@@ -5,6 +5,7 @@ pluginManagement {
 rootProject.name = 'curtaincall'
 
 include 'libs:common-web'
+include 'libs:test-support'
 include 'services:gateway'
 include 'services:user'
 include 'services:event'
