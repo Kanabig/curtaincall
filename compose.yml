@@ -17,11 +17,16 @@ services:
     image: mysql:8.4.13
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      USER_DB_PASSWORD: ${USER_DB_PASSWORD}
-      EVENT_DB_PASSWORD: ${EVENT_DB_PASSWORD}
-      RESERVATION_DB_PASSWORD: ${RESERVATION_DB_PASSWORD}
-      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD}
-      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      USER_APP_PASSWORD: ${USER_APP_PASSWORD}
+      USER_FLYWAY_PASSWORD: ${USER_FLYWAY_PASSWORD}
+      EVENT_APP_PASSWORD: ${EVENT_APP_PASSWORD}
+      EVENT_FLYWAY_PASSWORD: ${EVENT_FLYWAY_PASSWORD}
+      RESERVATION_APP_PASSWORD: ${RESERVATION_APP_PASSWORD}
+      RESERVATION_FLYWAY_PASSWORD: ${RESERVATION_FLYWAY_PASSWORD}
+      PAYMENT_APP_PASSWORD: ${PAYMENT_APP_PASSWORD}
+      PAYMENT_FLYWAY_PASSWORD: ${PAYMENT_FLYWAY_PASSWORD}
+      NOTIFICATION_APP_PASSWORD: ${NOTIFICATION_APP_PASSWORD}
+      NOTIFICATION_FLYWAY_PASSWORD: ${NOTIFICATION_FLYWAY_PASSWORD}
       TZ: Asia/Seoul
     command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
     ports:
@@ -103,8 +108,12 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/user_db
-      SPRING_DATASOURCE_USERNAME: user_svc
-      SPRING_DATASOURCE_PASSWORD: ${USER_DB_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: user_app
+      SPRING_DATASOURCE_PASSWORD: ${USER_APP_PASSWORD}
+      SPRING_FLYWAY_USER: user_flyway
+      SPRING_FLYWAY_PASSWORD: ${USER_FLYWAY_PASSWORD}
+      # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -119,8 +128,12 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/event_db
-      SPRING_DATASOURCE_USERNAME: event_svc
-      SPRING_DATASOURCE_PASSWORD: ${EVENT_DB_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: event_app
+      SPRING_DATASOURCE_PASSWORD: ${EVENT_APP_PASSWORD}
+      SPRING_FLYWAY_USER: event_flyway
+      SPRING_FLYWAY_PASSWORD: ${EVENT_FLYWAY_PASSWORD}
+      # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       # 비워 두면 fixture 모드로 동작한다
       KOPIS_API_KEY: ${KOPIS_API_KEY:-}
     depends_on:
@@ -147,8 +160,12 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/reservation_db
-      SPRING_DATASOURCE_USERNAME: reservation_svc
-      SPRING_DATASOURCE_PASSWORD: ${RESERVATION_DB_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: reservation_app
+      SPRING_DATASOURCE_PASSWORD: ${RESERVATION_APP_PASSWORD}
+      SPRING_FLYWAY_USER: reservation_flyway
+      SPRING_FLYWAY_PASSWORD: ${RESERVATION_FLYWAY_PASSWORD}
+      # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -164,8 +181,12 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/payment_db
-      SPRING_DATASOURCE_USERNAME: payment_svc
-      SPRING_DATASOURCE_PASSWORD: ${PAYMENT_DB_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: payment_app
+      SPRING_DATASOURCE_PASSWORD: ${PAYMENT_APP_PASSWORD}
+      SPRING_FLYWAY_USER: payment_flyway
+      SPRING_FLYWAY_PASSWORD: ${PAYMENT_FLYWAY_PASSWORD}
+      # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     depends_on:
       mysql: { condition: service_healthy }
       kafka: { condition: service_healthy }
@@ -180,8 +201,12 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/notification_db
-      SPRING_DATASOURCE_USERNAME: notification_svc
-      SPRING_DATASOURCE_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      SPRING_DATASOURCE_USERNAME: notification_app
+      SPRING_DATASOURCE_PASSWORD: ${NOTIFICATION_APP_PASSWORD}
+      SPRING_FLYWAY_USER: notification_flyway
+      SPRING_FLYWAY_PASSWORD: ${NOTIFICATION_FLYWAY_PASSWORD}
+      # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
     depends_on:

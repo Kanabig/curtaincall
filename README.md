@@ -30,7 +30,7 @@ docker compose up -d --build --wait
 - gateway만 `GATEWAY_HOST_PORT`(기본 8080)로 열린다. MySQL, Redis, Kafka, Mailpit은 개발 도구용으로 `.env`의 호스트 포트에 열려 있다(Mailpit 화면 8025).
 - KOPIS, LLM 키 없이 뜬다(fixture, Mock 모드).
 - 프로젝트를 나눠 동시에 띄우려면 `docker compose -p <이름>`과 함께 `.env`의 호스트 포트를 서로 다르게 바꾼다.
-- 서비스 계정이 자기 스키마만 쓸 수 있는지는 `docker/verify-schema-isolation.sh [프로젝트 이름]`으로 확인한다.
+- DB 계정은 서비스마다 앱 계정(`<서비스>_app`, DML)과 Flyway 계정(`<서비스>_flyway`, DDL + DML)으로 나뉘고 둘 다 자기 스키마 권한만 갖는다. 권한은 `docker/verify-schema-isolation.sh [프로젝트 이름]`으로 확인한다.
 
 ## 기술적 의사결정
 
