@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+    labels: [build]
+    ignore:
+      # Boot·Cloud 메이저/마이너 업그레이드는 별도 마이그레이션 작업으로 진행한다
+      - dependency-name: org.springframework.boot*
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: org.springframework.cloud*
+        update-types: [version-update:semver-major, version-update:semver-minor]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    labels: [ci]
