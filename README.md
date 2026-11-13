@@ -28,7 +28,7 @@
 
 ## 작업 방식
 
-이슈는 epic(서비스·기능군) > story(기능 ID 단위 요구사항, 수용 기준 포함) / task(환경·성능·검증) / bug로 나누고, epic 아래에 하위 이슈로 연결한다. story 하나가 브랜치 `feat/<이슈번호>-<설명>`과 PR 하나에 대응한다. PR 제목은 Conventional Commits이며 squash merge한다.
+이슈는 epic(서비스·기능군) > story(기능 ID 또는 사용자 화면 단위 요구사항, 수용 기준 포함) / task(환경·성능·검증) / bug로 나누고, epic 아래에 하위 이슈로 연결한다. story 하나가 브랜치 `feat/<이슈번호>-<설명>`과 PR 하나에 대응한다. PR 제목은 Conventional Commits이며 squash merge한다.
 
 | 이슈 유형 | PR type |
 |---|---|
