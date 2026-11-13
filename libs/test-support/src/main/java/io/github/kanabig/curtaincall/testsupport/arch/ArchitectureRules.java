@@ -14,7 +14,7 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 /**
  * 모든 모듈이 공유하는 아키텍처 규칙. 각 모듈 테스트가 {@code ArchTests.in(ArchitectureRules.class)}로 가져다 쓴다.
  *
- * <p>계층 패키지는 controller, service, repository, entity, messaging, scheduler, config. 해당 패키지가 없는 모듈에서는 그 계층 규칙이 비어 있는
+ * <p>계층 패키지는 controller, service, repository, entity, client, messaging, scheduler, config. 해당 패키지가 없는 모듈에서는 그 계층 규칙이 비어 있는
  * 채로 통과한다(코드가 생기면 그때부터 검사된다).
  */
 public final class ArchitectureRules {
@@ -22,7 +22,7 @@ public final class ArchitectureRules {
     static final String ROOT = "io.github.kanabig.curtaincall.";
     static final String COMMON = "common";
 
-    /** controller는 아무도 부르지 않고, service는 repository·entity를 향해서만 의존한다. */
+    /** controller는 아무도 부르지 않고, client는 service만 부른다. service는 repository를 향해서만 의존한다. */
     @ArchTest
     static final ArchRule LAYERS_FOLLOW_DIRECTION = layeredArchitecture()
             .consideringOnlyDependenciesInLayers()
@@ -33,6 +33,8 @@ public final class ArchitectureRules {
             .definedBy("..service..")
             .layer("Repository")
             .definedBy("..repository..")
+            .layer("Client")
+            .definedBy("..client..")
             .layer("Messaging")
             .definedBy("..messaging..")
             .layer("Scheduler")
@@ -43,6 +45,8 @@ public final class ArchitectureRules {
             .mayNotBeAccessedByAnyLayer()
             .whereLayer("Service")
             .mayOnlyBeAccessedByLayers("Controller", "Messaging", "Scheduler", "Config")
+            .whereLayer("Client")
+            .mayOnlyBeAccessedByLayers("Service")
             .whereLayer("Repository")
             .mayOnlyBeAccessedByLayers("Service", "Messaging", "Scheduler", "Config");
 
@@ -86,7 +90,8 @@ public final class ArchitectureRules {
             return null;
         }
         String rest = prefixed.substring(ROOT.length());
-        return rest.substring(0, rest.indexOf('.'));
+        int end = rest.indexOf('.');
+        return end < 0 ? null : rest.substring(0, end);
     }
 
     private ArchitectureRules() {}
