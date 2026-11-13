@@ -26,5 +26,15 @@
 
 **AI는 예매 경로 밖에.** 자연어 검색어를 구조화된 검색 조건으로 바꾸는 데만 LLM을 쓴다. 대기열·좌석·결제에는 넣지 않는다. 출력은 서버에서 검증하고, 실패하거나 느리면 키워드 검색으로 fallback한다. API 키 없이 Mock 모드로 실행된다.
 
+## 작업 방식
+
+이슈는 epic(서비스·기능군) > story(기능 ID 단위 요구사항, 수용 기준 포함) / task(환경·성능·검증) / bug로 나누고, epic 아래에 하위 이슈로 연결한다. story 하나가 브랜치 `feat/<이슈번호>-<설명>`과 PR 하나에 대응한다. PR 제목은 Conventional Commits이며 squash merge한다.
+
+| 이슈 유형 | PR type |
+|---|---|
+| story | feat |
+| task | build, ci, perf, test, refactor, chore, docs |
+| bug | fix |
+
 ## 데이터 출처
 공연·공연장 정보: (재)예술경영지원센터 공연예술통합전산망(www.kopis.or.kr)
