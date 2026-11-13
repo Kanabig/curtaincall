@@ -1,0 +1,16 @@
+name: release-source
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  only-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: main에는 dev에서 온 PR만 허용
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: test "$HEAD_REF" = "dev"
