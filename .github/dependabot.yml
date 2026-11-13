@@ -2,6 +2,7 @@ version: 2
 updates:
   - package-ecosystem: gradle
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -19,6 +20,7 @@ updates:
         update-types: [version-update:semver-major]
   - package-ecosystem: gradle
     directory: /build-logic
+    target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -30,6 +32,7 @@ updates:
         update-types: [version-update:semver-major, version-update:semver-minor]
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
     commit-message:

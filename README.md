@@ -34,7 +34,7 @@
 
 ## 작업 방식
 
-이슈는 epic(서비스·기능군) > story(기능 ID 또는 사용자 화면 단위 요구사항, 수용 기준 포함) / task(환경·성능·검증) / bug로 나누고, epic 아래에 하위 이슈로 연결한다. 이슈에는 유형과 서비스 라벨만 붙이고, 변경의 성격(type)은 PR 제목과 PR 라벨로 정한다. story 하나가 브랜치 `<type>/<이슈번호>-<설명>`과 PR 하나에 대응한다. PR 제목은 Conventional Commits이며 squash merge한다.
+이슈는 epic(서비스·기능군) > story(기능 ID 또는 사용자 화면 단위 요구사항, 수용 기준 포함) / task(환경·성능·검증) / bug로 나누고, epic 아래에 하위 이슈로 연결한다. 이슈에는 유형과 서비스 라벨만 붙이고, 변경의 성격(type)은 PR 제목과 PR 라벨로 정한다. story 하나가 브랜치 `<type>/<이슈번호>-<설명>`과 PR 하나에 대응한다. 이슈 브랜치는 `dev`에서 나와 `dev`로 squash merge한다. 마일스톤이 끝나면 `dev`를 `main`에 merge commit으로 올리고 태그를 붙인다. `main`은 항상 릴리스 가능한 상태다. PR 제목은 Conventional Commits를 따른다. 커밋 템플릿은 `git config commit.template .gitmessage.txt`로 쓴다.
 
 | 이슈 유형 | 주로 쓰는 PR type |
 |---|---|
