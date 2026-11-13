@@ -22,7 +22,7 @@ public final class ArchitectureRules {
     static final String ROOT = "io.github.kanabig.curtaincall.";
     static final String COMMON = "common";
 
-    /** controller는 아무도 부르지 않고, client는 service만 부른다. service는 repository를 향해서만 의존한다. */
+    /** controller는 아무도 부르지 않고, client(외부·내부 API 호출)는 service에서만 호출한다. repository는 service 등 허용된 계층만 호출한다. */
     @ArchTest
     static final ArchRule LAYERS_FOLLOW_DIRECTION = layeredArchitecture()
             .consideringOnlyDependenciesInLayers()
