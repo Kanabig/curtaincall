@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: search-assist
+server:
+  port: 8087
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

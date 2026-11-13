@@ -14,6 +14,12 @@
 | 프론트 | React, Vite, TypeScript |
 | 실행 환경 | Docker Compose, GitHub Actions |
 
+## 개발 환경
+
+- JDK 21, `./gradlew build`로 전체 빌드(spotlessCheck, checkstyle, 테스트 포함). 포맷은 `./gradlew spotlessApply`로 맞춘다.
+- IntelliJ: palantir-java-format 플러그인을 설치하고 Enable 해야 에디터 포맷이 spotless와 같아진다.
+- 구조: `services/*`(서비스), `libs/*`(공통 모듈), `build-logic`(Gradle 컨벤션 플러그인).
+
 ## 기술적 의사결정
 
 **예매처 시뮬레이션.** curtaincall은 기획사와 판매 대행 계약을 맺은 예매처라고 가정한다. 공연·공연장 정보는 KOPIS(공연예술통합전산망) 오픈 API에서 동기화하고, 원래 계약으로 받는 데이터(좌석 배치, 등급·가격, 회차, 판매 오픈 시각)는 객석 수 기준으로 생성한다. 좌석과 판매 데이터는 시연용 생성 데이터다.

@@ -1,0 +1,4 @@
+plugins {
+    id 'curtaincall.java-conventions'
+    id 'java-library'
+}
