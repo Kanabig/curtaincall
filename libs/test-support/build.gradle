@@ -5,6 +5,7 @@ plugins {
 dependencies {
     api 'org.springframework.boot:spring-boot-starter-test'
     api 'org.springframework.boot:spring-boot-testcontainers'
+    api 'com.tngtech.archunit:archunit-junit5:1.5.1'
     api 'org.testcontainers:junit-jupiter'
     api 'org.testcontainers:mysql'
     api 'org.testcontainers:kafka'
