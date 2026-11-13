@@ -17,6 +17,17 @@ updates:
       # Gradle 메이저는 Boot 마이그레이션 때 함께 올린다
       - dependency-name: gradle-wrapper
         update-types: [version-update:semver-major]
+  - package-ecosystem: gradle
+    directory: /build-logic
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+    labels: [build]
+    ignore:
+      - dependency-name: org.springframework.boot*
+        update-types: [version-update:semver-major, version-update:semver-minor]
   - package-ecosystem: github-actions
     directory: /
     schedule:

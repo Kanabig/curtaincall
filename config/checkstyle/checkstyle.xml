@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<!-- 포맷은 spotless가 맡는다. 여기서는 포매터가 못 잡는 규칙만 둔다. -->
+<module name="Checker">
+    <property name="severity" value="error"/>
+    <property name="charset" value="UTF-8"/>
+
+    <module name="TreeWalker">
+        <module name="PackageName">
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+        </module>
+        <module name="TypeName"/>
+        <module name="MethodName"/>
+        <module name="MemberName"/>
+        <module name="ParameterName"/>
+        <module name="LocalVariableName"/>
+        <module name="LocalFinalVariableName"/>
+        <module name="StaticVariableName"/>
+        <module name="ConstantName">
+            <!-- 로거(log)는 소문자를 허용한다 -->
+            <property name="format" value="^(log|logger|[A-Z][A-Z0-9]*(_[A-Z0-9]+)*)$"/>
+        </module>
+
+        <module name="AvoidStarImport"/>
+        <module name="UnusedImports"/>
+        <module name="EmptyCatchBlock"/>
+
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="System\.(out|err)\."/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message" value="System.out/err 대신 SLF4J 로거를 쓴다"/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\.printStackTrace\("/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message" value="printStackTrace 대신 로거로 예외를 남긴다"/>
+        </module>
+    </module>
+</module>

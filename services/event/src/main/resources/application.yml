@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: event
+server:
+  port: 8082
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

@@ -1,1 +1,15 @@
+pluginManagement {
+    includeBuild('build-logic')
+}
+
 rootProject.name = 'curtaincall'
+
+include 'libs:common-web'
+include 'services:gateway'
+include 'services:user'
+include 'services:event'
+include 'services:queue'
+include 'services:reservation'
+include 'services:payment'
+include 'services:notification'
+include 'services:search-assist'

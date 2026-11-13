@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: reservation
+server:
+  port: 8084
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
