@@ -41,6 +41,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           title: Coverage
           update-comment: true
+          # 기준치는 기능이 쌓인 뒤 정한다
+          min-coverage-overall: 0
+          min-coverage-changed-files: 0
 
       - name: Upload reports
         if: ${{ !cancelled() }}
