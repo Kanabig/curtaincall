@@ -24,9 +24,9 @@ sql() { # 서비스, 종류, SQL → 출력(에러 포함), 종료 코드
         mysql -u"$1_$2" -p"$(password "$1" "$2")" -D "$1_db" -e "$3" 2>&1
 }
 
-sql_on() { # 서비스, 종류, 대상 서비스(미사용, 호출부 가독성), SQL
+sql_global() { # 서비스, 종류, SQL (기본 스키마 없이 실행)
     docker compose "${project_args[@]}" exec -T mysql \
-        mysql -u"$1_$2" -p"$(password "$1" "$2")" -e "$4" 2>&1
+        mysql -u"$1_$2" -p"$(password "$1" "$2")" -e "$3" 2>&1
 }
 
 expect_ok() { # 설명, 출력, 종료 코드
@@ -41,7 +41,7 @@ for svc in "${services[@]}"; do
     # 스키마 격리
     for kind in app flyway; do
         for target in "${services[@]}"; do
-            out=$(sql_on "$svc" "$kind" "$target" "SHOW TABLES FROM \`${target}_db\`"); code=$?
+            out=$(sql_global "$svc" "$kind" "SHOW TABLES FROM \`${target}_db\`"); code=$?
             if [ "$svc" = "$target" ]; then
                 expect_ok "${svc}_${kind} -> ${target}_db 조회" "$out" $code
             else
