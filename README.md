@@ -20,6 +20,18 @@
 - IntelliJ: palantir-java-format 플러그인을 설치하고 Enable 해야 에디터 포맷이 spotless와 같아진다.
 - 구조: `services/*`(서비스), `libs/*`(공통 모듈), `build-logic`(Gradle 컨벤션 플러그인).
 
+## 실행
+
+```bash
+cp .env.example .env      # 기본값 그대로 쓸 수 있다
+docker compose up -d --build --wait
+```
+
+- gateway만 `GATEWAY_HOST_PORT`(기본 8080)로 열린다. MySQL, Redis, Kafka, Mailpit은 개발 도구용으로 `.env`의 호스트 포트에 열려 있다(Mailpit 화면 8025).
+- KOPIS, LLM 키 없이 뜬다(fixture, Mock 모드).
+- 프로젝트를 나눠 동시에 띄우려면 `docker compose -p <이름>`과 함께 `.env`의 호스트 포트를 서로 다르게 바꾼다.
+- 서비스 계정이 자기 스키마만 쓸 수 있는지는 `docker/verify-schema-isolation.sh [프로젝트 이름]`으로 확인한다.
+
 ## 기술적 의사결정
 
 **예매처 시뮬레이션.** curtaincall은 기획사와 판매 대행 계약을 맺은 예매처라고 가정한다. 공연·공연장 정보는 KOPIS(공연예술통합전산망) 오픈 API에서 동기화하고, 원래 계약으로 받는 데이터(좌석 배치, 등급·가격, 회차, 판매 오픈 시각)는 객석 수 기준으로 생성한다. 좌석과 판매 데이터는 시연용 생성 데이터다.

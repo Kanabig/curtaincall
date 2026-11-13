@@ -1,0 +1,209 @@
+name: curtaincall
+
+x-service: &service
+  restart: unless-stopped
+  environment: &service-env
+    SPRING_DATA_REDIS_HOST: redis
+    SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+x-java-health: &java-health
+  interval: 10s
+  timeout: 3s
+  retries: 12
+  start_period: 30s
+
+services:
+  mysql:
+    image: mysql:8.4.13
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD}
+      EVENT_DB_PASSWORD: ${EVENT_DB_PASSWORD}
+      RESERVATION_DB_PASSWORD: ${RESERVATION_DB_PASSWORD}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      TZ: Asia/Seoul
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    ports:
+      - "${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      # 초기화 중 임시 서버는 소켓만 열어서 TCP로 확인하면 초기화가 끝난 뒤에야 통과한다
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  redis:
+    image: redis:8.0.6
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:4.3.2
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:9094,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:${KAFKA_HOST_PORT:-9094}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # 토픽은 소유 서비스가 기동 시 선언한다. 오타로 토픽이 조용히 생기는 것을 막는다
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    ports:
+      - "${KAFKA_HOST_PORT:-9094}:9094"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    ports:
+      - "${MAILPIT_SMTP_HOST_PORT:-1025}:1025"
+      - "${MAILPIT_UI_HOST_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: gateway } }
+    image: curtaincall/gateway:local
+    ports:
+      - "${GATEWAY_HOST_PORT:-8080}:8080"
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+
+  user:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: user } }
+    image: curtaincall/user:local
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/user_db
+      SPRING_DATASOURCE_USERNAME: user_svc
+      SPRING_DATASOURCE_PASSWORD: ${USER_DB_PASSWORD}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8081/actuator/health"]
+
+  event:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: event } }
+    image: curtaincall/event:local
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/event_db
+      SPRING_DATASOURCE_USERNAME: event_svc
+      SPRING_DATASOURCE_PASSWORD: ${EVENT_DB_PASSWORD}
+      # 비워 두면 fixture 모드로 동작한다
+      KOPIS_API_KEY: ${KOPIS_API_KEY:-}
+    depends_on:
+      mysql: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8082/actuator/health"]
+
+  queue:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: queue } }
+    image: curtaincall/queue:local
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health"]
+
+  reservation:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: reservation } }
+    image: curtaincall/reservation:local
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/reservation_db
+      SPRING_DATASOURCE_USERNAME: reservation_svc
+      SPRING_DATASOURCE_PASSWORD: ${RESERVATION_DB_PASSWORD}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8084/actuator/health"]
+
+  payment:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: payment } }
+    image: curtaincall/payment:local
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/payment_db
+      SPRING_DATASOURCE_USERNAME: payment_svc
+      SPRING_DATASOURCE_PASSWORD: ${PAYMENT_DB_PASSWORD}
+    depends_on:
+      mysql: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8085/actuator/health"]
+
+  notification:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: notification } }
+    image: curtaincall/notification:local
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/notification_db
+      SPRING_DATASOURCE_USERNAME: notification_svc
+      SPRING_DATASOURCE_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+    depends_on:
+      mysql: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8086/actuator/health"]
+
+  search-assist:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: search-assist } }
+    image: curtaincall/search-assist:local
+    environment:
+      <<: *service-env
+      # 비워 두면 Mock 모드로 동작한다
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8087/actuator/health"]
+
+volumes:
+  mysql-data:
+  kafka-data:
