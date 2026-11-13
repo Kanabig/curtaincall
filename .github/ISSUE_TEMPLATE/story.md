@@ -2,7 +2,7 @@
 name: 스토리
 about: 사용자 관점 요구사항. PR 하나로 끝나는 크기
 title: "[기능 ID] "
-labels: story, feat
+labels: story
 ---
 
 ## 사용자 이야기

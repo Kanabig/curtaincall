@@ -2,7 +2,7 @@
 name: 버그
 about: 기대와 다르게 동작하는 문제
 title: ""
-labels: bug, fix
+labels: bug
 ---
 
 ## 현상
