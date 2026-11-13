@@ -9,6 +9,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,3 +25,27 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
       - run: ./gradlew build
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        uses: mikepenz/action-junit-report@v6
+        with:
+          report_paths: '**/build/test-results/test/TEST-*.xml'
+          check_name: Test report
+
+      - name: Coverage comment
+        if: github.event_name == 'pull_request'
+        uses: madrapps/jacoco-report@v1
+        with:
+          paths: ${{ github.workspace }}/**/build/reports/jacoco/test/jacocoTestReport.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: Coverage
+          update-comment: true
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports
+          path: '**/build/reports/'
+          retention-days: 7
