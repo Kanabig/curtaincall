@@ -5,9 +5,15 @@ server:
   port: 8082
 logging:
   pattern:
-    level: "%5p [%X{requestId:-}]"
+    level: "%5p [${spring.application.name},%X{requestId:-}]"
 management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
