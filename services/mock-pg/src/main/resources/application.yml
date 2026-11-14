@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: mock-pg
+  mvc:
+    problemdetails:
+      enabled: true
+  # 타임아웃 모드가 요청을 오래 붙잡아 두므로 스레드를 아끼려고 가상 스레드를 쓴다
+  threads:
+    virtual:
+      enabled: true
+server:
+  port: 8090
+mock-pg:
+  # 타임아웃 모드에서 응답 없이 붙잡아 두는 시간. 클라이언트 read timeout보다 충분히 길어야 한다
+  timeout-hang-ms: 60000
+logging:
+  pattern:
+    level: "%5p [${spring.application.name}]"
+  level:
+    # 응답 유실 모드가 의도적으로 던지는 예외가 요청마다 ERROR 스택트레이스로 남지 않게 한다
+    "[org.apache.catalina.core.ContainerBase.[Tomcat].[localhost].[/].[dispatcherServlet]]": "OFF"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
