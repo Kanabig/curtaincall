@@ -5,6 +5,7 @@ import io.github.kanabig.curtaincall.outbox.consumer.IdempotentConsumer;
 import io.github.kanabig.curtaincall.outbox.consumer.OutboxConsumerErrorHandling;
 import io.github.kanabig.curtaincall.outbox.consumer.ProcessedEventMaintenance;
 import io.github.kanabig.curtaincall.outbox.consumer.ProcessedEventRepository;
+import io.github.kanabig.curtaincall.outbox.consumer.RequestIdRecordInterceptor;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelopes;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxMaintenance;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxProducer;
@@ -195,6 +196,7 @@ public class OutboxAutoConfiguration {
             factory.setConsumerFactory(consumerFactory);
             // 처리가 끝난 뒤 IdempotentConsumer가 직접 커밋한다
             factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+            factory.setRecordInterceptor(new RequestIdRecordInterceptor());
             factory.setCommonErrorHandler(OutboxConsumerErrorHandling.create(
                     outboxProducer.template(), properties.consumer(), meterRegistry));
             return factory;

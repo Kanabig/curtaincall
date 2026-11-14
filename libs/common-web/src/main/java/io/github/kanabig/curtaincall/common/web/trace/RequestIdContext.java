@@ -1,5 +1,7 @@
 package io.github.kanabig.curtaincall.common.web.trace;
 
+import java.util.UUID;
+import java.util.regex.Pattern;
 import org.slf4j.MDC;
 
 /**
@@ -13,7 +15,20 @@ public final class RequestIdContext {
     public static final String HEADER = "X-Request-Id";
     public static final String MDC_KEY = "requestId";
 
+    // 로그 위조(개행 삽입 등)를 막으려고 허용 문자와 길이를 제한한다
+    private static final Pattern VALID = Pattern.compile("[A-Za-z0-9._-]{1,64}");
+
     private RequestIdContext() {}
+
+    /** 로그에 안전하게 남길 수 있는 형식인지. null이면 false. */
+    public static boolean isValid(String requestId) {
+        return requestId != null && VALID.matcher(requestId).matches();
+    }
+
+    /** 새 추적 ID. */
+    public static String generate() {
+        return UUID.randomUUID().toString();
+    }
 
     /** 현재 스레드의 추적 ID. 없으면 null. */
     public static String current() {

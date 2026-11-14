@@ -1,5 +1,6 @@
 package io.github.kanabig.curtaincall.outbox.relay;
 
+import io.github.kanabig.curtaincall.common.web.trace.RequestIdContext;
 import io.github.kanabig.curtaincall.outbox.config.OutboxProperties;
 import io.github.kanabig.curtaincall.outbox.message.OutboxMessage;
 import io.micrometer.core.instrument.Counter;
@@ -24,7 +25,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class OutboxRelay {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
-    private static final String REQUEST_ID_HEADER = "X-Request-Id";
 
     private final OutboxRepository repository;
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -83,7 +83,7 @@ public class OutboxRelay {
     private void send(OutboxMessage message) throws Exception {
         ProducerRecord<String, String> record = new ProducerRecord<>(message.topic(), message.key(), message.payload());
         if (message.requestId() != null) {
-            record.headers().add(REQUEST_ID_HEADER, message.requestId().getBytes(StandardCharsets.UTF_8));
+            record.headers().add(RequestIdContext.HEADER, message.requestId().getBytes(StandardCharsets.UTF_8));
         }
         kafkaTemplate.send(record).get(properties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
     }
