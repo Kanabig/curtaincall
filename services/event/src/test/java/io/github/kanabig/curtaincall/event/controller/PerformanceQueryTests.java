@@ -7,6 +7,7 @@ import io.github.kanabig.curtaincall.event.EventIntegrationTest;
 import io.github.kanabig.curtaincall.event.client.KopisCallException;
 import io.github.kanabig.curtaincall.event.client.KopisClient;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.Filter;
+import io.github.kanabig.curtaincall.event.dto.PerformanceState;
 import io.github.kanabig.curtaincall.event.repository.PerformanceQueryRepository;
 import io.github.kanabig.curtaincall.event.repository.PerformanceQueryRepository.Built;
 import io.github.kanabig.curtaincall.event.service.KopisSyncService;
@@ -134,15 +135,20 @@ class PerformanceQueryTests extends EventIntegrationTest {
         assertThat(get("/api/v1/performances").get("totalElements").asLong()).isEqualTo(3);
         assertThat(names(get("/api/v1/performances?region=서울"))).containsExactly("오페라의 유령", "백조의 호수");
         assertThat(names(get("/api/v1/performances?genre=뮤지컬"))).containsExactly("오페라의 유령", "레미제라블");
-        assertThat(names(get("/api/v1/performances?state=공연예정"))).containsExactly("백조의 호수", "레미제라블");
+        assertThat(names(get("/api/v1/performances?state=UPCOMING"))).containsExactly("백조의 호수", "레미제라블");
         // 기간은 겹치는 공연: 2027-01-15~2027-01-16 에는 A(~1/31)와 C(1/10~1/20)
         assertThat(names(get("/api/v1/performances?from=2027-01-15&to=2027-01-16")))
                 .containsExactly("오페라의 유령", "백조의 호수");
         assertThat(names(get("/api/v1/performances?from=2027-03-01"))).containsExactly("레미제라블");
         assertThat(names(get("/api/v1/performances?keyword=호수"))).containsExactly("백조의 호수");
-        assertThat(names(get("/api/v1/performances?region=서울&genre=뮤지컬&state=공연중&keyword=유령")))
+        assertThat(names(get("/api/v1/performances?region=서울&genre=뮤지컬&state=ONGOING&keyword=유령")))
                 .containsExactly("오페라의 유령");
         assertThat(names(get("/api/v1/performances?region=부산&genre=무용"))).isEmpty();
+
+        // 응답의 state는 영문 코드
+        JsonNode first = get("/api/v1/performances").get("content");
+        assertThat(first.get(0).get("state").asText()).isEqualTo("ONGOING");
+        assertThat(first.get(2).get("state").asText()).isEqualTo("UPCOMING");
     }
 
     @Test
@@ -193,7 +199,15 @@ class PerformanceQueryTests extends EventIntegrationTest {
         assertThat(second.get("totalElements").asLong()).isEqualTo(5);
         assertThat(get("/api/v1/performances?size=100").get("content")).hasSize(5);
 
-        for (String bad : List.of("size=101", "size=0", "page=-1", "from=2027-02-01&to=2027-01-01", "maxPrice=-1")) {
+        for (String bad : List.of(
+                "size=101",
+                "size=0",
+                "page=-1",
+                "from=2027-02-01&to=2027-01-01",
+                "maxPrice=-1",
+                "state=공연중",
+                "state=ON_SALE",
+                "state=ongoing")) {
             ResponseEntity<JsonNode> r = rest.getForEntity("/api/v1/performances?" + bad, JsonNode.class);
             assertThat(r.getStatusCode()).as(bad).isEqualTo(HttpStatus.BAD_REQUEST);
             assertThat(r.getBody().get("code").asText()).isEqualTo("INVALID_REQUEST");
@@ -214,6 +228,7 @@ class PerformanceQueryTests extends EventIntegrationTest {
 
         JsonNode d = get("/api/v1/performances/" + id);
         assertThat(d.get("kopisId").asText()).isEqualTo("A");
+        assertThat(d.get("state").asText()).isEqualTo("ONGOING");
         assertThat(d.get("name").asText()).isEqualTo("오페라의 유령");
         assertThat(d.get("runtime").asText()).isEqualTo("2시간");
         assertThat(d.get("relates").get(0).get("name").asText()).isEqualTo("예매처");
@@ -326,10 +341,10 @@ class PerformanceQueryTests extends EventIntegrationTest {
                 new Filter("서울", null, null, null, null, null, null),
                 new Filter(null, "뮤지컬", null, null, null, null, null),
                 new Filter(null, null, LocalDate.of(2026, 6, 1), LocalDate.of(2026, 7, 1), null, null, null),
-                new Filter(null, null, null, null, "공연중", null, null),
+                new Filter(null, null, null, null, PerformanceState.ONGOING, null, null),
                 new Filter(null, null, null, null, null, 60000, null),
                 new Filter(null, null, null, null, null, null, "공연 1"),
-                new Filter("서울", "뮤지컬", LocalDate.of(2026, 3, 1), null, "공연중", 60000, "공연"));
+                new Filter("서울", "뮤지컬", LocalDate.of(2026, 3, 1), null, PerformanceState.ONGOING, 60000, "공연"));
         for (Filter f : filters) {
             for (Built q : List.of(repository.listQuery(f, 0, 20, NOW), repository.countQuery(f, NOW))) {
                 List<Map<String, Object>> plan =

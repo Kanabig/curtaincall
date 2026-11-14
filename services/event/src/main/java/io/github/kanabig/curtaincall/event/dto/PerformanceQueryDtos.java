@@ -15,7 +15,7 @@ public final class PerformanceQueryDtos {
             String genre,
             LocalDate from,
             LocalDate to,
-            String state,
+            PerformanceState state,
             Integer maxPrice,
             String keyword) {}
 
@@ -24,7 +24,7 @@ public final class PerformanceQueryDtos {
             String name,
             String genre,
             String area,
-            String state,
+            PerformanceState state,
             LocalDate startDate,
             LocalDate endDate,
             String facilityName,
@@ -44,7 +44,7 @@ public final class PerformanceQueryDtos {
             String name,
             String genre,
             String area,
-            String state,
+            PerformanceState state,
             LocalDate startDate,
             LocalDate endDate,
             boolean openRun,

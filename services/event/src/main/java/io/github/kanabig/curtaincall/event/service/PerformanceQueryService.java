@@ -12,6 +12,7 @@ import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformanceP
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PriceItem;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.SessionDetail;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.SessionItem;
+import io.github.kanabig.curtaincall.event.dto.PerformanceState;
 import io.github.kanabig.curtaincall.event.dto.SaleState;
 import io.github.kanabig.curtaincall.event.entity.SaleSession;
 import io.github.kanabig.curtaincall.event.error.EventErrorCode;
@@ -72,13 +73,7 @@ public class PerformanceQueryService {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST, "keyword는 %d자 이하".formatted(MAX_KEYWORD));
         }
         return new Filter(
-                blankToNull(f.region()),
-                blankToNull(f.genre()),
-                f.from(),
-                f.to(),
-                blankToNull(f.state()),
-                f.maxPrice(),
-                keyword);
+                blankToNull(f.region()), blankToNull(f.genre()), f.from(), f.to(), f.state(), f.maxPrice(), keyword);
     }
 
     private static String blankToNull(String s) {
@@ -102,7 +97,7 @@ public class PerformanceQueryService {
                 row.name(),
                 row.genre(),
                 row.area(),
-                row.state(),
+                PerformanceState.fromKopis(row.state()),
                 row.startDate(),
                 row.endDate(),
                 row.openRun(),

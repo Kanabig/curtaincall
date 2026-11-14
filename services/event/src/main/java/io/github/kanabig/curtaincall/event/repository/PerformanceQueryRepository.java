@@ -2,6 +2,7 @@ package io.github.kanabig.curtaincall.event.repository;
 
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.Filter;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformanceItem;
+import io.github.kanabig.curtaincall.event.dto.PerformanceState;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -69,7 +70,7 @@ public class PerformanceQueryRepository {
         }
         if (f.state() != null) {
             sb.append(" AND p.state = ?");
-            args.add(f.state());
+            args.add(f.state().kopis());
         }
         if (f.keyword() != null) {
             sb.append(" AND p.name LIKE ? ESCAPE '\\\\'");
@@ -99,7 +100,7 @@ public class PerformanceQueryRepository {
                         rs.getString("name"),
                         rs.getString("genre"),
                         rs.getString("area"),
-                        rs.getString("state"),
+                        PerformanceState.fromKopis(rs.getString("state")),
                         rs.getDate("start_date").toLocalDate(),
                         rs.getDate("end_date").toLocalDate(),
                         rs.getString("facility_name"),
