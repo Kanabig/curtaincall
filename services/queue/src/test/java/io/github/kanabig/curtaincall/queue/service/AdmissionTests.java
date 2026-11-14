@@ -270,10 +270,10 @@ class AdmissionTests extends QueueIntegrationTest {
         assertThat(isActive(1) && isActive(3)).isTrue();
         assertThat(redis.keys(key("tick:*"))).hasSize(1);
 
-        // Redis와 같은 호스트의 시계로 61초·59초 전 폴링을 만든다
+        // Redis와 같은 호스트의 시계로 90초·40초 전 폴링을 만든다. 경계(60초)에서 떨어뜨려 부하로 시각이 밀려도 결과가 같다
         long now = System.currentTimeMillis();
-        redis.opsForZSet().add(key("seen"), "4", now - 61_000);
-        redis.opsForZSet().add(key("seen"), "5", now - 59_000);
+        redis.opsForZSet().add(key("seen"), "4", now - 90_000);
+        redis.opsForZSet().add(key("seen"), "5", now - 40_000);
         assertThat(admission.removeStale()).isEqualTo(1);
         assertThat(redis.opsForZSet().score(key("waiting"), "4")).isNull();
         assertThat(redis.opsForZSet().score(key("waiting"), "5")).isNotNull();
