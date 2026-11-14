@@ -113,9 +113,12 @@ public class Payment {
         return true;
     }
 
-    /** 명령 재전송 때문에 거래 조회를 처음부터 다시 한다(PAY-4). */
+    /**
+     * 명령 재전송 때문에 거래 조회를 처음부터 다시 한다(PAY-4). 조회가 진행 중이면 다시 시작하지 않는다. 재전송이 계속 오는 동안 조회 시작 시각이 밀리면 조회 제한 시간이 끝나지
+     * 않아 망취소로 넘어가지 못한다. 조회를 소진한 UNKNOWN만 다시 시작한다.
+     */
     public boolean restartInquiry(Instant now, Duration firstInquiryDelay) {
-        if (status != PaymentStatus.UNKNOWN) {
+        if (status != PaymentStatus.UNKNOWN || nextInquiryAt != null) {
             return false;
         }
         startInquiry(now, firstInquiryDelay);

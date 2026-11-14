@@ -218,8 +218,8 @@ class OrderSagaServiceTests extends OrderIntegrationTest {
     }
 
     @Test
-    @DisplayName("재전송은 3번까지이고, 그 뒤에도 응답이 없으면 지표를 올리고 멈춘 채 기다리다 늦은 승인으로 확정된다")
-    void stopsAfterMaxResendsAndStillConfirms() {
+    @DisplayName("재전송 한도(3번)를 넘기면 지표를 한 번만 올리지만 재전송과 점유 연장은 계속되고, 늦은 승인도 확정된다")
+    void keepsResendingAfterMaxResends() {
         String orderId = orderInPayment(USER, 1L);
         double stalledBefore = meterRegistry.counter("order.payment.stalled").count();
 
@@ -228,19 +228,45 @@ class OrderSagaServiceTests extends OrderIntegrationTest {
             assertThat(sagaService.resendDue()).isEqualTo(1);
         }
         assertThat(outboxTypes(orderId)).hasSize(4);
-        makeDue(orderId);
-        sagaService.resendDue();
+        assertThat(meterRegistry.counter("order.payment.stalled").count()).isEqualTo(stalledBefore);
 
-        assertThat(outboxTypes(orderId)).hasSize(4);
+        for (int i = 0; i < 2; i++) {
+            makeDue(orderId);
+            jdbc.update(
+                    "UPDATE seat_inventory SET expires_at = ? WHERE seat_id = 1",
+                    Timestamp.from(Instant.now().plusSeconds(60)));
+            assertThat(sagaService.resendDue()).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT expires_at FROM seat_inventory WHERE seat_id = 1", Timestamp.class)
+                            .toInstant())
+                    .isAfter(Instant.now().plusSeconds(600));
+        }
+
+        assertThat(outboxTypes(orderId)).hasSize(6);
         assertThat(meterRegistry.counter("order.payment.stalled").count()).isEqualTo(stalledBefore + 1);
         assertThat(jdbc.queryForObject(
                         "SELECT next_resend_at FROM orders WHERE order_id = ?", Timestamp.class, orderId))
-                .isNull();
-        assertThat(sagaService.resendDue()).isZero();
+                .isNotNull();
 
         approved(orderId);
 
         assertThat(status(orderId)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    @DisplayName("실패로 끝난 주문에 승인이 오면 상태는 그대로 두고 지표로 남긴다")
+    void approvedAfterFailedIsCounted() {
+        String orderId = orderInPayment(USER, 1L);
+        deliver("PaymentFailed", orderId, Map.of("reason", "DECLINED"));
+        double before =
+                meterRegistry.counter("order.payment.approved_after_terminal").count();
+
+        approved(orderId);
+
+        assertThat(status(orderId)).isEqualTo("FAILED");
+        assertThat(meterRegistry
+                        .counter("order.payment.approved_after_terminal")
+                        .count())
+                .isEqualTo(before + 1);
     }
 
     @Test

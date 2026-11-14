@@ -19,6 +19,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -39,6 +40,7 @@ public class OrderSagaService {
     private final OrderProperties properties;
     private final Clock clock;
     private final Counter stalled;
+    private final Counter approvedAfterTerminal;
 
     public OrderSagaService(
             OrderRepository orders,
@@ -54,6 +56,9 @@ public class OrderSagaService {
         this.clock = clock;
         this.stalled = Counter.builder(MetricNames.ORDER_PAYMENT_STALLED)
                 .description("결제 응답이 없어 재전송 한도를 넘긴 주문 수")
+                .register(meterRegistry);
+        this.approvedAfterTerminal = Counter.builder(MetricNames.ORDER_APPROVED_AFTER_TERMINAL)
+                .description("실패·만료로 끝난 주문에 승인 응답이 온 횟수")
                 .register(meterRegistry);
     }
 
@@ -71,19 +76,18 @@ public class OrderSagaService {
     }
 
     /**
-     * 응답이 {@code responseTimeout} 동안 없는 주문에 ApprovePayment를 다시 보내고 점유 연장을 갱신한다. 재전송은 {@code maxResends}번까지이고, 그 뒤에도 응답이
-     * 없으면 지표와 로그로 알리고 재전송을 멈춘 채 응답을 기다린다.
+     * 응답이 {@code responseTimeout} 동안 없는 주문에 ApprovePayment를 다시 보내고 점유 연장을 갱신한다. {@code maxResends}번을 넘기면 지표와 로그로 한 번
+     * 알리고, 응답이 올 때까지 같은 간격으로 계속 보낸다. payment가 UNKNOWN에서 복구하는 길이 이 재전송이고, 점유 연장이 끊기면 늦은 승인 때 한도 보호가 풀린다.
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public int resendDue() {
         Instant now = clock.instant();
         List<Order> due = orders.lockResendDue(now, RESEND_BATCH);
         for (Order order : due) {
-            if (order.commandSentCount() - 1 >= properties.maxResends()) {
-                orders.stopResending(order.orderId(), now);
+            // 한도를 넘는 순간 한 번만 알리고, 응답이 올 때까지 재전송과 점유 연장은 계속한다
+            if (order.commandSentCount() - 1 == properties.maxResends()) {
                 stalled.increment();
-                log.warn("결제 응답이 없어 재전송을 멈추고 기다린다: orderId={}, sent={}", order.orderId(), order.commandSentCount());
-                continue;
+                log.warn("결제 응답이 없어 재전송 한도를 넘었다: orderId={}, sent={}", order.orderId(), order.commandSentCount());
             }
             seats.renewForPayment(order.holdId(), now.plus(properties.paymentHoldExtension()));
             events.approvePayment(order);
@@ -148,6 +152,13 @@ public class OrderSagaService {
             return null;
         }
         if (order.status() != expected) {
+            if ("PaymentApproved".equals(eventName)
+                    && (order.status() == OrderStatus.FAILED || order.status() == OrderStatus.EXPIRED)) {
+                // 결제는 승인됐는데 주문은 실패로 끝난 상태. 설계상 생기면 안 되므로 눈에 띄게 남긴다
+                approvedAfterTerminal.increment();
+                log.error("종결된 주문에 승인이 왔다: orderId={}, status={}", orderId, order.status());
+                return null;
+            }
             log.info("이미 지나간 상태라 무시한다: orderId={}, event={}, status={}", orderId, eventName, order.status());
             return null;
         }

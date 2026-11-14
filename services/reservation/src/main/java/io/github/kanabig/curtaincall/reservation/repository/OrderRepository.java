@@ -97,14 +97,6 @@ public class OrderRepository {
                 orderId);
     }
 
-    /** 재전송을 멈춘다. 응답이 오면 상태 전이로 처리되므로 대기만 계속한다. */
-    public void stopResending(String orderId, Instant now) {
-        jdbc.update(
-                "UPDATE orders SET next_resend_at = NULL, updated_at = ? WHERE order_id = ?",
-                Timestamp.from(now),
-                orderId);
-    }
-
     /** 결제가 끝나 응답을 더 기다리지 않는다. 호출하는 쪽이 주문 행을 이미 잠갔다. */
     public void completePayment(String orderId, String paymentId) {
         jdbc.update("UPDATE orders SET payment_id = ?, next_resend_at = NULL WHERE order_id = ?", paymentId, orderId);

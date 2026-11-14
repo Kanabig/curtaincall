@@ -193,6 +193,26 @@ class OrderServiceTests extends OrderIntegrationTest {
     }
 
     @RepeatedTest(REPEAT)
+    @DisplayName("키가 다른 주문 생성이 같은 점유로 동시에 와도 하나만 성공하고 나머지는 ORDER_ALREADY_EXISTS이다")
+    void concurrentCreateDifferentKeys() throws Exception {
+        var hold = hold(USER, 1L, 2L);
+        List<Callable<Object>> creates = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            creates.add(() -> orderService.createOrder(USER, key(), hold.holdId()));
+        }
+
+        List<Object> results = runConcurrently(creates);
+
+        assertThat(results.stream().filter(r -> !(r instanceof Exception))).hasSize(1);
+        assertThat(results.stream().filter(r -> r instanceof Exception))
+                .allSatisfy(e -> assertThat(e)
+                        .isInstanceOfSatisfying(
+                                BusinessException.class,
+                                be -> assertThat(be.errorCode()).isEqualTo(ReservationErrorCode.ORDER_ALREADY_EXISTS)));
+        assertThat(count("orders")).isEqualTo(1);
+    }
+
+    @RepeatedTest(REPEAT)
     @DisplayName("키가 다른 결제 시작이 동시에 와도 하나만 성공하고 나머지는 ORDER_NOT_PAYABLE이다")
     void concurrentDifferentKeys() throws Exception {
         var hold = hold(USER, 1L);

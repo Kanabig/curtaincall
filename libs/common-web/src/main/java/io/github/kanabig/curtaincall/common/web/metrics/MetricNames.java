@@ -48,6 +48,9 @@ public final class MetricNames {
     /** 결제 응답을 기다리다 재전송 한도를 넘긴 주문의 발생 수. Counter(태그 없음). reservation이 등록한다. */
     public static final String ORDER_PAYMENT_STALLED = "order.payment.stalled";
 
+    /** 실패·만료로 끝난 주문에 승인 응답이 온 횟수. Counter(태그 없음). 0이 아니면 수동 확인 대상. reservation이 등록한다. */
+    public static final String ORDER_APPROVED_AFTER_TERMINAL = "order.payment.approved_after_terminal";
+
     /** 결과를 모른 채 남아 있는 결제 수(현재 UNKNOWN 상태인 건). Gauge. payment가 등록한다. */
     public static final String PAYMENT_UNKNOWN = "payment.unknown";
 

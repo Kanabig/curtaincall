@@ -17,7 +17,9 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** [RSV-5] 주문 생성과 결제 시작. 결제 결과 처리는 {@link OrderSagaService}가 맡는다. */
@@ -72,16 +74,17 @@ public class OrderService {
     }
 
     /** 점유가 만료된 채 결제를 시작하지 않은 주문을 EXPIRED로 정리한다. 좌석은 건드리지 않는다. */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public int expireOverdue() {
         return orders.expirePending(clock.instant());
     }
 
     private OrderResponse create(long userId, String holdId) {
+        List<HeldSeat> held = seats.lockByHold(holdId);
+        // 좌석 락을 잡은 뒤에 확인해야 앞선 트랜잭션이 커밋한 주문이 보인다(잠금 읽기 전에 읽으면 RR 읽기 뷰가 먼저 잡힌다)
         if (orders.existsByHold(holdId)) {
             throw new BusinessException(ReservationErrorCode.ORDER_ALREADY_EXISTS);
         }
-        List<HeldSeat> held = seats.lockByHold(holdId);
         if (held.isEmpty()
                 || held.stream()
                         .anyMatch(s -> !"HELD".equals(s.status())
@@ -105,7 +108,11 @@ public class OrderService {
                 null,
                 null,
                 0);
-        orders.insert(order);
+        try {
+            orders.insert(order);
+        } catch (DuplicateKeyException e) {
+            throw new BusinessException(ReservationErrorCode.ORDER_ALREADY_EXISTS);
+        }
         return OrderResponse.from(order);
     }
 
