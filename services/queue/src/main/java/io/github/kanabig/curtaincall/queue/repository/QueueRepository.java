@@ -47,7 +47,7 @@ public class QueueRepository {
      * 회차 하나의 입장 처리. 같은 초에는 인스턴스가 몇 개든 한 번만 실행된다. {@code nowMs}가 null이면 Redis TIME을 쓴다(운영). 값을 주는 것은 시계를 주입하는
      * 테스트용이다.
      */
-    public AdmitResult admit(long sessionId, Long nowMs, long entryTtlMs) {
+    public AdmitResult admit(long sessionId, Long nowMs, long entryTtlMs, long admitStaleMs) {
         List<?> r = redis.execute(
                 admitScript,
                 List.of(
@@ -57,11 +57,16 @@ public class QueueRepository {
                         QueueKeys.active(sessionId)),
                 nowMs == null ? "" : String.valueOf(nowMs),
                 String.valueOf(entryTtlMs),
-                QueueKeys.tickPrefix(sessionId));
+                QueueKeys.tickPrefix(sessionId),
+                String.valueOf(admitStaleMs));
         if (r == null || r.isEmpty() || ((Number) r.get(0)).longValue() != 1) {
             return AdmitResult.SKIPPED;
         }
-        return new AdmitResult(true, ((Number) r.get(1)).longValue(), ((Number) r.get(2)).longValue());
+        return new AdmitResult(
+                true,
+                ((Number) r.get(1)).longValue(),
+                ((Number) r.get(2)).longValue(),
+                ((Number) r.get(3)).longValue());
     }
 
     /** 마지막 폴링이 {@code staleAfterMs}보다 오래된 대기자를 지운다. 한 번에 {@code limit}명까지. {@code nowMs}가 null이면 Redis TIME. */
@@ -75,11 +80,12 @@ public class QueueRepository {
         return removed == null ? 0 : removed;
     }
 
-    /** 대기 포기. 없으면 아무 일도 하지 않는다. */
+    /** 대기 포기. 이미 입장한 사용자면 활성 목록에서도 빼서 자리를 돌려준다. 없으면 아무 일도 하지 않는다. */
     public void leave(long sessionId, long userId) {
         String user = String.valueOf(userId);
         redis.opsForZSet().remove(QueueKeys.waiting(sessionId), user);
         redis.opsForZSet().remove(QueueKeys.seen(sessionId), user);
+        redis.opsForZSet().remove(QueueKeys.active(sessionId), user);
     }
 
     /** 예매를 마친 사용자를 활성 목록에서 뺀다. 토큰 자체는 만료까지 유효하다. */

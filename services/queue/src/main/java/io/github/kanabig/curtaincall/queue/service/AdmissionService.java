@@ -35,10 +35,18 @@ public class AdmissionService {
         Long nowMs = now == null ? null : now.toEpochMilli();
         long total = 0;
         for (long sessionId : repository.openSessions()) {
-            AdmitResult result =
-                    repository.admit(sessionId, nowMs, properties.entryTtl().toMillis());
-            if (result.ran() && result.admitted() > 0) {
-                log.debug("회차 {} 입장 {}명, 활성 {}명", sessionId, result.admitted(), result.active());
+            AdmitResult result = repository.admit(
+                    sessionId,
+                    nowMs,
+                    properties.entryTtl().toMillis(),
+                    properties.admitStaleAfter().toMillis());
+            if (result.ran() && (result.admitted() > 0 || result.dropped() > 0)) {
+                log.debug(
+                        "회차 {} 입장 {}명, 폴링 끊김 {}명 제거, 활성 {}명",
+                        sessionId,
+                        result.admitted(),
+                        result.dropped(),
+                        result.active());
             }
             total += result.admitted();
         }

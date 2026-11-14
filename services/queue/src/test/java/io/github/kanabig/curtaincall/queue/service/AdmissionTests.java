@@ -53,6 +53,13 @@ class AdmissionTests extends QueueIntegrationTest {
         }
     }
 
+    /** 시계를 앞으로 돌리는 테스트에서 대기자들이 그 시각까지 계속 폴링한 것으로 만든다. */
+    private void pollUntil(int from, int to, Instant at) {
+        for (int u = from; u <= to; u++) {
+            redis.opsForZSet().add(key("seen"), String.valueOf(u), at.toEpochMilli());
+        }
+    }
+
     private boolean isActive(long userId) {
         return redis.opsForZSet().score(key("active"), String.valueOf(userId)) != null;
     }
@@ -116,6 +123,7 @@ class AdmissionTests extends QueueIntegrationTest {
         putConf(-1000, 50, 100);
         enterUsers(1, 1000);
         Instant t0 = startOfSecond();
+        pollUntil(1, 1000, t0.plusSeconds(40));
         List<Integer> seconds = new ArrayList<>();
         for (int s = 0; s < 40; s++) {
             seconds.add(s);
@@ -138,6 +146,7 @@ class AdmissionTests extends QueueIntegrationTest {
         admission.admitAll(t0.plus(properties.entryTtl()).minusSeconds(1));
         assertThat(isActive(3)).isFalse();
 
+        pollUntil(3, 4, t0.plus(properties.entryTtl()).plusSeconds(1));
         admission.admitAll(t0.plus(properties.entryTtl()).plusSeconds(1));
         assertThat(isActive(1)).isFalse();
         assertThat(isActive(3) && isActive(4)).isTrue();
@@ -159,6 +168,8 @@ class AdmissionTests extends QueueIntegrationTest {
         assertThat(redis.opsForZSet().score(key("waiting"), "1")).isNull();
         assertThat(redis.opsForZSet().score(key("seen"), "1")).isNull();
         assertThat(redis.opsForZSet().score(key("waiting"), "2")).isNotNull();
+        // 2번이 입장 순서가 되기 전에 다시 폴링한다
+        redis.opsForZSet().add(key("seen"), "2", nowMs - 5_000);
 
         // 빠진 사람이 앞자리를 잡고 있지 않으므로 다음 입장은 2번이다
         admission.admitAll(t0);
@@ -167,6 +178,56 @@ class AdmissionTests extends QueueIntegrationTest {
 
         // 시간이 더 지나면 폴링하지 않은 3번까지 빠진다. 입장한 2번은 대기 정리 대상이 아니다
         assertThat(admission.removeStale(t0.plusSeconds(61))).isEqualTo(1);
+        assertThat(isActive(2)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[QUE-4] 입장 순서가 됐을 때 폴링이 15초 넘게 끊긴 사람은 입장시키지 않고 지운 뒤 다음 사람으로 채운다")
+    void skipsWaitersWhoStoppedPolling() {
+        putConf(-1000, 3);
+        enterUsers(1, 6);
+        Instant t0 = startOfSecond();
+        long nowMs = t0.toEpochMilli();
+        redis.opsForZSet().add(key("seen"), "1", nowMs - 16_000);
+        redis.opsForZSet().add(key("seen"), "2", nowMs - 20_000);
+        redis.opsForZSet().add(key("seen"), "3", nowMs - 14_000);
+
+        assertThat(admission.admitAll(t0)).isEqualTo(3);
+        assertThat(isActive(1) || isActive(2)).isFalse();
+        assertThat(isActive(3) && isActive(4) && isActive(5)).isTrue();
+        assertThat(redis.opsForZSet().score(key("waiting"), "1")).isNull();
+        assertThat(redis.opsForZSet().score(key("seen"), "2")).isNull();
+        assertThat(redis.opsForZSet().zCard(key("waiting"))).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("[QUE-4] 대기자 모두 폴링이 끊겼으면 아무도 입장시키지 않고 대기열만 비운다")
+    void allStaleWaiters() {
+        putConf(-1000, 5);
+        enterUsers(1, 3);
+        Instant t0 = startOfSecond();
+        for (int u = 1; u <= 3; u++) {
+            redis.opsForZSet().add(key("seen"), String.valueOf(u), t0.toEpochMilli() - 30_000);
+        }
+        assertThat(admission.admitAll(t0)).isZero();
+        assertThat(activeCount()).isZero();
+        assertThat(redis.opsForZSet().zCard(key("waiting"))).isZero();
+    }
+
+    @Test
+    @DisplayName("[QUE-6] 입장한 사용자가 대기 포기를 부르면 활성에서도 빠져 자리가 돌아온다")
+    void leaveAfterAdmittedFreesSlot() {
+        putConf(-1000, 10, 1);
+        enterUsers(1, 2);
+        Instant t0 = startOfSecond();
+        admission.admitAll(t0);
+        assertThat(isActive(1)).isTrue();
+        assertThat(activeCount()).isEqualTo(1);
+
+        queue.leave(sessionId, 1);
+        assertThat(activeCount()).isZero();
+
+        admission.admitAll(t0.plusSeconds(1));
         assertThat(isActive(2)).isTrue();
     }
 

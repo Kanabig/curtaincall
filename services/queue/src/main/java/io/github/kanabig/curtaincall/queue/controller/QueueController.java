@@ -31,7 +31,7 @@ public class QueueController {
                 .body(entered.response());
     }
 
-    /** 대기 포기. 이미 나갔어도 204다. 입장한 뒤에는 토큰이 만료될 때까지 활성 목록에 남는다. */
+    /** 대기 포기. 이미 나갔어도 204다. 입장한 뒤에 불러도 활성 목록에서 빼서 자리를 돌려준다(이미 받은 토큰은 만료까지 유효). */
     @DeleteMapping("/api/v1/queue/sessions/{sessionId}/entries/me")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void leave(@PathVariable long sessionId, @RequestHeader("X-User-Id") long userId) {

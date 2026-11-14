@@ -43,7 +43,7 @@ public class QueueService {
         return toResponse(call(() -> repository.status(sessionId, userId)), sessionId, userId);
     }
 
-    /** 대기 포기. 대기 중이 아니어도 오류 없이 끝난다. */
+    /** 대기 포기. 입장한 사용자면 활성에서도 빠진다. 대기 중이 아니어도 오류 없이 끝난다. */
     public void leave(long sessionId, long userId) {
         call(() -> {
             repository.leave(sessionId, userId);
