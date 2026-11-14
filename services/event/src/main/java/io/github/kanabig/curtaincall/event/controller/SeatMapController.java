@@ -3,6 +3,7 @@ package io.github.kanabig.curtaincall.event.controller;
 import io.github.kanabig.curtaincall.event.service.SeatMapService;
 import io.github.kanabig.curtaincall.event.service.SeatMapService.Body;
 import java.time.Duration;
+import java.util.Locale;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -28,19 +29,23 @@ public class SeatMapController {
     @GetMapping("/api/v1/sessions/{id}/seat-map")
     public ResponseEntity<byte[]> seatMap(
             @PathVariable long id,
-            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
+            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch,
+            @RequestHeader(value = HttpHeaders.ACCEPT_ENCODING, required = false) String acceptEncoding) {
         Body body = seatMaps.get(id);
-        if (matches(ifNoneMatch, body.etag())) {
-            return ResponseEntity.status(304)
-                    .cacheControl(PUBLIC_CACHE)
-                    .eTag(body.etag())
-                    .build();
-        }
-        return ResponseEntity.ok()
+        boolean gzip = acceptEncoding != null
+                && acceptEncoding.toLowerCase(Locale.ROOT).contains("gzip");
+        String etag = gzip ? body.gzipEtag() : body.etag();
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(matches(ifNoneMatch, etag) ? 304 : 200)
                 .cacheControl(PUBLIC_CACHE)
-                .eTag(body.etag())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(body.json());
+                .eTag(etag)
+                .header(HttpHeaders.VARY, HttpHeaders.ACCEPT_ENCODING);
+        if (matches(ifNoneMatch, etag)) {
+            return response.build();
+        }
+        if (gzip) {
+            response.header(HttpHeaders.CONTENT_ENCODING, "gzip");
+        }
+        return response.contentType(MediaType.APPLICATION_JSON).body(gzip ? body.gzip() : body.json());
     }
 
     @GetMapping("/internal/sessions/{id}/seat-map")

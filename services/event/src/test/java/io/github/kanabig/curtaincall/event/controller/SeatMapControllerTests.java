@@ -157,6 +157,41 @@ class SeatMapControllerTests extends EventIntegrationTest {
     }
 
     @Test
+    @DisplayName("Accept-Encoding: gzip이면 압축 본문과 인코딩별 ETag로 응답하고, 풀면 평문과 같다")
+    void gzipVariant() throws Exception {
+        String path = "/api/v1/sessions/" + sessionId + "/seat-map";
+        HttpHeaders plainHeaders = new HttpHeaders();
+        ResponseEntity<byte[]> plain =
+                rest.exchange(path, HttpMethod.GET, new HttpEntity<>(plainHeaders), byte[].class);
+        java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+        java.net.http.HttpResponse<byte[]> gz = client.send(
+                java.net.http.HttpRequest.newBuilder(
+                                rest.getRestTemplate().getUriTemplateHandler().expand(path))
+                        .header("Accept-Encoding", "gzip")
+                        .build(),
+                java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+
+        assertThat(gz.headers().firstValue("Content-Encoding")).hasValue("gzip");
+        assertThat(gz.headers().firstValue("Vary")).hasValue("Accept-Encoding");
+        String gzEtag = gz.headers().firstValue("ETag").orElseThrow();
+        assertThat(gzEtag).isNotEqualTo(plain.getHeaders().getETag());
+        assertThat(gz.body().length).isLessThan(plain.getBody().length);
+        try (var in = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(gz.body()))) {
+            assertThat(in.readAllBytes()).isEqualTo(plain.getBody());
+        }
+        assertThat(client.send(
+                                java.net.http.HttpRequest.newBuilder(rest.getRestTemplate()
+                                                .getUriTemplateHandler()
+                                                .expand(path))
+                                        .header("Accept-Encoding", "gzip")
+                                        .header("If-None-Match", gzEtag)
+                                        .build(),
+                                java.net.http.HttpResponse.BodyHandlers.discarding())
+                        .statusCode())
+                .isEqualTo(304);
+    }
+
+    @Test
     @DisplayName("같은 회차를 다시 요청하면 DB를 읽지 않는다(첫 요청은 회차 1회·좌석 1회)")
     void servedFromCache() {
         String path = "/api/v1/sessions/" + sessionId + "/seat-map";

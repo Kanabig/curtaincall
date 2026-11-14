@@ -1,6 +1,5 @@
 package io.github.kanabig.curtaincall.event.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
 import io.github.kanabig.curtaincall.event.dto.PriceTable;
@@ -11,6 +10,8 @@ import io.github.kanabig.curtaincall.event.error.EventErrorCode;
 import io.github.kanabig.curtaincall.event.repository.HallSeatRepository;
 import io.github.kanabig.curtaincall.event.repository.HallSeatRepository.SeatRow;
 import io.github.kanabig.curtaincall.event.repository.SessionRepository;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
@@ -22,6 +23,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.GZIPOutputStream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -112,8 +114,9 @@ public class SeatMapService {
         }
         try {
             byte[] json = mapper.writeValueAsBytes(entries);
-            return new Body(json, etag(json));
-        } catch (JsonProcessingException e) {
+            String etag = etag(json);
+            return new Body(json, etag, gzip(json), etag.substring(0, etag.length() - 1) + "-gzip\"");
+        } catch (IOException e) {
             throw new IllegalStateException("좌석 배치도를 직렬화하지 못했다 sessionId=" + sessionId, e);
         }
     }
@@ -127,7 +130,16 @@ public class SeatMapService {
         }
     }
 
-    public record Body(byte[] json, String etag) {}
+    private static byte[] gzip(byte[] json) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(json.length / 8);
+        try (GZIPOutputStream gz = new GZIPOutputStream(out)) {
+            gz.write(json);
+        }
+        return out.toByteArray();
+    }
+
+    /** 본문을 평문과 gzip 두 가지로 들고 있다. 압축은 만들 때 한 번만 하고, 인코딩마다 ETag가 다르다. */
+    public record Body(byte[] json, String etag, byte[] gzip, String gzipEtag) {}
 
     private record Cached(Body body, Instant expiresAt) {}
 }
