@@ -29,8 +29,8 @@ spring:
   data:
     redis:
       # Redis가 느리거나 죽어도 요청이 오래 붙잡히지 않게 짧게 둔다(속도 제한은 fail-open)
-      timeout: 200ms
-      connect-timeout: 200ms
+      timeout: 100ms
+      connect-timeout: 100ms
 server:
   port: 8080
 logging:
@@ -45,7 +45,9 @@ curtaincall:
     user:
       rate-per-second: ${RATE_LIMIT_USER_PER_SECOND:10}
       burst: ${RATE_LIMIT_USER_BURST:20}
-    timeout: 200ms
+    timeout: 100ms
+    # 실패 뒤 이 시간 동안은 Redis를 부르지 않고 통과시킨다
+    circuit-open: 5s
     # gateway가 가장 앞단이면 false. X-Forwarded-For는 클라이언트가 임의로 보낼 수 있다
     trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:false}
   jwt:

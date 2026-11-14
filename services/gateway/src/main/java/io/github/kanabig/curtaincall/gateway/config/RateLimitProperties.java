@@ -10,13 +10,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param ip IP별 토큰 버킷
  * @param user 계정별 토큰 버킷
  * @param timeout Redis 호출 제한 시간. 넘으면 통과시킨다
+ * @param circuitOpen Redis 호출이 실패한 뒤 이 시간 동안은 호출하지 않고 통과시킨다. 장애 중 요청마다 타임아웃을 기다리지 않게 한다
  * @param trustForwardedFor true면 X-Forwarded-For의 마지막 값을 클라이언트 IP로 쓴다. gateway 앞에 신뢰하는 프록시가 있을 때만 켠다
  */
 @ConfigurationProperties("curtaincall.rate-limit")
 public record RateLimitProperties(
         @DefaultValue Bucket ip,
         @DefaultValue Bucket user,
-        @DefaultValue("200ms") Duration timeout,
+        @DefaultValue("100ms") Duration timeout,
+        @DefaultValue("5s") Duration circuitOpen,
         @DefaultValue("false") boolean trustForwardedFor) {
 
     /**
