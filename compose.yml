@@ -165,6 +165,7 @@ services:
       SPRING_FLYWAY_USER: reservation_flyway
       SPRING_FLYWAY_PASSWORD: ${RESERVATION_FLYWAY_PASSWORD}
       CURTAINCALL_EVENT_BASE_URL: http://event:8082
+      CURTAINCALL_HOLD_STRATEGY: ${CURTAINCALL_HOLD_STRATEGY:-conditional-update}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     depends_on:
