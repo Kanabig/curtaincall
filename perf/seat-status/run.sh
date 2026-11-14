@@ -19,7 +19,7 @@ compose() { docker compose -p "$PROJECT" "$@"; }
 mysql_root() { compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" reservation_db 2>/dev/null'; }
 k6run() { docker run --rm --user "$(id -u):$(id -g)" --network "${PROJECT}_default" -v "$PWD/perf:/perf:ro" "$@"; }
 
-CURTAINCALL_SEAT_STATUS_CACHE_TTL="$TTL" compose up -d --force-recreate --wait reservation
+CURTAINCALL_SEAT_STATUS_CACHE_TTL="$TTL" compose up -d --build --force-recreate --wait reservation
 mysql_root < perf/seat-hold/seed.sql
 # 워밍업
 k6run -e VUS=50 -e DURATION=10s "$K6_IMAGE" run --quiet /perf/seat-status/seat-status.js > /dev/null || true
@@ -49,4 +49,4 @@ kill $SAMPLER 2>/dev/null || true
 echo "--- 좌석 상태 SELECT 실행 수 (DB)" | tee "$OUT/db-queries.txt"
 echo "SELECT count_star, ROUND(avg_timer_wait/1e9,2) AS avg_ms FROM performance_schema.events_statements_summary_by_digest WHERE schema_name='reservation_db' AND digest_text LIKE 'SELECT \`seat_id\` , STATUS FROM \`seat_inventory\` WHERE \`session_id\` = ? AND%'" \
     | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -t 2>/dev/null' | tee -a "$OUT/db-queries.txt"
-if [ "$HOLD_RATE" != "0" ]; then grep -E "http_req_duration|hold_ok|hold_error" "$OUT/k6-hold.txt" | tee "$OUT/hold-summary.txt"; fi
+if [ "$HOLD_RATE" != "0" ]; then grep -E "latency|hold_" "$OUT/k6-hold.txt" | tee "$OUT/hold-summary.txt"; fi
