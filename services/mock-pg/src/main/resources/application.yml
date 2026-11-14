@@ -16,9 +16,6 @@ mock-pg:
 logging:
   pattern:
     level: "%5p [${spring.application.name}]"
-  level:
-    # 응답 유실 모드가 의도적으로 던지는 예외가 요청마다 ERROR 스택트레이스로 남지 않게 한다
-    "[org.apache.catalina.core.ContainerBase.[Tomcat].[localhost].[/].[dispatcherServlet]]": "OFF"
 management:
   endpoints:
     web:
