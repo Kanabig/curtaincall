@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   pull_request:
+    branches: [dev, main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -24,6 +25,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
+        with:
+          # 캐시는 dev·main push에서만 저장하고, PR은 읽기만 한다
+          cache-read-only: ${{ github.event_name != 'push' }}
       - run: ./gradlew build
 
       - name: Test report

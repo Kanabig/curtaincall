@@ -5,4 +5,11 @@ plugins {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    testImplementation project(':libs:test-support')
+}
+
+// Dockerfile이 서비스 이름과 무관하게 같은 경로를 복사하도록 파일명을 고정한다
+tasks.named('bootJar') {
+    archiveFileName = 'app.jar'
 }

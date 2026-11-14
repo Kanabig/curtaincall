@@ -1,0 +1,21 @@
+plugins {
+    id 'curtaincall.library-conventions'
+}
+
+dependencies {
+    api 'org.springframework.boot:spring-boot-starter-test'
+    api 'org.springframework.boot:spring-boot-testcontainers'
+    api 'com.tngtech.archunit:archunit-junit5:1.5.1'
+    api 'org.testcontainers:junit-jupiter'
+    api 'org.testcontainers:mysql'
+    api 'org.testcontainers:kafka'
+    api 'com.redis:testcontainers-redis'
+
+    // 이 모듈 자체의 샘플 테스트용. 서비스는 자기 의존성을 따로 선언한다.
+    testImplementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    testImplementation 'org.springframework.kafka:spring-kafka'
+    testImplementation 'org.flywaydb:flyway-core'
+    testImplementation 'org.flywaydb:flyway-mysql'
+    testRuntimeOnly 'com.mysql:mysql-connector-j'
+}

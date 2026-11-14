@@ -1,0 +1,117 @@
+package io.github.kanabig.curtaincall.payment.service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.kanabig.curtaincall.outbox.message.EventEnvelope;
+import io.github.kanabig.curtaincall.outbox.message.EventTypes;
+import io.github.kanabig.curtaincall.payment.config.PaymentProperties;
+import io.github.kanabig.curtaincall.payment.dto.ApprovePaymentCommand;
+import io.github.kanabig.curtaincall.payment.entity.Payment;
+import io.github.kanabig.curtaincall.payment.repository.PaymentRepository;
+import java.time.Clock;
+import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+/**
+ * [PAY-1, PAY-3] {@code payment.command}를 처리한다. IdempotentConsumer의 트랜잭션 안에서 호출된다.
+ *
+ * <p>같은 주문의 ApprovePayment는 payment 행이 하나(order_id UNIQUE)라 PG 승인을 한 번만 시도한다. 이미 있는 주문이면 현재 결과를 다시 응답한다. PG 호출은
+ * 트랜잭션 밖에서 하므로 새 결제를 커밋한 뒤에 시작한다.
+ */
+@Service
+@Transactional(readOnly = true)
+public class PaymentCommandService {
+
+    private static final Logger log = LoggerFactory.getLogger(PaymentCommandService.class);
+
+    private final PaymentRepository repository;
+    private final PaymentEvents events;
+    private final PaymentApprovalService approvalService;
+    private final ObjectMapper objectMapper;
+    private final PaymentProperties.Inquiry inquiry;
+    private final Clock clock;
+
+    public PaymentCommandService(
+            PaymentRepository repository,
+            PaymentEvents events,
+            PaymentApprovalService approvalService,
+            ObjectMapper objectMapper,
+            PaymentProperties properties,
+            Clock clock) {
+        this.repository = repository;
+        this.events = events;
+        this.approvalService = approvalService;
+        this.objectMapper = objectMapper;
+        this.inquiry = properties.inquiry();
+        this.clock = clock;
+    }
+
+    @Transactional
+    public void handle(EventEnvelope envelope) {
+        String name = EventTypes.nameOf(envelope.eventType());
+        if ("ApprovePayment".equals(name)) {
+            approve(read(envelope));
+        } else {
+            log.warn("처리하지 않는 명령이다: eventType={}, eventId={}", envelope.eventType(), envelope.eventId());
+        }
+    }
+
+    private void approve(ApprovePaymentCommand command) {
+        // 잠그지 않고 먼저 읽는다. 없는 행에 FOR UPDATE를 걸면 갭 락이 생겨 서로 다른 주문의 INSERT가 교착한다
+        Payment existing = repository.findByOrderId(command.orderId()).orElse(null);
+        if (existing != null) {
+            respondWithCurrentResult(lock(existing));
+            return;
+        }
+        Payment payment = repository.saveAndFlush(Payment.request(
+                command.orderId(), command.userId(), command.amount(), command.cardToken(), clock.instant()));
+        String paymentId = payment.getPaymentId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                approvalService.dispatch(paymentId);
+            }
+        });
+    }
+
+    private Payment lock(Payment payment) {
+        return repository
+                .findForUpdate(payment.getPaymentId())
+                .orElseThrow(() -> new IllegalStateException("결제를 찾을 수 없다: " + payment.getPaymentId()));
+    }
+
+    private void respondWithCurrentResult(Payment payment) {
+        Instant now = clock.instant();
+        switch (payment.getStatus()) {
+            case APPROVED -> events.approved(payment);
+            case FAILED -> events.failed(payment);
+            case UNKNOWN -> {
+                if (payment.restartInquiry(now, inquiry.initialDelay())) {
+                    log.info("명령이 다시 와서 소진된 거래 조회를 처음부터 다시 한다: orderId={}", payment.getOrderId());
+                } else {
+                    log.info("거래 조회가 진행 중이라 재전송된 명령은 무시한다: orderId={}", payment.getOrderId());
+                }
+            }
+            case REQUESTED -> {
+                // 승인 호출이 진행 중이면 결과가 나올 때 응답한다. 오래 멈춰 있으면 호출 결과를 알 수 없으므로 조회로 확인한다
+                if (payment.getCreatedAt().plus(inquiry.requestedStaleAfter()).isBefore(now)) {
+                    payment.markUnknown(now, inquiry.initialDelay());
+                    log.warn("승인 호출이 끝나지 않은 채 오래됐다. 거래 조회로 확인한다: orderId={}", payment.getOrderId());
+                }
+            }
+        }
+    }
+
+    private ApprovePaymentCommand read(EventEnvelope envelope) {
+        try {
+            return objectMapper.treeToValue(envelope.payload(), ApprovePaymentCommand.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("ApprovePayment payload를 읽을 수 없다: " + envelope.eventId(), e);
+        }
+    }
+}

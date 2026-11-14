@@ -1,13 +1,39 @@
 spring:
   application:
     name: payment
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          # Instant를 UTC로 저장한다. 서버·JVM 시간대와 무관하게 거래 조회 시각이 일정하다
+          time_zone: UTC
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
 server:
   port: 8085
 logging:
   pattern:
-    level: "%5p [%X{requestId:-}]"
+    level: "%5p [${spring.application.name},%X{requestId:-}]"
 management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
+curtaincall:
+  outbox:
+    enabled: true
+    consumer:
+      enabled: true
+payment:
+  pg:
+    base-url: http://localhost:8090

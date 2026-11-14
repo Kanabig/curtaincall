@@ -20,6 +20,18 @@
 - IntelliJ: palantir-java-format 플러그인을 설치하고 Enable 해야 에디터 포맷이 spotless와 같아진다.
 - 구조: `services/*`(서비스), `libs/*`(공통 모듈), `build-logic`(Gradle 컨벤션 플러그인).
 
+## 실행
+
+```bash
+cp .env.example .env      # 기본값 그대로 쓸 수 있다
+docker compose up -d --build --wait
+```
+
+- gateway만 `GATEWAY_HOST_PORT`(기본 8080)로 열린다. MySQL, Redis, Kafka, Mailpit은 개발 도구용으로 `.env`의 호스트 포트에 열려 있다(Mailpit 화면 8025).
+- KOPIS, LLM 키 없이 뜬다(fixture, Mock 모드).
+- 프로젝트를 나눠 동시에 띄우려면 `docker compose -p <이름>`과 함께 `.env`의 호스트 포트를 서로 다르게 바꾼다.
+- DB 계정은 서비스마다 앱 계정(`<서비스>_app`, DML)과 Flyway 계정(`<서비스>_flyway`, DDL + DML)으로 나뉘고 둘 다 자기 스키마 권한만 갖는다. 권한은 `docker/verify-schema-isolation.sh [프로젝트 이름]`으로 확인한다. 계정이나 초기화 스크립트를 바꾸면 `docker compose down -v` 후 다시 기동해야 반영된다(초기화는 빈 볼륨에서만 실행된다).
+
 ## 기술적 의사결정
 
 **예매처 시뮬레이션.** curtaincall은 기획사와 판매 대행 계약을 맺은 예매처라고 가정한다. 공연·공연장 정보는 KOPIS(공연예술통합전산망) 오픈 API에서 동기화하고, 원래 계약으로 받는 데이터(좌석 배치, 등급·가격, 회차, 판매 오픈 시각)는 객석 수 기준으로 생성한다. 좌석과 판매 데이터는 시연용 생성 데이터다.
@@ -30,11 +42,22 @@
 
 **Spring Boot 3.5에서 시작해 4.1로.** 현업에 가장 많이 깔린 3.x로 개발하고 메이저 버전업을 직접 진행한다. 3.5는 2026-06-30에 OSS 지원이 끝났고 Spring Initializr도 4.0 미만 생성을 막아, 4.1.2로 생성한 뒤 3.5.16과 Gradle 8.14.7(3.5 지원 범위)로 내렸다.
 
+**좌석 점유는 MySQL 조건부 UPDATE.** 점유 방식 두 가지(조건부 UPDATE, `SELECT … FOR UPDATE` 비관적 락)를 같은 조건으로 비교했다. 앞열에 요청이 몰리는 분포(1만 석, 60초, 3회 중앙값)에서 둘 다 p95 4ms 안팎이고 교착과 락 대기 타임아웃은 0, 이중 점유도 없었다. 차이가 없어 추가 인프라 없는 조건부 UPDATE를 기본으로 쓴다(`curtaincall.hold.strategy`로 전환). 시나리오는 `perf/seat-hold`.
+
+| 초당 요청 | 전략 | p50 / p95 / p99 (ms) | 성공 점유/초 | 교착·타임아웃 |
+|---|---|---|---|---|
+| 300 | 조건부 UPDATE | 2.2 / 3.7 / 6.7 | 65 | 0 |
+| 300 | 비관적 락 | 1.8 / 3.6 / 6.9 | 64 | 0 |
+| 1000 | 조건부 UPDATE | 1.9 / 3.5 / 5.4 | 90 | 0 |
+| 1000 | 비관적 락 | 1.7 / 3.3 / 4.9 | 89 | 0 |
+
+측정 조건은 reservation 인스턴스 하나, gateway 없이 서비스 직접 호출, 한 PC(16 CPU)에 MySQL·reservation·k6 동거, 재고가 금방 차서 응답 대부분이 409다. 초당 1000건에서는 MySQL CPU가 갑자기 치솟으며 p95가 300ms를 넘는 실행이 있었다(조건부 UPDATE 3회 중 1회, p95 1.1초, 요청 일부 지연 누락). 이 환경 단일 인스턴스 기준 포화 구간이며 원인은 확인하지 못했다.
+
 **AI는 예매 경로 밖에.** 자연어 검색어를 구조화된 검색 조건으로 바꾸는 데만 LLM을 쓴다. 대기열·좌석·결제에는 넣지 않는다. 출력은 서버에서 검증하고, 실패하거나 느리면 키워드 검색으로 fallback한다. API 키 없이 Mock 모드로 실행된다.
 
 ## 작업 방식
 
-이슈는 epic(서비스·기능군) > story(기능 ID 또는 사용자 화면 단위 요구사항, 수용 기준 포함) / task(환경·성능·검증) / bug로 나누고, epic 아래에 하위 이슈로 연결한다. 이슈에는 유형과 서비스 라벨만 붙이고, 변경의 성격(type)은 PR 제목과 PR 라벨로 정한다. story 하나가 브랜치 `<type>/<이슈번호>-<설명>`과 PR 하나에 대응한다. PR 제목은 Conventional Commits이며 squash merge한다.
+이슈는 epic(서비스·기능군) > story(기능 ID 또는 사용자 화면 단위 요구사항, 수용 기준 포함) / task(환경·성능·검증) / bug로 나누고, epic 아래에 하위 이슈로 연결한다. 이슈에는 유형과 서비스 라벨만 붙이고, 변경의 성격(type)은 PR 제목과 PR 라벨로 정한다. story 하나가 브랜치 `<type>/<이슈번호>-<설명>`과 PR 하나에 대응한다. 이슈 브랜치는 `dev`에서 나와 `dev`로 squash merge한다. 마일스톤이 끝나면 `dev`를 `main`에 merge commit으로 올리고 태그를 붙인다. `main`은 항상 릴리스 가능한 상태다. PR 제목은 Conventional Commits를 따른다. 커밋 템플릿은 `git config commit.template .gitmessage.txt`로 쓴다.
 
 | 이슈 유형 | 주로 쓰는 PR type |
 |---|---|

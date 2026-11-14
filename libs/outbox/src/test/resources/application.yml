@@ -1,0 +1,18 @@
+spring:
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus
+curtaincall:
+  outbox:
+    enabled: true
+    relay:
+      # 테스트에서 릴레이를 직접 돌린다. 캐시된 컨텍스트의 릴레이가 다른 테스트의 행을 가져가지 않게 한다
+      auto-start: false
+    consumer:
+      enabled: true
+      backoff-initial: 50ms

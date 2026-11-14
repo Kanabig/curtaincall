@@ -1,0 +1,32 @@
+plugins {
+    id 'curtaincall.library-conventions'
+}
+
+dependencies {
+    api 'org.springframework.boot:spring-boot-starter-jdbc'
+    api 'org.springframework.boot:spring-boot-starter-json'
+    api 'org.springframework.kafka:spring-kafka'
+    api 'io.micrometer:micrometer-core'
+    implementation project(':libs:common-web')
+
+    testImplementation project(':libs:test-support')
+    testImplementation 'org.springframework.boot:spring-boot-starter-actuator'
+    testImplementation 'io.micrometer:micrometer-registry-prometheus'
+    testImplementation 'org.flywaydb:flyway-core'
+    testImplementation 'org.flywaydb:flyway-mysql'
+    testRuntimeOnly 'com.mysql:mysql-connector-j'
+}
+
+// 서비스가 복사해 가는 SQL 템플릿을 테스트 마이그레이션으로도 그대로 쓴다. 템플릿과 테스트 스키마가 어긋나지 않게 한다.
+tasks.named('processTestResources') {
+    from('src/main/resources/outbox') {
+        include 'outbox.sql'
+        rename 'outbox.sql', 'V1__create_outbox.sql'
+        into 'db/migration'
+    }
+    from('src/main/resources/outbox') {
+        include 'processed_event.sql'
+        rename 'processed_event.sql', 'V2__create_processed_event.sql'
+        into 'db/migration'
+    }
+}
