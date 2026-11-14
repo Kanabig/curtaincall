@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,6 +99,11 @@ public class KopisSyncService {
 
     /** 동기화를 한 번 돌린다. 다른 인스턴스가 돌리는 중이면 아무것도 하지 않고 SKIPPED를 돌려준다. */
     public SyncRun sync(String trigger) {
+        return sync(trigger, id -> {});
+    }
+
+    /** onStarted는 실행 이력 행을 만든 직후 실행 ID와 함께 불린다. 건너뛰면 불리지 않는다. */
+    public SyncRun sync(String trigger, LongConsumer onStarted) {
         String owner = UUID.randomUUID().toString();
         Instant now = clock.instant();
         if (!lock.tryAcquire(LOCK, owner, now, now.plus(properties.lockLease()))) {
@@ -105,18 +111,19 @@ public class KopisSyncService {
             return new SyncRun(0, SyncStatus.SKIPPED, null, null, false, 0, 0, 0, 0, 0, null);
         }
         try {
-            return run(trigger, now);
+            return run(trigger, now, onStarted);
         } finally {
             lock.release(LOCK, owner);
         }
     }
 
-    private SyncRun run(String trigger, Instant startedAt) {
+    private SyncRun run(String trigger, Instant startedAt, LongConsumer onStarted) {
         LocalDate today = LocalDate.now(clock);
         LastSync last = runs.lastListCompleted(properties.zone()).orElse(null);
         LocalDate afterDate = last == null ? null : last.date();
         LocalDate windowEnd = today.plusDays(properties.windowDays() - 1L);
         long runId = runs.start(trigger, client.metered(), startedAt, afterDate);
+        onStarted.accept(runId);
         CallBudget budget =
                 new CallBudget(callLog, clock, client.metered(), properties.syncMaxCalls(), properties.dailyLimit());
         Progress progress = new Progress();

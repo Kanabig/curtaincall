@@ -33,3 +33,7 @@ curtaincall:
     detail-max-attempts: 3
     cron: "0 0 4 * * *"
     zone: Asia/Seoul
+  outbox:
+    enabled: true
+  topics:
+    session: event.session
