@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({EventClientProperties.class, SeatInventoryProperties.class})
+@EnableConfigurationProperties({EventClientProperties.class, SeatInventoryProperties.class, HoldProperties.class})
 public class EventClientConfig {
 
     static final String EVENT_REST_CLIENT = "eventRestClient";

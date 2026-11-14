@@ -12,6 +12,12 @@ public final class MetricNames {
     /** 좌석 점유. Timer. 태그 result = success, conflict, limit_exceeded, error. 지연 분포와 성공·실패 수를 함께 본다. */
     public static final String SEAT_HOLD = "seat.hold";
 
+    /** 재고 생성을 기다리는(PENDING) 회차 수. Gauge. reservation이 등록한다. */
+    public static final String SEAT_STOCK_PENDING = "seat.stock.pending";
+
+    /** 가장 오래된 PENDING 회차의 대기 시간(초). Gauge. PENDING이 없으면 0. reservation이 등록한다. */
+    public static final String SEAT_STOCK_PENDING_OLDEST_AGE = "seat.stock.pending.oldest.age";
+
     /** 대기열 길이. Gauge. 태그 schedule(회차). */
     public static final String QUEUE_LENGTH = "queue.length";
 
