@@ -49,6 +49,14 @@ public class OrderSeatRepository {
                 holdId);
     }
 
+    /** 환불이 끝난 예매의 좌석을 판매 가능으로 되돌린다. 점유 때 남은 hold_id로 찾는다. */
+    public int releaseSold(String holdId) {
+        return jdbc.update(
+                "UPDATE seat_inventory SET status = 'AVAILABLE', hold_id = NULL, holder_id = NULL, expires_at = NULL,"
+                        + " version = version + 1 WHERE hold_id = ? AND status = 'SOLD'",
+                holdId);
+    }
+
     /**
      * 결제를 시작하며 점유를 {@code expiresAt}까지 늘린다. 아직 만료되지 않은 내 점유만 늘리므로, 바뀐 행 수가 주문 좌석 수보다 적으면 호출하는 쪽이 거절한다.
      */

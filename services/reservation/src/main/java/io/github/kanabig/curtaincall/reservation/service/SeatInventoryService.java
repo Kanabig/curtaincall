@@ -49,7 +49,17 @@ public class SeatInventoryService {
 
     /** 재고 생성 대상으로 등록한다. 이벤트 소비 트랜잭션 안에서 부른다. */
     public void requestInventory(long sessionId) {
-        repository.insertPending(sessionId, clock.instant());
+        requestInventory(sessionId, null);
+    }
+
+    /** {@code startAt}은 예매 취소 기한 계산에 쓴다. */
+    public void requestInventory(long sessionId, Instant startAt) {
+        repository.insertPending(sessionId, clock.instant(), startAt);
+    }
+
+    /** 회차 수정 이벤트로 시작 시각을 맞춘다. */
+    public void updateStartAt(long sessionId, Instant startAt) {
+        repository.updateStartAt(sessionId, startAt);
     }
 
     /**

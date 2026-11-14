@@ -8,8 +8,11 @@ import io.github.kanabig.curtaincall.reservation.config.OrderProperties;
 import io.github.kanabig.curtaincall.reservation.entity.HeldSeat;
 import io.github.kanabig.curtaincall.reservation.entity.Order;
 import io.github.kanabig.curtaincall.reservation.entity.OrderStatus;
+import io.github.kanabig.curtaincall.reservation.entity.Reservation;
+import io.github.kanabig.curtaincall.reservation.entity.ReservationStatus;
 import io.github.kanabig.curtaincall.reservation.repository.OrderRepository;
 import io.github.kanabig.curtaincall.reservation.repository.OrderSeatRepository;
+import io.github.kanabig.curtaincall.reservation.repository.ReservationRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
@@ -36,6 +39,7 @@ public class OrderSagaService {
 
     private final OrderRepository orders;
     private final OrderSeatRepository seats;
+    private final ReservationRepository reservations;
     private final OrderEvents events;
     private final OrderProperties properties;
     private final Clock clock;
@@ -45,12 +49,14 @@ public class OrderSagaService {
     public OrderSagaService(
             OrderRepository orders,
             OrderSeatRepository seats,
+            ReservationRepository reservations,
             OrderEvents events,
             OrderProperties properties,
             Clock clock,
             MeterRegistry meterRegistry) {
         this.orders = orders;
         this.seats = seats;
+        this.reservations = reservations;
         this.events = events;
         this.properties = properties;
         this.clock = clock;
@@ -135,13 +141,44 @@ public class OrderSagaService {
     }
 
     private void onCancelled(String orderId) {
-        // 예매 취소(USER_CANCEL)의 환불 완료는 REFUNDING이 아니라 예매 쪽 상태로 처리한다
-        Order order = lockExpecting(orderId, OrderStatus.REFUNDING, "PaymentCancelled");
+        Order order = orders.lock(orderId).orElse(null);
         if (order == null) {
+            log.warn("없는 주문의 결제 이벤트를 무시한다: orderId={}, event=PaymentCancelled", orderId);
             return;
         }
-        transition(order, OrderStatus.REFUNDED, clock.instant());
-        events.orderRefunded(order);
+        if (order.status() == OrderStatus.REFUNDING) {
+            // 좌석 소실 보상(SEAT_LOST)의 환불 완료
+            transition(order, OrderStatus.REFUNDED, clock.instant());
+            events.orderRefunded(order);
+            return;
+        }
+        // 사용자 취소(USER_CANCEL)의 환불 완료. 주문은 CONFIRMED로 끝나 있고 상태는 예매에 있다
+        Reservation reservation = reservations.lockByOrder(orderId).orElse(null);
+        if (reservation == null || reservation.status() != ReservationStatus.CANCEL_REQUESTED) {
+            log.info("이미 지나간 상태라 무시한다: orderId={}, event=PaymentCancelled, status={}", orderId, order.status());
+            return;
+        }
+        completeUserCancel(order, reservation);
+    }
+
+    /** 환불이 끝났으니 좌석을 푼다. 좌석이 환불보다 먼저 풀리지 않도록 이 경로 하나에서만 푼다. */
+    private void completeUserCancel(Order order, Reservation reservation) {
+        seats.lockByHold(order.holdId());
+        int released = seats.releaseSold(order.holdId());
+        if (released != reservation.seatIds().size()) {
+            // SOLD 좌석은 아무도 건드리지 않으므로 생기면 안 된다. 환불은 끝났으니 예매는 마무리하고 눈에 띄게 남긴다
+            log.error(
+                    "취소한 예매의 좌석 수가 맞지 않는다: reservationId={}, expected={}, released={}",
+                    reservation.reservationId(),
+                    reservation.seatIds().size(),
+                    released);
+        }
+        if (!reservations.transition(
+                reservation.reservationId(), ReservationStatus.CANCEL_REQUESTED, ReservationStatus.CANCELLED)) {
+            throw new IllegalStateException("예매 상태가 바뀌었다: " + reservation.reservationId());
+        }
+        events.reservationCancelled(order, reservation);
+        log.info("예매 취소를 마쳤다: reservationId={}", reservation.reservationId());
     }
 
     /** 주문을 잠그고 기대한 상태일 때만 돌려준다. 없는 주문이거나 이미 지나간 상태면 null(무시). */

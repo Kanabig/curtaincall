@@ -25,13 +25,29 @@ public class SeatInventoryRepository {
         this.jdbc = jdbc;
     }
 
-    /** 재고를 만들어야 하는 회차로 등록한다. 이미 등록됐거나 준비된 회차는 그대로 둔다. */
-    public void insertPending(long sessionId, Instant now) {
+    /** 재고를 만들어야 하는 회차로 등록한다. 이미 등록됐거나 준비된 회차는 그대로 두고, 시작 시각이 비어 있으면 채운다. */
+    public void insertPending(long sessionId, Instant now, Instant startAt) {
         jdbc.update(
-                "INSERT INTO session_stock (session_id, status, next_attempt_at) VALUES (?, 'PENDING', ?)"
-                        + " ON DUPLICATE KEY UPDATE session_id = session_id",
+                "INSERT INTO session_stock (session_id, status, next_attempt_at, start_at) VALUES (?, 'PENDING', ?, ?)"
+                        + " ON DUPLICATE KEY UPDATE start_at = COALESCE(start_at, VALUES(start_at))",
                 sessionId,
-                Timestamp.from(now));
+                Timestamp.from(now),
+                startAt == null ? null : Timestamp.from(startAt));
+    }
+
+    /** 회차 시작 시각을 바꾼다. 아직 등록되지 않은 회차면 아무것도 하지 않는다. */
+    public void updateStartAt(long sessionId, Instant startAt) {
+        jdbc.update("UPDATE session_stock SET start_at = ? WHERE session_id = ?", Timestamp.from(startAt), sessionId);
+    }
+
+    public Optional<Instant> findStartAt(long sessionId) {
+        return jdbc
+                .query(
+                        "SELECT start_at FROM session_stock WHERE session_id = ? AND start_at IS NOT NULL",
+                        (rs, row) -> rs.getTimestamp(1).toInstant(),
+                        sessionId)
+                .stream()
+                .findFirst();
     }
 
     /**
