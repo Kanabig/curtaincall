@@ -28,7 +28,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /** RSV-1~4 좌석 점유. 동시성 테스트는 반복 실행해 전부 통과해야 하고, 교착과 락 대기 타임아웃은 InnoDB 지표로 센다. */
 @SpringBootTest(
-        properties = {"spring.kafka.listener.auto-startup=false", "curtaincall.inventory.scheduler.enabled=false"})
+        properties = {
+            "spring.kafka.listener.auto-startup=false",
+            "curtaincall.inventory.scheduler.enabled=false",
+            "curtaincall.order.scheduler.enabled=false",
+            "curtaincall.outbox.relay.auto-start=false"
+        })
 class SeatHoldServiceTests extends InventoryIntegrationTest {
 
     static final int REPEAT = 30;

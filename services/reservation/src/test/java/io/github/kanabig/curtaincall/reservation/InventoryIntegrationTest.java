@@ -32,6 +32,10 @@ public abstract class InventoryIntegrationTest {
         jdbc.update("DELETE FROM session_stock");
         jdbc.update("DELETE FROM user_session_quota");
         jdbc.update("DELETE FROM processed_event");
+        jdbc.update("DELETE FROM outbox");
+        jdbc.update("DELETE FROM reservation");
+        jdbc.update("DELETE FROM orders");
+        jdbc.update("DELETE FROM idempotency_key");
     }
 
     protected static List<SeatMapEntry> seatMap(int count) {

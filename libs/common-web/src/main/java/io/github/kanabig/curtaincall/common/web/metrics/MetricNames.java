@@ -45,6 +45,9 @@ public final class MetricNames {
     /** 결제 결과 중 주의가 필요한 것의 발생 수. Counter. 태그 status = UNKNOWN, CANCEL_FAILED. */
     public static final String PAYMENT_ATTENTION = "payment.attention";
 
+    /** 결제 응답을 기다리다 재전송 한도를 넘긴 주문의 발생 수. Counter(태그 없음). reservation이 등록한다. */
+    public static final String ORDER_PAYMENT_STALLED = "order.payment.stalled";
+
     /** 결과를 모른 채 남아 있는 결제 수(현재 UNKNOWN 상태인 건). Gauge. payment가 등록한다. */
     public static final String PAYMENT_UNKNOWN = "payment.unknown";
 
