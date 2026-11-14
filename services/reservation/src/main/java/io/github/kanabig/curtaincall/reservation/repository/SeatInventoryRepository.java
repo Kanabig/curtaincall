@@ -1,8 +1,8 @@
 package io.github.kanabig.curtaincall.reservation.repository;
 
-import io.github.kanabig.curtaincall.reservation.dto.ReservationDetailResponse;
 import io.github.kanabig.curtaincall.reservation.entity.NewSeat;
 import io.github.kanabig.curtaincall.reservation.entity.PendingStock;
+import io.github.kanabig.curtaincall.reservation.entity.SeatLine;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,7 +43,7 @@ public class SeatInventoryRepository {
     }
 
     /** 좌석별 등급·가격을 seat_id 순으로 읽는다. */
-    public List<ReservationDetailResponse.SeatLine> findSeatLines(long sessionId, List<Long> seatIds) {
+    public List<SeatLine> findSeatLines(long sessionId, List<Long> seatIds) {
         if (seatIds.isEmpty()) {
             return List.of();
         }
@@ -54,8 +54,7 @@ public class SeatInventoryRepository {
         return jdbc.query(
                 "SELECT seat_id, grade, price FROM seat_inventory WHERE session_id = ? AND seat_id IN (" + marks
                         + ") ORDER BY seat_id",
-                (rs, row) -> new ReservationDetailResponse.SeatLine(
-                        rs.getLong("seat_id"), rs.getString("grade"), rs.getInt("price")),
+                (rs, row) -> new SeatLine(rs.getLong("seat_id"), rs.getString("grade"), rs.getInt("price")),
                 args.toArray());
     }
 

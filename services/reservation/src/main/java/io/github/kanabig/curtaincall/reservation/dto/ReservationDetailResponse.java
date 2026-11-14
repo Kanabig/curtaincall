@@ -2,6 +2,7 @@ package io.github.kanabig.curtaincall.reservation.dto;
 
 import io.github.kanabig.curtaincall.reservation.entity.ReservationStatus;
 import io.github.kanabig.curtaincall.reservation.entity.ReservationView;
+import io.github.kanabig.curtaincall.reservation.entity.SeatLine;
 import java.time.Instant;
 import java.util.List;
 
@@ -15,8 +16,6 @@ public record ReservationDetailResponse(
         long amount,
         ReservationStatus status,
         Instant createdAt) {
-
-    public record SeatLine(long seatId, String grade, int price) {}
 
     public static ReservationDetailResponse from(ReservationView view, List<SeatLine> seats) {
         return new ReservationDetailResponse(
