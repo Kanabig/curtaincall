@@ -30,6 +30,7 @@ public abstract class InventoryIntegrationTest {
     void cleanTables() {
         jdbc.update("DELETE FROM seat_inventory");
         jdbc.update("DELETE FROM session_stock");
+        jdbc.update("DELETE FROM user_session_quota");
         jdbc.update("DELETE FROM processed_event");
     }
 

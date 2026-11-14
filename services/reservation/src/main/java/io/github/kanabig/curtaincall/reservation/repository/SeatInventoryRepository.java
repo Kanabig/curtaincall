@@ -106,4 +106,19 @@ public class SeatInventoryRepository {
                 sessionId);
         return ready != null && ready > 0;
     }
+
+    public int countPending() {
+        Integer count =
+                jdbc.queryForObject("SELECT COUNT(*) FROM session_stock WHERE status = 'PENDING'", Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    /** 가장 오래된 PENDING 회차가 등록된 지 얼마나 됐는지. 시각은 DB 시계로 잰다. PENDING이 없으면 0. */
+    public double oldestPendingAgeSeconds() {
+        Double age = jdbc.queryForObject(
+                "SELECT COALESCE(TIMESTAMPDIFF(MICROSECOND, MIN(created_at), CURRENT_TIMESTAMP(6)) / 1000000, 0)"
+                        + " FROM session_stock WHERE status = 'PENDING'",
+                Double.class);
+        return age == null ? 0 : age;
+    }
 }
