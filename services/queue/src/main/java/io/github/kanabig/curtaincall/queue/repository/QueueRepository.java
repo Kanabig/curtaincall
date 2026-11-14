@@ -44,33 +44,34 @@ public class QueueRepository {
     }
 
     /**
-     * 회차 하나의 입장 처리. 같은 초({@code nowMs} 기준)에는 인스턴스가 몇 개든 한 번만 실행된다. 시각은 호출하는 쪽이 정해서 넘긴다. 같은 초를 같은 시계로
-     * 판정해야 하므로 인스턴스끼리 시계가 크게 어긋나면 초당 한도가 느슨해질 수 있다(같은 호스트·NTP 동기화 전제).
+     * 회차 하나의 입장 처리. 같은 초에는 인스턴스가 몇 개든 한 번만 실행된다. {@code nowMs}가 null이면 Redis TIME을 쓴다(운영). 값을 주는 것은 시계를 주입하는
+     * 테스트용이다.
      */
-    public AdmitResult admit(long sessionId, long nowMs, long entryTtlMs) {
+    public AdmitResult admit(long sessionId, Long nowMs, long entryTtlMs) {
         List<?> r = redis.execute(
                 admitScript,
                 List.of(
                         QueueKeys.conf(sessionId),
                         QueueKeys.waiting(sessionId),
                         QueueKeys.seen(sessionId),
-                        QueueKeys.active(sessionId),
-                        QueueKeys.tick(sessionId, Math.floorDiv(nowMs, 1000))),
-                String.valueOf(nowMs),
-                String.valueOf(entryTtlMs));
+                        QueueKeys.active(sessionId)),
+                nowMs == null ? "" : String.valueOf(nowMs),
+                String.valueOf(entryTtlMs),
+                QueueKeys.tickPrefix(sessionId));
         if (r == null || r.isEmpty() || ((Number) r.get(0)).longValue() != 1) {
             return AdmitResult.SKIPPED;
         }
         return new AdmitResult(true, ((Number) r.get(1)).longValue(), ((Number) r.get(2)).longValue());
     }
 
-    /** 마지막 폴링이 {@code cutoffMs}보다 오래된 대기자를 지운다. 한 번에 {@code limit}명까지. */
-    public long removeStale(long sessionId, long cutoffMs, int limit) {
+    /** 마지막 폴링이 {@code staleAfterMs}보다 오래된 대기자를 지운다. 한 번에 {@code limit}명까지. {@code nowMs}가 null이면 Redis TIME. */
+    public long removeStale(long sessionId, Long nowMs, long staleAfterMs, int limit) {
         Long removed = redis.execute(
                 removeStaleScript,
                 List.of(QueueKeys.seen(sessionId), QueueKeys.waiting(sessionId)),
-                String.valueOf(cutoffMs),
-                String.valueOf(limit));
+                String.valueOf(limit),
+                String.valueOf(staleAfterMs),
+                nowMs == null ? "" : String.valueOf(nowMs));
         return removed == null ? 0 : removed;
     }
 

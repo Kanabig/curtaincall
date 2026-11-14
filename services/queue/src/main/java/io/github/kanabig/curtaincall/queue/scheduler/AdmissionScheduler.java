@@ -32,12 +32,12 @@ public class AdmissionScheduler {
 
     @Scheduled(fixedRate = 1000)
     void admit() {
-        run(() -> service.admitAll(clock.instant()), "입장 처리");
+        run(() -> service.admitAll(), "입장 처리");
     }
 
     @Scheduled(fixedRate = 10_000)
     void removeStale() {
-        run(() -> service.removeStale(clock.instant()), "이탈 정리");
+        run(() -> service.removeStale(), "이탈 정리");
     }
 
     private void run(Runnable task, String name) {

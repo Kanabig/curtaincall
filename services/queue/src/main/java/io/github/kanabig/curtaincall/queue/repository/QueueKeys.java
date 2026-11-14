@@ -23,9 +23,9 @@ final class QueueKeys {
         return "q:" + sid + ":active";
     }
 
-    /** 같은 초에 입장 처리를 한 번만 하도록 잡는 키. */
-    static String tick(long sid, long epochSecond) {
-        return "q:" + sid + ":tick:" + epochSecond;
+    /** 같은 초에 입장 처리를 한 번만 하도록 잡는 키의 접두. 스크립트가 뒤에 epochSecond를 붙인다. */
+    static String tickPrefix(long sid) {
+        return "q:" + sid + ":tick:";
     }
 
     static String conf(long sid) {

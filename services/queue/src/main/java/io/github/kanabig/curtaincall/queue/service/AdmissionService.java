@@ -25,12 +25,18 @@ public class AdmissionService {
         this.properties = properties;
     }
 
-    /** 판매 중인 모든 회차를 한 번씩 입장 처리한다. @return 이번 호출이 입장시킨 총 인원 */
+    /** 운영 경로. 시각은 Redis TIME이다. */
+    public long admitAll() {
+        return admitAll(null);
+    }
+
+    /** 테스트용. 시각을 주입한다. */
     public long admitAll(Instant now) {
+        Long nowMs = now == null ? null : now.toEpochMilli();
         long total = 0;
         for (long sessionId : repository.openSessions()) {
-            AdmitResult result = repository.admit(
-                    sessionId, now.toEpochMilli(), properties.entryTtl().toMillis());
+            AdmitResult result =
+                    repository.admit(sessionId, nowMs, properties.entryTtl().toMillis());
             if (result.ran() && result.admitted() > 0) {
                 log.debug("회차 {} 입장 {}명, 활성 {}명", sessionId, result.admitted(), result.active());
             }
@@ -39,14 +45,20 @@ public class AdmissionService {
         return total;
     }
 
-    /** 폴링이 {@code staleAfter} 넘게 없는 대기자를 지운다. @return 지운 총 인원 */
+    /** 운영 경로. 폴링이 {@code staleAfter} 넘게 없는 대기자를 지운다. 시각은 Redis TIME이다. */
+    public long removeStale() {
+        return removeStale(null);
+    }
+
+    /** 테스트용. 시각을 주입한다. */
     public long removeStale(Instant now) {
-        long cutoff = now.minus(properties.staleAfter()).toEpochMilli();
+        Long nowMs = now == null ? null : now.toEpochMilli();
         long total = 0;
         for (long sessionId : repository.openSessions()) {
             long removed;
             do {
-                removed = repository.removeStale(sessionId, cutoff, STALE_BATCH);
+                removed = repository.removeStale(
+                        sessionId, nowMs, properties.staleAfter().toMillis(), STALE_BATCH);
                 total += removed;
             } while (removed == STALE_BATCH);
         }

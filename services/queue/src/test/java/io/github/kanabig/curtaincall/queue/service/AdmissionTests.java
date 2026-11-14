@@ -182,6 +182,25 @@ class AdmissionTests extends QueueIntegrationTest {
     }
 
     @Test
+    @DisplayName("[QUE-4, QUE-6] 시각을 넘기지 않으면 Redis TIME으로 입장 처리와 이탈 정리를 한다")
+    void usesRedisTimeWithoutInjectedClock() {
+        putConf(-1000, 3);
+        enterUsers(1, 5);
+
+        assertThat(admission.admitAll()).isEqualTo(3);
+        assertThat(isActive(1) && isActive(3)).isTrue();
+        assertThat(redis.keys(key("tick:*"))).hasSize(1);
+
+        // Redis와 같은 호스트의 시계로 61초·59초 전 폴링을 만든다
+        long now = System.currentTimeMillis();
+        redis.opsForZSet().add(key("seen"), "4", now - 61_000);
+        redis.opsForZSet().add(key("seen"), "5", now - 59_000);
+        assertThat(admission.removeStale()).isEqualTo(1);
+        assertThat(redis.opsForZSet().score(key("waiting"), "4")).isNull();
+        assertThat(redis.opsForZSet().score(key("waiting"), "5")).isNotNull();
+    }
+
+    @Test
     @DisplayName("[QUE-5] 입장하면 sub, sid, exp를 담은 HS256 토큰을 받고 만료는 활성 만료 시각과 같다")
     void issuesEntryToken() {
         putConf(-1000, 5);

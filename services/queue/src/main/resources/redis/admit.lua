@@ -1,13 +1,19 @@
 -- 입장 처리. 앞에서부터 min(admissionPerSecond, maxActiveUsers - 활성 수)명을 활성 목록에 넣는다.
 -- 인스턴스가 여럿이어도 같은 초에는 한 번만 돈다: tick 키(초 단위)를 NX로 못 잡으면 바로 끝낸다.
 -- 만료된 활성 사용자는 여기서 정리한다. 활성 수를 세기 직전에 지워야 상한이 만료 시각 기준으로 정확하다.
--- KEYS: conf, waiting, seen, active, tick   ARGV: nowMs, entryTtlMs
+-- 시각은 ARGV[1]이 비어 있으면 Redis TIME을 쓴다. 운영은 비워서 인스턴스 시계와 상관없이 초를 Redis 한 곳에서 정하고(enter·status와 같은 기준),
+-- 테스트만 시각을 넘겨 기다리지 않는다.
+-- KEYS: conf, waiting, seen, active   ARGV: nowMs(빈 문자열이면 TIME), entryTtlMs, tickKeyPrefix
 -- 반환: {0} 이번 초는 다른 인스턴스가 처리 | {1, 입장 수, 입장 뒤 활성 수} | {-1} 판매 중이 아니거나 회차 없음
-if not redis.call('SET', KEYS[5], '1', 'NX', 'EX', 5) then
+local now = tonumber(ARGV[1])
+if not now then
+  local t = redis.call('TIME')
+  now = t[1] * 1000 + math.floor(t[2] / 1000)
+end
+if not redis.call('SET', ARGV[3] .. math.floor(now / 1000), '1', 'NX', 'EX', 5) then
   return {0}
 end
 local conf = redis.call('HMGET', KEYS[1], 'status', 'saleOpenAt', 'admissionPerSecond', 'maxActiveUsers')
-local now = tonumber(ARGV[1])
 if conf[1] ~= 'ON_SALE' or now < tonumber(conf[2]) then
   return {-1}
 end
