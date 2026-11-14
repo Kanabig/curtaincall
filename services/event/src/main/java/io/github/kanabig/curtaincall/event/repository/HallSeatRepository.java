@@ -89,5 +89,26 @@ public class HallSeatRepository {
                 mt13id);
     }
 
+    /** 좌석 ID를 포함한 배치. 배치도 응답용이라 정렬은 {@link #findSeats}와 같다. */
+    public List<SeatRow> findSeatRows(String mt13id) {
+        return jdbc.query(
+                "SELECT seat_id, floor, section, row_label, seat_no, x, y, depth, wheelchair FROM hall_seat"
+                        + " WHERE mt13id = ? ORDER BY y, x",
+                (rs, i) -> new SeatRow(
+                        rs.getLong("seat_id"),
+                        new SeatSpec(
+                                rs.getInt("floor"),
+                                rs.getString("section"),
+                                rs.getString("row_label"),
+                                rs.getInt("seat_no"),
+                                rs.getInt("x"),
+                                rs.getInt("y"),
+                                rs.getInt("depth"),
+                                rs.getBoolean("wheelchair"))),
+                mt13id);
+    }
+
+    public record SeatRow(long seatId, SeatSpec spec) {}
+
     public record HallScale(Integer seatScale, Integer disabledSeatScale) {}
 }

@@ -40,4 +40,16 @@ public class SalePerformanceRepository {
                 .stream()
                 .findFirst();
     }
+
+    /** 등록된 공연의 KOPIS 가격 안내 원문. 공연이 없으면 비어 있고, 원문이 없으면 null이다. */
+    public Optional<String> findPriceGuidance(long id) {
+        return jdbc
+                .query(
+                        "SELECT p.price_guidance FROM sale_performance s JOIN performance p ON p.mt20id = s.mt20id"
+                                + " WHERE s.id = ?",
+                        (rs, i) -> rs.getString(1),
+                        id)
+                .stream()
+                .findFirst();
+    }
 }

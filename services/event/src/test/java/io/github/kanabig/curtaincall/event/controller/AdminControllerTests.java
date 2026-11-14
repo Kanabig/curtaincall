@@ -41,6 +41,13 @@ import org.springframework.http.ResponseEntity;
 @Import(AdminControllerTests.TestClockConfig.class)
 class AdminControllerTests extends EventIntegrationTest {
 
+    /** 가격 안내가 없는 공연의 기본 등급표와 같은 등급. */
+    static final List<Map<String, Object>> DEFAULT_PRICES = List.of(
+            Map.of("grade", "VIP", "price", 150000),
+            Map.of("grade", "R", "price", 120000),
+            Map.of("grade", "S", "price", 90000),
+            Map.of("grade", "A", "price", 60000));
+
     static final Instant NOW = Instant.parse("2026-12-01T00:00:00Z");
     static final Instant OPEN = NOW.plus(Duration.ofHours(2));
     static final Instant START = OPEN.plus(Duration.ofDays(7));
@@ -127,7 +134,7 @@ class AdminControllerTests extends EventIntegrationTest {
         return Map.of(
                 "startAt", iso(START),
                 "saleOpenAt", iso(open),
-                "prices", List.of(Map.of("grade", "R", "price", 120000), Map.of("grade", "S", "price", 90000)),
+                "prices", DEFAULT_PRICES,
                 "admissionPerSecond", 50,
                 "maxActiveUsers", 500);
     }
@@ -196,7 +203,7 @@ class AdminControllerTests extends EventIntegrationTest {
         assertThat(payload.get("startAt").asText()).endsWith("+09:00");
         assertThat(OffsetDateTime.parse(payload.get("saleOpenAt").asText()).toInstant())
                 .isEqualTo(OPEN);
-        assertThat(payload.get("prices")).hasSize(2);
+        assertThat(payload.get("prices")).hasSize(4);
         assertThat(payload.get("admissionPerSecond").asInt()).isEqualTo(50);
         assertThat(payload.get("maxActiveUsers").asInt()).isEqualTo(500);
         assertThat(payload.has("seats")).isFalse();
@@ -226,6 +233,47 @@ class AdminControllerTests extends EventIntegrationTest {
     }
 
     @Test
+    @DisplayName("가격 등급이 공연 등급표와 다르면(누락·초과) 등록과 수정이 400 PRICE_GRADE_MISMATCH이고 이벤트가 없다")
+    void priceGradesMustMatchLayoutGrades() {
+        String path = "/api/v1/admin/performances/" + performanceId + "/sessions";
+        Map<String, Object> body = new java.util.HashMap<>(sessionBody(OPEN));
+
+        body.put("prices", DEFAULT_PRICES.subList(0, 3));
+        ResponseEntity<JsonNode> missing = admin(HttpMethod.POST, path, body);
+        assertThat(missing.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(missing.getBody().get("code").asText()).isEqualTo("PRICE_GRADE_MISMATCH");
+
+        List<Map<String, Object>> extra = new java.util.ArrayList<>(DEFAULT_PRICES);
+        extra.add(Map.of("grade", "B", "price", 30000));
+        body.put("prices", extra);
+        assertThat(admin(HttpMethod.POST, path, body).getBody().get("code").asText())
+                .isEqualTo("PRICE_GRADE_MISMATCH");
+
+        body.put("prices", List.of(Map.of("grade", "R", "price", 120000), Map.of("grade", "S", "price", 90000)));
+        assertThat(admin(HttpMethod.POST, path, body).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(outboxTypes()).isEmpty();
+
+        long id = createSession(OPEN);
+        ResponseEntity<JsonNode> update =
+                admin(HttpMethod.PATCH, "/api/v1/admin/sessions/" + id, Map.of("prices", DEFAULT_PRICES.subList(1, 4)));
+        assertThat(update.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(update.getBody().get("code").asText()).isEqualTo("PRICE_GRADE_MISMATCH");
+        assertThat(outboxTypes()).containsExactly("SessionCreated");
+    }
+
+    @Test
+    @DisplayName("가격 안내를 읽은 공연은 그 등급표의 등급과 맞아야 한다")
+    void priceGradesFollowParsedGuidance() {
+        jdbc.update("UPDATE performance SET price_guidance = 'R석 99,000원, S석 77,000원' WHERE mt20id = 'PF1'");
+        String path = "/api/v1/admin/performances/" + performanceId + "/sessions";
+        Map<String, Object> body = new java.util.HashMap<>(sessionBody(OPEN));
+
+        assertThat(admin(HttpMethod.POST, path, body).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        body.put("prices", List.of(Map.of("grade", "R", "price", 99000), Map.of("grade", "S", "price", 77000)));
+        assertThat(admin(HttpMethod.POST, path, body).getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
+    @Test
     @DisplayName("오픈 10분 전보다 이른 시각에는 일정·가격도 수정되고 SessionUpdated가 바뀐 뒤 전체 값을 싣는다")
     void updateBeforeLock() throws Exception {
         long id = createSession(OPEN);
@@ -241,7 +289,7 @@ class AdminControllerTests extends EventIntegrationTest {
         JsonNode payload = lastOutboxPayload();
         assertThat(payload.get("admissionPerSecond").asInt()).isEqualTo(80);
         assertThat(payload.get("maxActiveUsers").asInt()).isEqualTo(500);
-        assertThat(payload.get("prices")).hasSize(2);
+        assertThat(payload.get("prices")).hasSize(4);
         assertThat(OffsetDateTime.parse(payload.get("saleOpenAt").asText()).toInstant())
                 .isEqualTo(OPEN.plus(Duration.ofHours(1)));
     }
@@ -257,7 +305,7 @@ class AdminControllerTests extends EventIntegrationTest {
                 admin(HttpMethod.PATCH, path, Map.of("saleOpenAt", iso(OPEN.plusSeconds(3600))));
         assertThat(locked.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(locked.getBody().get("code").asText()).isEqualTo("SESSION_EDIT_LOCKED");
-        assertThat(admin(HttpMethod.PATCH, path, Map.of("prices", List.of(Map.of("grade", "R", "price", 1))))
+        assertThat(admin(HttpMethod.PATCH, path, Map.of("prices", DEFAULT_PRICES))
                         .getStatusCode())
                 .isEqualTo(HttpStatus.CONFLICT);
         assertThat(outboxTypes()).containsExactly("SessionCreated");
