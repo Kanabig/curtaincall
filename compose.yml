@@ -194,6 +194,17 @@ services:
       <<: *java-health
       test: ["CMD", "curl", "-fs", "http://localhost:8085/actuator/health"]
 
+  # 외부 PG 역할의 가짜 PG. 장애 주입은 PUT /pg/admin/faults
+  mock-pg:
+    <<: *service
+    build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: mock-pg } }
+    image: curtaincall/mock-pg:local
+    ports:
+      - "${MOCK_PG_HOST_PORT:-8090}:8090"
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fs", "http://localhost:8090/actuator/health"]
+
   notification:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: notification } }

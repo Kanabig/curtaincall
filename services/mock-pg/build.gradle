@@ -1,0 +1,9 @@
+plugins {
+    id 'curtaincall.service-conventions'
+}
+
+// 외부 시스템 역할의 가짜 PG라 common-web을 쓰지 않고 웹 스타터만 직접 가진다
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+}

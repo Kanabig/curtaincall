@@ -14,3 +14,4 @@ scrape_configs:
           - payment:8085
           - notification:8086
           - search-assist:8087
+          - mock-pg:8090
