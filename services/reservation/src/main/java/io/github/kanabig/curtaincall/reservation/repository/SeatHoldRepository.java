@@ -74,8 +74,9 @@ public class SeatHoldRepository {
      * 요청한 좌석 행을 {@code seat_id} 오름차순으로 잠그고 현재 상태를 돌려준다(비관적 락 전략). 모든 점유가 같은 순서로 잠가야 서로를 기다리기만 하고 교착하지 않는다. 없는
      * 좌석은 결과에 빠진다.
      *
-     * <p>{@code FORCE INDEX (PRIMARY)}가 필요하다. 없으면 옵티마이저가 {@code idx_seat_inventory_holder}로 회차 전체를 훑고 filesort해, {@code holder_id} 순서로
-     * 필요 없는 행까지 잠가 교착이 났다(동시성 테스트로 재현, EXPLAIN으로 확인).
+     * <p>{@code FORCE INDEX (PRIMARY)}가 필요하다. 없으면 통계에 따라 옵티마이저가 {@code idx_seat_inventory_holder}로 회차 전체를 훑고 filesort해, {@code
+     * holder_id} 순서로 필요 없는 행까지 잠가 교착이 난다. 동시성 테스트에서 간헐적으로 났고 EXPLAIN으로 확인했지만, 테스트 데이터가 작으면 PK가 골라져 나지 않을 수도
+     * 있어 단위 테스트가 이 힌트를 지켜 주지는 않는다.
      */
     public List<LockedSeat> lockSeats(long sessionId, List<Long> seatIds) {
         List<Object> args = new ArrayList<>();
