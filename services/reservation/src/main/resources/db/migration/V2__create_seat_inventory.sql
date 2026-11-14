@@ -13,9 +13,16 @@ CREATE TABLE seat_inventory (
     INDEX idx_seat_inventory_hold (hold_id)
 );
 
--- 행이 있으면 재고 생성이 끝난 회차다. 재고 행과 같은 트랜잭션에서 넣는다.
+-- 회차의 재고 생성 상태. PENDING은 재고를 만들어야 하는 회차, READY는 재고 행이 모두 만들어진 회차다.
+-- next_attempt_at은 다음 처리 시각이면서 처리 중인 인스턴스가 잡아 둔 임대 만료 시각이다.
 CREATE TABLE session_stock (
-    session_id BIGINT      NOT NULL PRIMARY KEY,
-    seat_count INT         NOT NULL,
-    ready_at   DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+    session_id      BIGINT       NOT NULL PRIMARY KEY,
+    status          VARCHAR(10)  NOT NULL,
+    seat_count      INT          NULL,
+    attempts        INT          NOT NULL DEFAULT 0,
+    next_attempt_at DATETIME(6)  NOT NULL,
+    last_error      VARCHAR(200) NULL,
+    created_at      DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    ready_at        DATETIME(6)  NULL,
+    INDEX idx_session_stock_due (status, next_attempt_at)
 );

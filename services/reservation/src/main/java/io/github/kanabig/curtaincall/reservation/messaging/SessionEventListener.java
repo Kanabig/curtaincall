@@ -33,7 +33,7 @@ public class SessionEventListener {
 
     private void handle(EventEnvelope envelope) {
         if (SESSION_CREATED.equals(envelope.eventType())) {
-            inventoryService.createInventory(sessionId(envelope));
+            inventoryService.requestInventory(sessionId(envelope));
         }
     }
 

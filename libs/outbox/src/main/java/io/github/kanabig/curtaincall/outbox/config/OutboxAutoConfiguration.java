@@ -199,6 +199,8 @@ public class OutboxAutoConfiguration {
             factory.setRecordInterceptor(new RequestIdRecordInterceptor());
             factory.setCommonErrorHandler(OutboxConsumerErrorHandling.create(
                     outboxProducer.template(), properties.consumer(), meterRegistry));
+            // 팩토리를 직접 만들었으므로 Boot의 spring.kafka.listener.auto-startup을 여기서 반영한다
+            factory.setAutoStartup(kafkaProperties.getListener().isAutoStartup());
             return factory;
         }
     }
