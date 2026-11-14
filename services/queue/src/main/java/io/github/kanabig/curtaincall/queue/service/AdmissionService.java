@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * [QUE-4, QUE-6] 입장 처리와 이탈 정리. 시각을 받아 동작하므로 테스트가 시계를 직접 넘긴다. 만료된 활성 사용자는 입장 처리 스크립트 안에서 활성 수를 세기 직전에 지운다(ADR-0007).
+ * [QUE-4, QUE-6] 입장 처리와 이탈 정리. 운영은 시각을 Redis TIME으로 정하고, 테스트만 시각을 넘긴다. 만료된 활성 사용자는 입장 처리 스크립트 안에서 활성 수를 세기 직전에 지운다.
  */
 @Service
 public class AdmissionService {
