@@ -4,6 +4,7 @@ import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.Filter;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformanceDetail;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformancePage;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.SessionDetail;
+import io.github.kanabig.curtaincall.event.dto.PerformanceState;
 import io.github.kanabig.curtaincall.event.service.PerformanceQueryService;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -28,7 +29,7 @@ public class PerformanceController {
             @RequestParam(required = false) String genre,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) String state,
+            @RequestParam(required = false) PerformanceState state,
             @RequestParam(required = false) Integer maxPrice,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
