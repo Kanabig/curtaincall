@@ -94,13 +94,20 @@ class PerformanceQueryTests extends EventIntegrationTest {
         return jdbc.queryForObject("SELECT id FROM sale_performance WHERE mt20id = ?", Long.class, id);
     }
 
+    /** 서울 시각 문자열을 JVM 시간대와 무관하게 같은 시각(Instant)으로 바꾼다. */
+    static java.sql.Timestamp kst(String local) {
+        return java.sql.Timestamp.from(java.time.LocalDateTime.parse(local.replace(' ', 'T'))
+                .atZone(ZoneId.of("Asia/Seoul"))
+                .toInstant());
+    }
+
     long session(long performanceId, String startAt, String openAt, boolean suspended, Map<String, Integer> prices) {
         jdbc.update(
                 "INSERT INTO session (performance_id, start_at, sale_open_at, admission_per_second, max_active_users,"
                         + " suspended, created_at, updated_at) VALUES (?, ?, ?, 100, 1000, ?, NOW(6), NOW(6))",
                 performanceId,
-                startAt,
-                openAt,
+                kst(startAt),
+                kst(openAt),
                 suspended);
         long id = jdbc.queryForObject("SELECT MAX(id) FROM session", Long.class);
         prices.forEach((g, p) ->
