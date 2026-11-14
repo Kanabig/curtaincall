@@ -324,6 +324,7 @@ class SeatHoldServiceTests extends InventoryIntegrationTest {
     void firstRequestsRaceOnMissingQuotaRow() throws Exception {
         seed(SESSION, 40);
         long deadlocks = innodbMetric("lock_deadlocks");
+        long timeouts = innodbMetric("lock_timeouts");
 
         // 사용자 20명이 각각 탭 3개로 동시에 시작한다. 한도 행은 아무도 만들어 두지 않았다
         List<Callable<SeatHold>> tasks = new ArrayList<>();
@@ -340,5 +341,6 @@ class SeatHoldServiceTests extends InventoryIntegrationTest {
                 .filter(r -> !(r instanceof SeatHold))
                 .forEach(r -> assertThat(isSeatConflict(r)).as("실패 원인: %s", r).isTrue());
         assertThat(innodbMetric("lock_deadlocks") - deadlocks).isZero();
+        assertThat(innodbMetric("lock_timeouts") - timeouts).isZero();
     }
 }
