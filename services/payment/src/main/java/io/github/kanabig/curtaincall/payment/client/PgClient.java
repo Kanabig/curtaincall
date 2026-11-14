@@ -84,6 +84,33 @@ public class PgClient {
         }
     }
 
+    /**
+     * 망취소. 거래가 있으면 취소하고, 없으면 PG가 사전 취소로 기록해 이후 같은 주문의 승인을 거절한다. 2xx만 성공이다. 404는 경로·설정 오류일 수 있어 취소가 기록됐다고 볼 수
+     * 없으므로 실패로 둔다.
+     */
+    public boolean cancelByOrder(String merchantOrderId) {
+        try {
+            Bulkhead.decorateRunnable(queryBulkhead, () -> requestCancelByOrder(merchantOrderId))
+                    .run();
+            return true;
+        } catch (BulkheadFullException e) {
+            return false;
+        } catch (RuntimeException e) {
+            log.warn("PG 망취소에 실패했다: merchantOrderId={}, cause={}", merchantOrderId, e.toString());
+            return false;
+        }
+    }
+
+    private void requestCancelByOrder(String merchantOrderId) {
+        restClient
+                .post()
+                .uri(uri -> uri.path("/pg/v1/transactions/cancel")
+                        .queryParam("merchantOrderId", merchantOrderId)
+                        .build())
+                .retrieve()
+                .toBodilessEntity();
+    }
+
     private PgApproval requestApproval(String merchantOrderId, long amount, String cardToken) {
         PgApproval response = restClient
                 .post()

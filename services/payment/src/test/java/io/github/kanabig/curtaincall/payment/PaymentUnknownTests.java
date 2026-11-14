@@ -62,8 +62,51 @@ class PaymentUnknownTests extends PaymentIntegrationTest {
     }
 
     @Test
-    @DisplayName("PG가 승인을 기록하지 못한 채(404) 조회 제한 시간이 지나면 UNKNOWN으로 남고 메트릭이 오르며, 명령이 다시 오면 조회를 처음부터 다시 한다")
-    void exhaustedInquiryKeepsUnknownAndRestartsOnResend() {
+    @DisplayName("조회가 제한 시간 내내 404면 망취소 뒤 PaymentFailed(PG_NOT_RECEIVED)로 확정한다")
+    void allNotFoundIsNetCancelledAndFailed() throws Exception {
+        String orderId = newOrderId();
+        PG.hang = true;
+        PG.hangMs = 2000;
+
+        deliver(approveCommand(orderId, "tok_approve"));
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("UNKNOWN"));
+        exhaustInquiryTime(orderId);
+
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("FAILED"));
+        assertThat(publishedPayload(orderId, "PaymentFailed").get("reason").asText())
+                .isEqualTo("PG_NOT_RECEIVED");
+        assertThat(PG.cancelRequests()).isEqualTo(1);
+        assertThat(PG.isPreCancelled(orderId)).isTrue();
+    }
+
+    @Test
+    @DisplayName("망취소 뒤 PG가 늦게 승인을 기록하려 해도 거절되어 거래가 생기지 않는다")
+    void lateApprovalIsRejectedAfterNetCancel() {
+        String orderId = newOrderId();
+        // read timeout 500ms보다 긴 지연. PG는 지연이 끝난 뒤에야 승인을 기록하려 한다
+        PG.delayMs = 2500;
+
+        deliver(approveCommand(orderId, "tok_approve"));
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("UNKNOWN"));
+        exhaustInquiryTime(orderId);
+
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("FAILED"));
+        await().atMost(Duration.ofSeconds(8))
+                .untilAsserted(() -> assertThat(PG.hasTransaction(orderId)).isFalse());
+        // 지연이 끝난 뒤까지 기다려도 거래가 없다
+        await().during(Duration.ofSeconds(3))
+                .atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(PG.hasTransaction(orderId)).isFalse());
+        assertThat(status(orderId)).isEqualTo("FAILED");
+    }
+
+    @Test
+    @DisplayName("조회에 오류가 섞였으면 제한 시간이 지나도 망취소하지 않고 UNKNOWN으로 남기며 메트릭이 오른다")
+    void mixedInquiryErrorsKeepUnknown() {
         String orderId = newOrderId();
         PG.hang = true;
         PG.hangMs = 2000;
@@ -72,15 +115,40 @@ class PaymentUnknownTests extends PaymentIntegrationTest {
         deliver(approveCommand(orderId, "tok_approve"));
         await().atMost(Duration.ofSeconds(5))
                 .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("UNKNOWN"));
-        // 조회 시작 시각을 제한 시간(30s)보다 오래전으로 돌려 다음 조회 miss에서 멈추게 한다
-        jdbc.update(
-                "UPDATE payment SET inquiry_started_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 HOUR) WHERE order_id = ?",
-                orderId);
+        PG.inquiryFail = true;
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(attempts(orderId)).isGreaterThanOrEqualTo(1));
+        PG.inquiryFail = false;
+        exhaustInquiryTime(orderId);
 
         await().atMost(Duration.ofSeconds(10))
                 .untilAsserted(() -> assertThat(nextInquiryIsNull(orderId)).isTrue());
         assertThat(status(orderId)).isEqualTo("UNKNOWN");
+        assertThat(PG.cancelRequests()).isZero();
         assertThat(attentionCount() - before).isEqualTo(1.0);
+        assertThat(publishedTypes(orderId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("망취소가 실패하면 UNKNOWN으로 남고 메트릭이 오르며, 명령이 다시 오면 조회를 처음부터 다시 한다")
+    void failedNetCancelKeepsUnknownAndRestartsOnResend() {
+        String orderId = newOrderId();
+        PG.hang = true;
+        PG.hangMs = 2000;
+        PG.cancelFail = true;
+        double before = attentionCount();
+
+        deliver(approveCommand(orderId, "tok_approve"));
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("UNKNOWN"));
+        exhaustInquiryTime(orderId);
+
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertThat(PG.cancelRequests()).isEqualTo(1));
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(attentionCount() - before).isEqualTo(1.0));
+        assertThat(status(orderId)).isEqualTo("UNKNOWN");
+        assertThat(nextInquiryIsNull(orderId)).isTrue();
         assertThat(publishedTypes(orderId)).isEmpty();
 
         deliver(approveCommand(orderId, "tok_approve"));
@@ -89,6 +157,13 @@ class PaymentUnknownTests extends PaymentIntegrationTest {
         assertThat(attempts(orderId)).isZero();
         assertThat(status(orderId)).isEqualTo("UNKNOWN");
         assertThat(PG.approvalRequestsFor(orderId)).isEqualTo(1);
+    }
+
+    /** 조회 시작 시각을 제한 시간(테스트 30s)보다 오래전으로 돌려, 다음 조회 miss에서 소진되게 한다. */
+    private void exhaustInquiryTime(String orderId) {
+        jdbc.update(
+                "UPDATE payment SET inquiry_started_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 HOUR) WHERE order_id = ?",
+                orderId);
     }
 
     @Test

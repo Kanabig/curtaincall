@@ -59,6 +59,9 @@ public class Payment {
     @Column(name = "inquiry_attempts", nullable = false)
     private int inquiryAttempts;
 
+    @Column(name = "inquiry_error_seen", nullable = false)
+    private boolean inquiryErrorSeen;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -128,10 +131,18 @@ public class Payment {
     }
 
     /** 조회했지만 결과를 얻지 못했다. 다음 조회를 예약하고, 제한 시간을 넘기면 조회를 멈춘다. */
-    public void inquiryMissed(Instant now, Instant nextAt, Instant deadline) {
+    public void inquiryMissed(Instant now, Instant nextAt, Instant deadline, boolean notFound) {
         this.inquiryAttempts++;
+        if (!notFound) {
+            this.inquiryErrorSeen = true;
+        }
         this.updatedAt = now;
         this.nextInquiryAt = nextAt.isAfter(deadline) ? null : nextAt;
+    }
+
+    /** 지금까지의 조회가 모두 "거래 없음"(404)이었는지. */
+    public boolean isInquiryAllNotFound() {
+        return !inquiryErrorSeen;
     }
 
     public boolean isInquiryExhausted() {
@@ -141,6 +152,7 @@ public class Payment {
     private void startInquiry(Instant now, Duration firstInquiryDelay) {
         this.inquiryStartedAt = now;
         this.inquiryAttempts = 0;
+        this.inquiryErrorSeen = false;
         this.nextInquiryAt = now.plus(firstInquiryDelay);
         this.updatedAt = now;
     }

@@ -31,6 +31,10 @@ final class FakePg {
     volatile boolean fail;
     volatile boolean dropResponse;
     volatile long hangMs = 60_000;
+    volatile boolean inquiryFail;
+    volatile boolean cancelFail;
+    private final java.util.Set<String> preCancelled = ConcurrentHashMap.newKeySet();
+    private final AtomicInteger cancelRequests = new AtomicInteger();
 
     private record Transaction(String tid, String merchantOrderId, String status, long amount, Instant createdAt) {}
 
@@ -42,7 +46,7 @@ final class FakePg {
         }
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.createContext("/pg/v1/approvals", this::approve);
-        server.createContext("/pg/v1/transactions", this::find);
+        server.createContext("/pg/v1/transactions", this::transactions);
         server.start();
     }
 
@@ -55,8 +59,12 @@ final class FakePg {
         hang = false;
         fail = false;
         dropResponse = false;
+        inquiryFail = false;
+        cancelFail = false;
         transactions.clear();
         approvalRequests.clear();
+        preCancelled.clear();
+        cancelRequests.set(0);
     }
 
     /** 승인 요청이 PG에 도착한 횟수(기록 여부와 무관). */
@@ -74,6 +82,14 @@ final class FakePg {
         transactions.put(
                 merchantOrderId,
                 new Transaction("mpg_seed_" + merchantOrderId, merchantOrderId, "APPROVED", amount, Instant.now()));
+    }
+
+    int cancelRequests() {
+        return cancelRequests.get();
+    }
+
+    boolean isPreCancelled(String merchantOrderId) {
+        return preCancelled.contains(merchantOrderId);
     }
 
     boolean hasTransaction(String merchantOrderId) {
@@ -103,6 +119,10 @@ final class FakePg {
                 respond(exchange, 500, "{}");
                 return;
             }
+            if (preCancelled.contains(orderId)) {
+                respond(exchange, 409, "{}");
+                return;
+            }
             Transaction candidate = new Transaction(
                     "mpg_" + Math.abs(orderId.hashCode()),
                     orderId,
@@ -130,7 +150,36 @@ final class FakePg {
         }
     }
 
+    private void transactions(HttpExchange exchange) throws IOException {
+        if ("POST".equals(exchange.getRequestMethod())) {
+            cancelByOrder(exchange);
+        } else {
+            find(exchange);
+        }
+    }
+
+    /** mock-pg의 망취소: 거래가 없으면 사전 취소로 기록해 이후 승인을 거절한다. */
+    private void cancelByOrder(HttpExchange exchange) throws IOException {
+        cancelRequests.incrementAndGet();
+        String query = exchange.getRequestURI().getRawQuery();
+        String orderId = URLDecoder.decode(query.substring(query.indexOf('=') + 1), StandardCharsets.UTF_8);
+        if (cancelFail) {
+            respond(exchange, 500, "{}");
+        } else {
+            if (!transactions.containsKey(orderId)) {
+                preCancelled.add(orderId);
+            }
+            respond(exchange, 200, "{\"status\":\"CANCELLED\"}");
+        }
+        exchange.close();
+    }
+
     private void find(HttpExchange exchange) throws IOException {
+        if (inquiryFail) {
+            respond(exchange, 500, "{}");
+            exchange.close();
+            return;
+        }
         String query = exchange.getRequestURI().getRawQuery();
         String orderId = URLDecoder.decode(query.substring(query.indexOf('=') + 1), StandardCharsets.UTF_8);
         Transaction transaction = transactions.get(orderId);

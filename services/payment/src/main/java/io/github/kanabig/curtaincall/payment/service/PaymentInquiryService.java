@@ -92,16 +92,32 @@ public class PaymentInquiryService {
                 when found.isDeclined() -> results.failed(paymentId, FailureReason.NOT_APPROVED);
                 case InquiryOutcome.Found found -> {
                     log.error("거래 조회 결과가 예상 밖이다: orderId={}, status={}", payment.getOrderId(), found.status());
-                    results.inquiryMissed(paymentId);
+                    onMiss(payment, false);
                 }
                 case InquiryOutcome.NotFound notFound -> {
                     log.info("PG에 거래 기록이 없다. UNKNOWN을 유지하고 조회를 이어 간다: orderId={}", payment.getOrderId());
-                    results.inquiryMissed(paymentId);
+                    onMiss(payment, true);
                 }
-                case InquiryOutcome.Failed failed -> results.inquiryMissed(paymentId);
+                case InquiryOutcome.Failed failed -> onMiss(payment, false);
             }
         } catch (RuntimeException e) {
             log.error("거래 조회 처리 중 오류: paymentId={}", paymentId, e);
+        }
+    }
+
+    private void onMiss(Payment payment, boolean notFound) {
+        PaymentResultService.InquiryMiss miss = results.inquiryMissed(payment.getPaymentId(), notFound);
+        if (miss == PaymentResultService.InquiryMiss.EXHAUSTED_ALL_NOT_FOUND) {
+            netCancel(payment);
+        }
+    }
+
+    /** PG에 거래가 없다고 끝까지 답한 건을 망취소한다. 취소가 확인되면 늦은 승인도 무효이므로 실패로 확정해도 안전하다. */
+    private void netCancel(Payment payment) {
+        if (pgClient.cancelByOrder(payment.getOrderId())) {
+            results.failed(payment.getPaymentId(), FailureReason.PG_NOT_RECEIVED);
+        } else {
+            results.netCancelFailed(payment.getPaymentId());
         }
     }
 }

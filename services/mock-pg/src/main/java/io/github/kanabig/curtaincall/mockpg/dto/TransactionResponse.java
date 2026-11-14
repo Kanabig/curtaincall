@@ -13,6 +13,11 @@ public record TransactionResponse(
         Instant createdAt,
         Instant cancelledAt) {
 
+    /** 거래 없이 취소만 기록된 주문. tid가 없다. */
+    public static TransactionResponse preCancelled(String merchantOrderId, Instant now) {
+        return new TransactionResponse(null, merchantOrderId, TransactionStatus.CANCELLED, 0, null, null, now);
+    }
+
     public static TransactionResponse from(Transaction transaction) {
         return new TransactionResponse(
                 transaction.getTid(),
