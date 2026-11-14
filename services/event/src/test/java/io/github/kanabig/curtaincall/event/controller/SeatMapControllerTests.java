@@ -83,11 +83,16 @@ class SeatMapControllerTests extends EventIntegrationTest {
     long createSession() {
         Instant open = Instant.now().plus(Duration.ofDays(1));
         Map<String, Object> body = Map.of(
-                "startAt", iso(open.plus(Duration.ofDays(7))),
-                "saleOpenAt", iso(open),
-                "prices", AdminControllerTests.DEFAULT_PRICES,
-                "admissionPerSecond", 50,
-                "maxActiveUsers", 500);
+                "startAt",
+                iso(open.plus(Duration.ofDays(7))),
+                "saleOpenAt",
+                iso(open),
+                "prices",
+                AdminControllerTests.DEFAULT_PRICES,
+                "admissionPerSecond",
+                50,
+                "maxActiveUsers",
+                500);
         ResponseEntity<JsonNode> response =
                 admin(HttpMethod.POST, "/api/v1/admin/performances/" + performanceId + "/sessions", body);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -115,7 +120,8 @@ class SeatMapControllerTests extends EventIntegrationTest {
         JsonNode seats = response.getBody();
         assertThat(seats).hasSize(100);
         JsonNode first = seats.get(0);
-        assertThat(first.fieldNames()).toIterable()
+        assertThat(first.fieldNames())
+                .toIterable()
                 .containsExactlyInAnyOrder(
                         "seatId", "floor", "section", "row", "number", "x", "y", "grade", "price", "wheelchair");
         assertThat(first.get("grade").asText()).isEqualTo("VIP");
@@ -130,7 +136,9 @@ class SeatMapControllerTests extends EventIntegrationTest {
         }
         assertThat(ids).hasSize(100);
         assertThat(wheelchair).isEqualTo(2);
-        assertThat(response.getHeaders().getCacheControl()).contains("max-age=60").contains("public");
+        assertThat(response.getHeaders().getCacheControl())
+                .contains("max-age=60")
+                .contains("public");
         assertThat(response.getHeaders().getETag()).isNotBlank();
     }
 

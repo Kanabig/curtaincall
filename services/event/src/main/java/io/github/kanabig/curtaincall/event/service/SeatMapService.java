@@ -83,13 +83,16 @@ public class SeatMapService {
     }
 
     private Body load(long sessionId) {
-        SaleSession session = sessions.find(sessionId)
-                .orElseThrow(() -> new BusinessException(EventErrorCode.SESSION_NOT_FOUND));
+        SaleSession session =
+                sessions.find(sessionId).orElseThrow(() -> new BusinessException(EventErrorCode.SESSION_NOT_FOUND));
         List<Price> byPrice = session.prices().stream()
                 .sorted(Comparator.comparingInt(Price::price).reversed().thenComparing(Price::grade))
                 .toList();
         PriceTable table = new PriceTable(
-                byPrice.stream().map(p -> new PriceTable.Tier(p.grade(), p.price())).toList(), true);
+                byPrice.stream()
+                        .map(p -> new PriceTable.Tier(p.grade(), p.price()))
+                        .toList(),
+                true);
         List<SeatRow> rows = seats.findSeatRows(session.venueId());
         List<SeatMapEntry> entries = new ArrayList<>(rows.size());
         for (SeatRow row : rows) {

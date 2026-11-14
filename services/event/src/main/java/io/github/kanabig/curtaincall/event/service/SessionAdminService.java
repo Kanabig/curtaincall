@@ -165,7 +165,7 @@ public class SessionAdminService {
      * 가격표의 등급은 공연의 등급표(배치의 등급)와 같아야 한다. 배치의 모든 등급에 가격이 있어야 좌석 가격이 비지 않고, 배치에 없는 등급은 어느 좌석에도 붙지 않는다.
      */
     private void checkGrades(long performanceId, List<Price> prices) {
-        String guidance = performances.findPriceGuidance(performanceId).orElse(null);
+        String guidance = performances.findPriceGuidance(performanceId);
         Set<String> expected = new HashSet<>();
         priceParser.parse(guidance).tiers().forEach(t -> expected.add(t.grade()));
         Set<String> given = new HashSet<>();

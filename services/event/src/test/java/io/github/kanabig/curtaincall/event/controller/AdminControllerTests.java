@@ -132,11 +132,16 @@ class AdminControllerTests extends EventIntegrationTest {
 
     Map<String, Object> sessionBody(Instant open) {
         return Map.of(
-                "startAt", iso(START),
-                "saleOpenAt", iso(open),
-                "prices", DEFAULT_PRICES,
-                "admissionPerSecond", 50,
-                "maxActiveUsers", 500);
+                "startAt",
+                iso(START),
+                "saleOpenAt",
+                iso(open),
+                "prices",
+                DEFAULT_PRICES,
+                "admissionPerSecond",
+                50,
+                "maxActiveUsers",
+                500);
     }
 
     static String iso(Instant instant) {
@@ -269,7 +274,7 @@ class AdminControllerTests extends EventIntegrationTest {
         Map<String, Object> body = new java.util.HashMap<>(sessionBody(OPEN));
 
         assertThat(admin(HttpMethod.POST, path, body).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        body.put("prices", List.of(Map.of("grade", "R", "price", 99000), Map.of("grade", "S", "price", 77000)));
+        body.put("prices", List.of(Map.of("grade", "R석", "price", 99000), Map.of("grade", "S석", "price", 77000)));
         assertThat(admin(HttpMethod.POST, path, body).getStatusCode()).isEqualTo(HttpStatus.CREATED);
     }
 

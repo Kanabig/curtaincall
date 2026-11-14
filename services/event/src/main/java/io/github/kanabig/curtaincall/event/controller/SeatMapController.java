@@ -27,7 +27,8 @@ public class SeatMapController {
 
     @GetMapping("/api/v1/sessions/{id}/seat-map")
     public ResponseEntity<byte[]> seatMap(
-            @PathVariable long id, @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
+            @PathVariable long id,
+            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         Body body = seatMaps.get(id);
         if (matches(ifNoneMatch, body.etag())) {
             return ResponseEntity.status(304)
