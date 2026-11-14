@@ -24,6 +24,17 @@ metrics() {
 CURTAINCALL_HOLD_STRATEGY="$STRATEGY" compose up -d --force-recreate --wait reservation
 mysql_root < perf/seat-hold/seed.sql
 
+# 워밍업(JIT, 커넥션 풀): 측정에서 제외하고 재고를 다시 채운다. 이때 점유가 섞인 상태로 잠금 SELECT의 실행 계획도 남긴다
+mkdir -p "$OUT/warmup"
+docker run --rm --user "$(id -u):$(id -g)" --network "${PROJECT}_default" -v "$PWD/perf/seat-hold:/scripts:ro" -v "$PWD/$OUT/warmup:/out" \
+    -e RATE=200 -e DURATION="${WARMUP:-12s}" "$K6_IMAGE" run --quiet /scripts/seat-hold.js > /dev/null || true
+{
+    echo "ANALYZE TABLE seat_inventory;"
+    echo "EXPLAIN SELECT seat_id, status, expires_at FROM seat_inventory WHERE session_id = 1 AND seat_id IN (4, 5, 7, 8) ORDER BY seat_id FOR UPDATE;"
+    echo "EXPLAIN SELECT seat_id, status, expires_at FROM seat_inventory FORCE INDEX (PRIMARY) WHERE session_id = 1 AND seat_id IN (4, 5, 7, 8) ORDER BY seat_id FOR UPDATE;"
+} | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -t reservation_db 2>/dev/null' | tee "$OUT/explain.txt"
+mysql_root < perf/seat-hold/seed.sql
+
 {
     echo "commit:     $(git rev-parse HEAD)"
     echo "strategy:   $STRATEGY  rate=$RATE/s  duration=$DURATION"
