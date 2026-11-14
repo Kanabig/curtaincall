@@ -48,7 +48,7 @@ public record PaymentProperties(
 
     /**
      * PG 취소(환불) 재시도. n번째 재시도 간격은 {@code initialDelay * 2^n}이고 maxInterval을 넘지 않는다. maxAttempts번 시도해도 취소하지 못하면 CANCEL_FAILED로 두고
-     * 수동 처리한다. lease는 처리 중인 건을 다른 인스턴스나 스케줄러가 다시 집지 않게 하는 시간이다.
+     * 수동 처리한다. lease는 처리 중인 건을 다른 인스턴스나 스케줄러가 다시 집지 않게 하는 시간이며, 한 번의 시도(거래 조회 + 취소, 각각 PG read timeout 이내)보다 길어야 한다.
      */
     public record Cancel(
             @DefaultValue("1s") Duration initialDelay,
