@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -121,6 +122,20 @@ public class SeatInventoryRepository {
                 Integer.class,
                 sessionId);
         return ready != null && ready > 0;
+    }
+
+    /**
+     * 가능하지 않은 좌석(만료 전 HELD, SOLD)을 seat_id 순서로 넘긴다. 만료된 HELD는 가능이므로 건너뛴다. 가능한 좌석은 읽지 않는다.
+     */
+    public void forEachUnavailable(long sessionId, Instant now, BiConsumer<Long, String> consumer) {
+        jdbc.query(
+                "SELECT seat_id, status FROM seat_inventory WHERE session_id = ?"
+                        + " AND (status = 'SOLD' OR (status = 'HELD' AND expires_at >= ?)) ORDER BY seat_id",
+                rs -> {
+                    consumer.accept(rs.getLong(1), rs.getString(2));
+                },
+                sessionId,
+                Timestamp.from(now));
     }
 
     public int countPending() {
