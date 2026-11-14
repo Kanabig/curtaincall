@@ -91,8 +91,11 @@ public class PaymentCommandService {
             case APPROVED -> events.approved(payment);
             case FAILED -> events.failed(payment);
             case UNKNOWN -> {
-                payment.restartInquiry(now, inquiry.initialDelay());
-                log.info("명령이 다시 와서 거래 조회를 처음부터 다시 한다: orderId={}", payment.getOrderId());
+                if (payment.restartInquiry(now, inquiry.initialDelay())) {
+                    log.info("명령이 다시 와서 소진된 거래 조회를 처음부터 다시 한다: orderId={}", payment.getOrderId());
+                } else {
+                    log.info("거래 조회가 진행 중이라 재전송된 명령은 무시한다: orderId={}", payment.getOrderId());
+                }
             }
             case REQUESTED -> {
                 // 승인 호출이 진행 중이면 결과가 나올 때 응답한다. 오래 멈춰 있으면 호출 결과를 알 수 없으므로 조회로 확인한다

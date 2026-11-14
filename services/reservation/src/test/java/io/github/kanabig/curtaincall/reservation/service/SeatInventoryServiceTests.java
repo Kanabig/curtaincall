@@ -29,6 +29,8 @@ import org.springframework.transaction.support.TransactionTemplate;
         properties = {
             "spring.kafka.listener.auto-startup=false",
             "curtaincall.inventory.scheduler.enabled=false",
+            "curtaincall.order.scheduler.enabled=false",
+            "curtaincall.outbox.relay.auto-start=false",
             "curtaincall.inventory.retry-backoff=30s"
         })
 class SeatInventoryServiceTests extends InventoryIntegrationTest {

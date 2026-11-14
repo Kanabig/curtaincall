@@ -167,6 +167,33 @@ class PaymentUnknownTests extends PaymentIntegrationTest {
     }
 
     @Test
+    @DisplayName("거래 조회가 진행 중일 때 명령이 다시 와도 조회 시작 시각과 시도 횟수는 그대로다")
+    void resendDuringInquiryDoesNotRestart() {
+        String orderId = newOrderId();
+        PG.hang = true;
+        PG.hangMs = 2000;
+
+        deliver(approveCommand(orderId, "tok_approve"));
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("UNKNOWN"));
+        // 조회 제한 시간(30s) 안쪽의 과거로 돌려 두고, 재전송이 이 값을 건드리는지 본다
+        jdbc.update(
+                "UPDATE payment SET inquiry_started_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 10 SECOND) WHERE order_id = ?",
+                orderId);
+        Object startedBefore =
+                jdbc.queryForObject("SELECT inquiry_started_at FROM payment WHERE order_id = ?", Object.class, orderId);
+
+        deliver(approveCommand(orderId, "tok_approve"));
+        deliver(approveCommand(orderId, "tok_approve"));
+
+        assertThat(nextInquiryIsNull(orderId)).isFalse();
+        assertThat(jdbc.queryForObject(
+                        "SELECT inquiry_started_at FROM payment WHERE order_id = ?", Object.class, orderId))
+                .isEqualTo(startedBefore);
+        assertThat(PG.approvalRequestsFor(orderId)).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("승인 호출 도중 멈춘 REQUESTED는 UNKNOWN을 거쳐 조회로 확정된다")
     void staleRequestedIsRecovered() {
         String orderId = newOrderId();

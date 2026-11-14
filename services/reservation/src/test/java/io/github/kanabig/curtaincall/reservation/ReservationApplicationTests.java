@@ -14,7 +14,12 @@ import org.springframework.http.ResponseEntity;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"spring.kafka.listener.auto-startup=false", "curtaincall.inventory.scheduler.enabled=false"})
+        properties = {
+            "spring.kafka.listener.auto-startup=false",
+            "curtaincall.inventory.scheduler.enabled=false",
+            "curtaincall.order.scheduler.enabled=false",
+            "curtaincall.outbox.relay.auto-start=false"
+        })
 @Import(TestContainersConfig.class)
 class ReservationApplicationTests {
 

@@ -38,7 +38,9 @@ import org.springframework.test.context.DynamicPropertySource;
             "curtaincall.inventory.retry-backoff=100ms",
             "curtaincall.inventory.max-backoff=300ms",
             "curtaincall.inventory.scheduler.interval=100ms",
-            "curtaincall.event.read-timeout=1s"
+            "curtaincall.event.read-timeout=1s",
+            "curtaincall.order.scheduler.enabled=false",
+            "curtaincall.outbox.relay.auto-start=false"
         })
 @Import({TestContainersConfig.class, SeatInventoryRecoveryTests.Topics.class})
 // 스케줄러가 켜진 컨텍스트를 캐시에 남기면 다른 테스트의 PENDING 행을 가져간다

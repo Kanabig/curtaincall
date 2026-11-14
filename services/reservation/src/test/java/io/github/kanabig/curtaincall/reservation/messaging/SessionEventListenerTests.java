@@ -20,7 +20,12 @@ import org.springframework.kafka.core.KafkaTemplate;
 
 /** [EVT-9] SessionCreated 소비는 PENDING 상태 행만 남기고 event를 부르지 않는다. */
 @SpringBootTest(
-        properties = {"spring.kafka.listener.auto-startup=true", "curtaincall.inventory.scheduler.enabled=false"})
+        properties = {
+            "spring.kafka.listener.auto-startup=true",
+            "curtaincall.inventory.scheduler.enabled=false",
+            "curtaincall.order.scheduler.enabled=false",
+            "curtaincall.outbox.relay.auto-start=false"
+        })
 @Import(SessionEventListenerTests.Topics.class)
 class SessionEventListenerTests extends InventoryIntegrationTest {
 

@@ -22,6 +22,7 @@ management:
         "[http.server.requests]": true
 curtaincall:
   outbox:
+    enabled: true
     consumer:
       enabled: true
   event:
@@ -30,3 +31,6 @@ curtaincall:
     read-timeout: 10s
   inventory:
     insert-batch-size: 1000
+  order:
+    scheduler:
+      interval: 5s

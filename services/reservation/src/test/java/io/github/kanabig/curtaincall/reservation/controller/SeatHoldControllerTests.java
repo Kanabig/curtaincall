@@ -22,7 +22,12 @@ import org.springframework.http.ResponseEntity;
 /** RSV-1~4 점유 API와 재고 생성 지표. */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"spring.kafka.listener.auto-startup=false", "curtaincall.inventory.scheduler.enabled=false"})
+        properties = {
+            "spring.kafka.listener.auto-startup=false",
+            "curtaincall.inventory.scheduler.enabled=false",
+            "curtaincall.order.scheduler.enabled=false",
+            "curtaincall.outbox.relay.auto-start=false"
+        })
 class SeatHoldControllerTests extends InventoryIntegrationTest {
 
     @Autowired
