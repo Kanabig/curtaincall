@@ -59,7 +59,7 @@ public class SessionRepository {
 
     /** 행을 잠그고 읽는다. 수정·삭제·중지가 오픈 시각 판단과 같은 트랜잭션에서 일어나야 하므로 FOR UPDATE다. */
     public Optional<SaleSession> findForUpdate(long id) {
-        return find(id, " FOR UPDATE");
+        return find(id, " FOR UPDATE OF s");
     }
 
     public Optional<SaleSession> find(long id) {

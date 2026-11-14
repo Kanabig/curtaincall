@@ -12,7 +12,7 @@ public enum EventErrorCode implements ErrorCode {
     SESSION_ALREADY_OPENED(HttpStatus.CONFLICT, "판매가 이미 열린 회차"),
     SESSION_EDIT_LOCKED(HttpStatus.CONFLICT, "판매 오픈 10분 전부터는 입장 속도와 활성 상한만 수정할 수 있음"),
     KOPIS_QUOTA_LOW(HttpStatus.CONFLICT, "KOPIS 남은 호출 수가 부족함"),
-    KOPIS_SYNC_RUNNING(HttpStatus.CONFLICT, "KOPIS 동기화가 이미 실행 중");
+    KOPIS_SYNC_IN_PROGRESS(HttpStatus.CONFLICT, "KOPIS 동기화가 이미 실행 중(정기 또는 수동)");
 
     private final HttpStatus status;
     private final String message;

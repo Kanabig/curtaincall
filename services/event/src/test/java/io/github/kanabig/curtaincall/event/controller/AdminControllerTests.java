@@ -341,4 +341,22 @@ class AdminControllerTests extends EventIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT trigger_type FROM kopis_sync_run WHERE id = ?", String.class, runId))
                 .isEqualTo("MANUAL");
     }
+
+    @Autowired
+    io.github.kanabig.curtaincall.event.repository.KopisSyncLockRepository syncLock;
+
+    @Test
+    @DisplayName("정기 동기화가 락을 쥔 동안 수동 요청은 409 KOPIS_SYNC_IN_PROGRESS이고 실행 이력이 늘지 않는다")
+    void manualSyncWhileScheduledRunning() {
+        Instant now = clock.instant();
+        assertThat(syncLock.tryAcquire("kopis-sync", "scheduled", now, now.plusSeconds(60)))
+                .isTrue();
+
+        ResponseEntity<JsonNode> response = admin(HttpMethod.POST, "/api/v1/admin/kopis/sync", null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().get("code").asText()).isEqualTo("KOPIS_SYNC_IN_PROGRESS");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM kopis_sync_run", Integer.class))
+                .isZero();
+    }
 }
