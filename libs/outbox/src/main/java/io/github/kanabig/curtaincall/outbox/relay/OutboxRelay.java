@@ -13,7 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -42,10 +41,8 @@ public class OutboxRelay {
             MeterRegistry meterRegistry) {
         this.repository = repository;
         this.kafkaTemplate = kafkaTemplate;
-        // REPEATABLE READ에서는 SKIP LOCKED 조회가 인덱스 범위에 갭 락을 잡아 다른 릴레이의 발행 처리와 교착한다.
-        // READ COMMITTED는 조회한 행만 잠근다
-        this.transactionTemplate = new TransactionTemplate(transactionManager);
-        this.transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        // SKIP LOCKED 조회의 갭 락이 다른 릴레이의 발행 처리와 교착하지 않게 READ COMMITTED로 실행한다
+        this.transactionTemplate = OutboxTransactions.readCommitted(transactionManager);
         this.properties = properties;
         this.published = Counter.builder("outbox.relay.published")
                 .description("릴레이가 Kafka로 발행한 메시지 수")

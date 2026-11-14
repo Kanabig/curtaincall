@@ -138,16 +138,12 @@ class OutboxBrokerOutageTests extends OutboxIntegrationTest {
     }
 
     private OutboxRelay relayTo(String bootstrap) {
-        Map<String, Object> producerProperties = new HashMap<>();
-        producerProperties.put("bootstrap.servers", bootstrap);
-        // 브로커가 없을 때 빨리 실패하게 한다
-        producerProperties.put("max.block.ms", "2000");
-        producerProperties.put("request.timeout.ms", "2000");
-        producerProperties.put("delivery.timeout.ms", "4000");
-        KafkaTemplate<String, String> template = new KafkaTemplate<>(
-                new DefaultKafkaProducerFactory<>(OutboxProducerSettings.enforce(producerProperties)));
+        // 운영과 같은 설정(발송 시간 제한 포함)으로 만든다. 브로커가 없을 때 빨리 실패하도록 제한만 짧게 준다
+        Duration sendTimeout = Duration.ofSeconds(2);
+        KafkaTemplate<String, String> template = new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(
+                OutboxProducerSettings.enforce(Map.of("bootstrap.servers", bootstrap), sendTimeout)));
         OutboxProperties.Relay properties = new OutboxProperties.Relay(
-                false, Duration.ofMillis(200), 100, Duration.ofSeconds(5), Duration.ofDays(1), Duration.ofMinutes(1));
+                false, Duration.ofMillis(200), 100, sendTimeout, Duration.ofDays(1), Duration.ofMinutes(1));
         return new OutboxRelay(repository, template, transactionManager, properties, new SimpleMeterRegistry());
     }
 }

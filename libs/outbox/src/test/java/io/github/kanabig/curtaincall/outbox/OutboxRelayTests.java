@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxMaintenance;
+import io.github.kanabig.curtaincall.outbox.relay.OutboxTransactions;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -13,12 +14,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /** NFR-4 릴레이 발행. */
 class OutboxRelayTests extends OutboxIntegrationTest {
 
     @Autowired
     ObjectMapper objectMapper;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     @Test
     @DisplayName("릴레이가 outbox 행을 키와 추적 ID 헤더를 붙여 발행하고 발행 시각을 채운다")
@@ -98,7 +103,9 @@ class OutboxRelayTests extends OutboxIntegrationTest {
         jdbc.update("UPDATE outbox SET published_at = NOW(6) - INTERVAL 2 DAY WHERE message_key = 'a'");
         jdbc.update("UPDATE outbox SET published_at = NOW(6) WHERE message_key = 'b'");
 
-        int deleted = new OutboxMaintenance(repository, Duration.ofDays(1)).deleteExpired();
+        int deleted = new OutboxMaintenance(
+                        repository, OutboxTransactions.readCommitted(transactionManager), Duration.ofDays(1))
+                .deleteExpired();
 
         assertThat(deleted).isEqualTo(1);
         assertThat(jdbc.queryForList("SELECT message_key FROM outbox ORDER BY message_key", String.class))

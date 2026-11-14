@@ -93,8 +93,9 @@ class OutboxRelayConcurrencyTests extends OutboxIntegrationTest {
     }
 
     private OutboxRelay newRelay() {
-        KafkaTemplate<String, String> template = new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(
-                OutboxProducerSettings.enforce(Map.of("bootstrap.servers", bootstrapServers()))));
+        KafkaTemplate<String, String> template =
+                new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(OutboxProducerSettings.enforce(
+                        Map.of("bootstrap.servers", bootstrapServers()), Duration.ofSeconds(5))));
         OutboxProperties.Relay properties = new OutboxProperties.Relay(
                 false, Duration.ofMillis(200), 100, Duration.ofSeconds(5), Duration.ofDays(1), Duration.ofMinutes(1));
         return new OutboxRelay(repository, template, transactionManager, properties, new SimpleMeterRegistry());

@@ -12,6 +12,7 @@ import io.github.kanabig.curtaincall.outbox.relay.OutboxProducerSettings;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxRelay;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxRelayLifecycle;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxRepository;
+import io.github.kanabig.curtaincall.outbox.relay.OutboxTransactions;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxWriter;
 import io.github.kanabig.curtaincall.outbox.relay.PeriodicTaskLifecycle;
 import io.micrometer.core.instrument.Gauge;
@@ -75,8 +76,10 @@ public class OutboxAutoConfiguration {
     /** 릴레이와 DLT 발행이 같이 쓴다. KafkaProducer는 첫 발행 때 만들어지므로 쓰지 않으면 연결하지 않는다. */
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean
-    OutboxProducer outboxProducer(KafkaProperties kafkaProperties, KafkaConnectionDetails connectionDetails) {
-        return new OutboxProducer(OutboxProducerSettings.from(kafkaProperties, connectionDetails));
+    OutboxProducer outboxProducer(
+            KafkaProperties kafkaProperties, KafkaConnectionDetails connectionDetails, OutboxProperties properties) {
+        return new OutboxProducer(OutboxProducerSettings.from(
+                kafkaProperties, connectionDetails, properties.relay().sendTimeout()));
     }
 
     @Bean
@@ -114,8 +117,14 @@ public class OutboxAutoConfiguration {
         }
 
         @Bean
-        OutboxMaintenance outboxMaintenance(OutboxRepository repository, OutboxProperties properties) {
-            return new OutboxMaintenance(repository, properties.relay().retention());
+        OutboxMaintenance outboxMaintenance(
+                OutboxRepository repository,
+                PlatformTransactionManager transactionManager,
+                OutboxProperties properties) {
+            return new OutboxMaintenance(
+                    repository,
+                    OutboxTransactions.readCommitted(transactionManager),
+                    properties.relay().retention());
         }
 
         @Bean
@@ -151,9 +160,13 @@ public class OutboxAutoConfiguration {
 
         @Bean
         ProcessedEventMaintenance processedEventMaintenance(
-                ProcessedEventRepository repository, OutboxProperties properties) {
+                ProcessedEventRepository repository,
+                PlatformTransactionManager transactionManager,
+                OutboxProperties properties) {
             return new ProcessedEventMaintenance(
-                    repository, properties.consumer().processedEventRetention());
+                    repository,
+                    OutboxTransactions.readCommitted(transactionManager),
+                    properties.consumer().processedEventRetention());
         }
 
         @Bean
