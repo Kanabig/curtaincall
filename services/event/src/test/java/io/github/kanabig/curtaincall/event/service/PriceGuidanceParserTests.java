@@ -62,7 +62,7 @@ class PriceGuidanceParserTests {
     @ParameterizedTest
     @ValueSource(
             strings = {
-                // 실제 응답에서 확인한 비등급형(ADR-0002)
+                // 실제 응답에서 확인한 비등급형
                 "현장판매 14,900원, 사전예약 9,900원",
                 "현장판매 14,900원",
                 "성인 20,000원, 청소년 10,000원",
