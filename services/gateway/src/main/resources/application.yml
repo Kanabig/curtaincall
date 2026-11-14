@@ -1,9 +1,43 @@
 spring:
   application:
     name: gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: user
+              uri: ${USER_SERVICE_URL:http://user:8081}
+              predicates:
+                - Path=/api/v1/users/**,/api/v1/auth/**
+            - id: event
+              uri: ${EVENT_SERVICE_URL:http://event:8082}
+              predicates:
+                - Path=/api/v1/performances/**,/api/v1/sessions/{id},/api/v1/sessions/{id}/seat-map,/api/v1/admin/**
+            - id: queue
+              uri: ${QUEUE_SERVICE_URL:http://queue:8083}
+              predicates:
+                - Path=/api/v1/queue/**
+            - id: reservation
+              uri: ${RESERVATION_SERVICE_URL:http://reservation:8084}
+              predicates:
+                - Path=/api/v1/sessions/{id}/seat-status,/api/v1/sessions/{id}/holds,/api/v1/holds/**,/api/v1/orders/**,/api/v1/reservations/**
+            - id: search-assist
+              uri: ${SEARCH_ASSIST_SERVICE_URL:http://search-assist:8087}
+              predicates:
+                - Path=/api/v1/search/**
 server:
   port: 8080
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{requestId:-}]"
+curtaincall:
+  jwt:
+    # 비밀값이라 기본값을 두지 않는다. 환경변수 CURTAINCALL_JWT_ACCESS_SECRET으로 넣는다(user와 같은 값)
 management:
+  server:
+    # actuator는 외부 진입 포트(8080)와 분리한다. compose 내부망에서만 접근한다
+    port: 8089
   endpoints:
     web:
       exposure:
