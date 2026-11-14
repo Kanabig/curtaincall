@@ -86,6 +86,21 @@ class KopisSyncServiceTests extends EventIntegrationTest {
     }
 
     @Test
+    @DisplayName("fixture로 끝낸 실행은 증분 기준일이 아니라서, live로 바꾼 첫 동기화는 afterdate 없이 전체를 받는다")
+    void firstLiveRunAfterFixtureIsFull() {
+        jdbc.update(
+                "INSERT INTO kopis_sync_run (trigger_type, metered, status, started_at, list_completed)"
+                        + " VALUES ('BOOTSTRAP', FALSE, 'SUCCESS', ?, TRUE)",
+                java.sql.Timestamp.from(clock.instant()));
+
+        SyncRun run = syncService.sync("TEST");
+
+        assertThat(run.afterDate()).isNull();
+        assertThat(SERVER.requests()).extracting(URI::getQuery).noneMatch(q -> q.contains("afterdate="));
+        assertThat(count("performance")).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("다시 돌리면 첫 실행이 끝난 날짜 기준으로 증분 조회하고, 바뀐 공연이 없으면 목록 호출만 한다")
     void incrementalSecondRun() {
         syncService.sync("TEST");
@@ -98,6 +113,41 @@ class KopisSyncServiceTests extends EventIntegrationTest {
         assertThat(second.afterDate()).isEqualTo(LocalDate.now(clock));
         assertThat(SERVER.requests()).extracting(URI::getQuery).allMatch(q -> q.contains("afterdate="));
         assertThat(count("performance")).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("창이 하루 밀리면 새로 들어온 마지막 하루만 afterdate 없이 받고 나머지는 증분으로 받는다")
+    void newlyEnteredDayIsFetchedInFull() {
+        syncService.sync("TEST");
+        jdbc.update("UPDATE kopis_sync_run SET synced_until = DATE_SUB(synced_until, INTERVAL 1 DAY)");
+        SERVER.requests().clear();
+        String windowEnd = LocalDate.now(clock).plusDays(89).format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+
+        SyncRun run = syncService.sync("TEST");
+
+        List<String> full = SERVER.requests().stream()
+                .map(URI::getQuery)
+                .filter(q -> !q.contains("afterdate="))
+                .toList();
+        assertThat(full).hasSize(1);
+        assertThat(full.get(0)).contains("stdate=" + windowEnd, "eddate=" + windowEnd);
+        // 증분 구간(오늘~창 끝 전날 88일 = 31+31+27)은 창 3개
+        assertThat(SERVER.requests()).hasSize(4);
+        assertThat(run.calls()).isEqualTo(4);
+        assertThat(run.syncedUntil()).isEqualTo(LocalDate.now(clock).plusDays(89));
+    }
+
+    @Test
+    @DisplayName("며칠 건너뛰어 지난 구간이 모두 지나갔으면 창 전체를 afterdate 없이 받는다")
+    void skippedDaysFetchFullWindow() {
+        syncService.sync("TEST");
+        jdbc.update("UPDATE kopis_sync_run SET synced_until = DATE_SUB(?, INTERVAL 10 DAY)", LocalDate.now(clock));
+        SERVER.requests().clear();
+
+        SyncRun run = syncService.sync("TEST");
+
+        assertThat(SERVER.requests()).hasSize(3).extracting(URI::getQuery).noneMatch(q -> q.contains("afterdate="));
+        assertThat(run.status()).isEqualTo(SyncStatus.SUCCESS);
     }
 
     @Test

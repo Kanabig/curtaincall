@@ -57,14 +57,18 @@ CREATE TABLE kopis_call_log (
     count     INT  NOT NULL DEFAULT 0
 );
 
--- 동기화 실행 이력. list_completed인 마지막 실행의 시작일이 다음 증분 조회의 기준일이다.
+-- 동기화 실행 이력. 실제 KOPIS를 호출한(metered) 실행 중 list_completed인 마지막 실행의 시작일이 다음 증분 조회의 기준일이다.
+-- synced_until은 그 실행이 목록을 받은 기간의 끝날이다. 창이 매일 밀리므로 그 뒤 구간은 다음 실행이 afterdate 없이 전체로 받는다.
+-- fixture 실행은 기준일로 쓰지 않는다. 나중에 키를 넣고 live로 바꿨을 때 첫 동기화가 전체 적재여야 하기 때문이다.
 CREATE TABLE kopis_sync_run (
     id                BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
     trigger_type      VARCHAR(10)  NOT NULL,
+    metered           BOOLEAN      NOT NULL,
     status            VARCHAR(10)  NOT NULL,
     started_at        DATETIME(6)  NOT NULL,
     finished_at       DATETIME(6)  NULL,
     after_date        DATE         NULL,
+    synced_until      DATE         NULL,
     list_completed    BOOLEAN      NOT NULL DEFAULT FALSE,
     calls             INT          NOT NULL DEFAULT 0,
     listed            INT          NOT NULL DEFAULT 0,

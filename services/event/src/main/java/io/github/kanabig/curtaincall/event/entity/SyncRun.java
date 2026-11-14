@@ -7,6 +7,7 @@ public record SyncRun(
         long id,
         SyncStatus status,
         LocalDate afterDate,
+        LocalDate syncedUntil,
         boolean listCompleted,
         int calls,
         int listed,

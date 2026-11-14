@@ -96,14 +96,15 @@ public class PerformanceRepository {
     }
 
     /**
-     * 다음에 상세를 받을 공연. 이미 시작했거나 오늘 시작하는 공연은 같은 순위로 두고, 그다음은 시작일이 가까운 순서다. skip은 이번 실행에서 이미 시도해 실패한 공연이다.
+     * 다음에 상세를 받을 공연. 이미 시작했거나 오늘 시작하는 공연은 같은 순위로 두고, 그다음은 시작일이 가까운 순서다. endedAfter보다 일찍 끝난 공연은 건너뛴다. skip은 이번 실행에서 이미 시도해 실패한 공연이다.
      */
-    public Optional<PendingPerformance> nextPending(LocalDate today, int maxAttempts, List<String> skip) {
+    public Optional<PendingPerformance> nextPending(
+            LocalDate today, LocalDate endedAfter, int maxAttempts, List<String> skip) {
         String notIn = skip.isEmpty() ? "" : " AND mt20id NOT IN (" + "?,".repeat(skip.size() - 1) + "?)";
         List<Object> args = new ArrayList<>();
         args.add(maxAttempts);
         args.addAll(skip);
-        args.add(Date.valueOf(today));
+        args.add(Date.valueOf(endedAfter));
         args.add(Date.valueOf(today));
         return jdbc
                 .query(

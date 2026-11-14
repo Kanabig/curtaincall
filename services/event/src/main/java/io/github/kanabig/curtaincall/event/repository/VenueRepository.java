@@ -47,13 +47,13 @@ public class VenueRepository {
     /**
      * 시설 상세를 새로 받아야 하는 시설 ID. 공연이 참조하는데 아직 없거나 refreshBefore보다 오래된 것. 끝난 공연만 참조하는 시설은 갱신하지 않는다.
      */
-    public List<String> findNeedingFetch(Instant refreshBefore, java.time.LocalDate today, int limit) {
+    public List<String> findNeedingFetch(Instant refreshBefore, java.time.LocalDate endedAfter, int limit) {
         return jdbc.queryForList(
                 "SELECT DISTINCT p.mt10id FROM performance p LEFT JOIN venue v ON v.mt10id = p.mt10id"
                         + " WHERE p.mt10id IS NOT NULL AND p.end_date >= ? AND (v.mt10id IS NULL OR v.fetched_at < ?)"
                         + " ORDER BY p.mt10id LIMIT ?",
                 String.class,
-                java.sql.Date.valueOf(today),
+                java.sql.Date.valueOf(endedAfter),
                 Timestamp.from(refreshBefore),
                 limit);
     }

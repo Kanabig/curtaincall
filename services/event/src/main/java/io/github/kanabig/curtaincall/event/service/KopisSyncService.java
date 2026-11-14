@@ -10,6 +10,7 @@ import io.github.kanabig.curtaincall.event.client.KopisXmlParser;
 import io.github.kanabig.curtaincall.event.config.KopisProperties;
 import io.github.kanabig.curtaincall.event.dto.KopisFacility;
 import io.github.kanabig.curtaincall.event.dto.KopisPerformanceDetail;
+import io.github.kanabig.curtaincall.event.entity.LastSync;
 import io.github.kanabig.curtaincall.event.entity.PendingPerformance;
 import io.github.kanabig.curtaincall.event.entity.SyncRun;
 import io.github.kanabig.curtaincall.event.entity.SyncStatus;
@@ -101,7 +102,7 @@ public class KopisSyncService {
         Instant now = clock.instant();
         if (!lock.tryAcquire(LOCK, owner, now, now.plus(properties.lockLease()))) {
             log.info("KOPIS 동기화가 이미 실행 중이라 건너뛴다");
-            return new SyncRun(0, SyncStatus.SKIPPED, null, false, 0, 0, 0, 0, 0, null);
+            return new SyncRun(0, SyncStatus.SKIPPED, null, null, false, 0, 0, 0, 0, 0, null);
         }
         try {
             return run(trigger, now);
@@ -112,16 +113,19 @@ public class KopisSyncService {
 
     private SyncRun run(String trigger, Instant startedAt) {
         LocalDate today = LocalDate.now(clock);
-        LocalDate afterDate = runs.lastListCompletedDate(properties.zone()).orElse(null);
-        long runId = runs.start(trigger, startedAt, afterDate);
+        LastSync last = runs.lastListCompleted(properties.zone()).orElse(null);
+        LocalDate afterDate = last == null ? null : last.date();
+        LocalDate windowEnd = today.plusDays(properties.windowDays() - 1L);
+        long runId = runs.start(trigger, client.metered(), startedAt, afterDate);
         CallBudget budget =
                 new CallBudget(callLog, clock, client.metered(), properties.syncMaxCalls(), properties.dailyLimit());
         Progress progress = new Progress();
         SyncStatus status = SyncStatus.SUCCESS;
         String error = null;
         try {
-            progress.listCompleted = syncList(budget, progress, today, afterDate);
-            syncDetails(budget, progress, today);
+            progress.listCompleted = syncList(budget, progress, today, windowEnd, last);
+            // 처음 적재(BOOTSTRAP)는 이미 끝난 공연의 상세도 받는다. fixture는 외부 호출이 아니고 시연 데이터가 시간에 따라 비지 않게 하려는 것이다
+            syncDetails(budget, progress, "BOOTSTRAP".equals(trigger) ? LocalDate.EPOCH : today, today);
             if (!progress.listCompleted) {
                 status = SyncStatus.PARTIAL;
             }
@@ -144,6 +148,7 @@ public class KopisSyncService {
                 runId,
                 status,
                 afterDate,
+                progress.listCompleted ? windowEnd : null,
                 progress.listCompleted,
                 budget.used(),
                 progress.listed,
@@ -163,17 +168,41 @@ public class KopisSyncService {
         return result;
     }
 
-    /** 기간을 31일 창으로 나눠 목록을 받는다. 항목을 건너뛰었으면 false를 돌려 다음 실행이 같은 기준일로 다시 받게 한다. */
-    private boolean syncList(CallBudget budget, Progress progress, LocalDate today, LocalDate afterDate) {
+    /**
+     * 목록을 받는다. 지난 실행이 받은 기간(오늘~syncedUntil)은 지난 실행 시작일 이후 수정분만(afterdate), 창이 밀리며 새로 들어온 구간(syncedUntil 다음날~창 끝)은
+     * 수정 여부와 상관없이 전체를 받는다. 지난 실행이 없으면 전체다. 실행을 며칠 건너뛰면 전체 구간이 길어질 뿐 빠지는 날은 없다. 항목을 건너뛰었으면 false를 돌려 다음
+     * 실행이 같은 기준으로 다시 받게 한다.
+     */
+    private boolean syncList(
+            CallBudget budget, Progress progress, LocalDate today, LocalDate windowEnd, LastSync last) {
+        LocalDate incrementalEnd = null;
+        LocalDate fullStart = today;
+        if (last != null && last.syncedUntil() != null && !last.syncedUntil().isBefore(today)) {
+            incrementalEnd = last.syncedUntil().isAfter(windowEnd) ? windowEnd : last.syncedUntil();
+            fullStart = incrementalEnd.plusDays(1);
+        }
         boolean complete = true;
-        LocalDate last = today.plusDays(properties.windowDays() - 1L);
-        for (LocalDate from = today; !from.isAfter(last); from = from.plusDays(MAX_WINDOW_DAYS)) {
-            LocalDate to =
-                    from.plusDays(MAX_WINDOW_DAYS - 1L).isAfter(last) ? last : from.plusDays(MAX_WINDOW_DAYS - 1L);
+        if (incrementalEnd != null) {
+            complete = syncRange(budget, progress, today, incrementalEnd, last.date());
+        }
+        if (!fullStart.isAfter(windowEnd)) {
+            complete &= syncRange(budget, progress, fullStart, windowEnd, null);
+        }
+        return complete;
+    }
+
+    /** from~to를 31일 창으로 나눠 받는다. afterDate가 있으면 목록에 나온 공연은 모두 수정된 것이라 상세를 다시 받게 한다. */
+    private boolean syncRange(
+            CallBudget budget, Progress progress, LocalDate rangeFrom, LocalDate rangeTo, LocalDate afterDate) {
+        boolean complete = true;
+        for (LocalDate from = rangeFrom; !from.isAfter(rangeTo); from = from.plusDays(MAX_WINDOW_DAYS)) {
+            LocalDate windowFrom = from;
+            LocalDate to = from.plusDays(MAX_WINDOW_DAYS - 1L).isAfter(rangeTo)
+                    ? rangeTo
+                    : from.plusDays(MAX_WINDOW_DAYS - 1L);
             int page = 1;
             while (true) {
                 int currentPage = page;
-                LocalDate windowFrom = from;
                 String xml = call(
                         budget,
                         () -> client.listPerformances(windowFrom, to, currentPage, properties.listRows(), afterDate));
@@ -193,17 +222,17 @@ public class KopisSyncService {
         return complete;
     }
 
-    private void syncDetails(CallBudget budget, Progress progress, LocalDate today) {
+    private void syncDetails(CallBudget budget, Progress progress, LocalDate endedAfter, LocalDate today) {
         Set<String> triedVenues = new HashSet<>();
         // 지난 실행에서 상세는 받았지만 시설을 못 받은 공연과 오래된 시설을 먼저 채운다. 밀린 상세가 호출을 다 써도 시설이 굶지 않게 하려는 순서다
         for (String mt10id :
-                venues.findNeedingFetch(clock.instant().minus(properties.facilityRefresh()), today, 1000)) {
+                venues.findNeedingFetch(clock.instant().minus(properties.facilityRefresh()), endedAfter, 1000)) {
             fetchFacility(budget, progress, mt10id, triedVenues);
         }
         List<String> failed = new ArrayList<>();
         while (true) {
             PendingPerformance next = performances
-                    .nextPending(today, properties.detailMaxAttempts(), failed)
+                    .nextPending(today, endedAfter, properties.detailMaxAttempts(), failed)
                     .orElse(null);
             if (next == null) {
                 return;
