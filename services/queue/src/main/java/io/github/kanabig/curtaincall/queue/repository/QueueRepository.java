@@ -47,7 +47,7 @@ public class QueueRepository {
      * 회차 하나의 입장 처리. 같은 초에는 인스턴스가 몇 개든 한 번만 실행된다. {@code nowMs}가 null이면 Redis TIME을 쓴다(운영). 값을 주는 것은 시계를 주입하는
      * 테스트용이다.
      */
-    public AdmitResult admit(long sessionId, Long nowMs, long entryTtlMs, long admitStaleMs) {
+    public AdmitResult admit(long sessionId, Long nowMs, long entryTtlMs, long admitStaleMs, int dropLimit) {
         List<?> r = redis.execute(
                 admitScript,
                 List.of(
@@ -58,7 +58,8 @@ public class QueueRepository {
                 nowMs == null ? "" : String.valueOf(nowMs),
                 String.valueOf(entryTtlMs),
                 QueueKeys.tickPrefix(sessionId),
-                String.valueOf(admitStaleMs));
+                String.valueOf(admitStaleMs),
+                String.valueOf(dropLimit));
         if (r == null || r.isEmpty() || ((Number) r.get(0)).longValue() != 1) {
             return AdmitResult.SKIPPED;
         }
@@ -80,12 +81,11 @@ public class QueueRepository {
         return removed == null ? 0 : removed;
     }
 
-    /** 대기 포기. 이미 입장한 사용자면 활성 목록에서도 빼서 자리를 돌려준다. 없으면 아무 일도 하지 않는다. */
+    /** 대기 포기. 대기 중일 때만 뺀다. 입장한 사용자는 건드리지 않는다(토큰은 무상태라 회수할 수 없어 활성 수에서만 빼면 상한이 느슨해진다). */
     public void leave(long sessionId, long userId) {
         String user = String.valueOf(userId);
         redis.opsForZSet().remove(QueueKeys.waiting(sessionId), user);
         redis.opsForZSet().remove(QueueKeys.seen(sessionId), user);
-        redis.opsForZSet().remove(QueueKeys.active(sessionId), user);
     }
 
     /** 예매를 마친 사용자를 활성 목록에서 뺀다. 토큰 자체는 만료까지 유효하다. */

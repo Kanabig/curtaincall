@@ -5,7 +5,8 @@
 -- 폴링이 끊긴 사람에게 자리를 주면 토큰을 받아 가지 않아 입장 TTL 동안 슬롯만 차지한다.
 -- 시각은 ARGV[1]이 비어 있으면 Redis TIME을 쓴다. 운영은 비워서 인스턴스 시계와 상관없이 초를 Redis 한 곳에서 정하고(enter·status와 같은 기준),
 -- 테스트만 시각을 넘겨 기다리지 않는다.
--- KEYS: conf, waiting, seen, active   ARGV: nowMs(빈 문자열이면 TIME), entryTtlMs, tickKeyPrefix, admitStaleMs
+-- 지우는 수가 ARGV[5]에 닿으면 이번 틱은 거기서 멈춘다(Redis를 오래 잡지 않기 위해). 나머지는 다음 틱과 이탈 정리가 맡는다.
+-- KEYS: conf, waiting, seen, active   ARGV: nowMs(빈 문자열이면 TIME), entryTtlMs, tickKeyPrefix, admitStaleMs, dropLimit
 -- 반환: {0} 이번 초는 다른 인스턴스가 처리 | {1, 입장 수, 입장 뒤 활성 수, 폴링이 끊겨 지운 수} | {-1} 판매 중이 아니거나 회차 없음
 local now = tonumber(ARGV[1])
 if not now then
@@ -26,7 +27,8 @@ local exp = now + tonumber(ARGV[2])
 local freshAfter = now - tonumber(ARGV[4])
 local admitted = 0
 local dropped = 0
-while need > 0 do
+local dropLimit = tonumber(ARGV[5])
+while need > 0 and dropped < dropLimit do
   local popped = redis.call('ZPOPMIN', KEYS[2], need)
   if #popped == 0 then
     break

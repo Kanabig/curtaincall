@@ -39,7 +39,8 @@ public class AdmissionService {
                     sessionId,
                     nowMs,
                     properties.entryTtl().toMillis(),
-                    properties.admitStaleAfter().toMillis());
+                    properties.admitStaleAfter().toMillis(),
+                    properties.admitDropLimit());
             if (result.ran() && (result.admitted() > 0 || result.dropped() > 0)) {
                 log.debug(
                         "회차 {} 입장 {}명, 폴링 끊김 {}명 제거, 활성 {}명",

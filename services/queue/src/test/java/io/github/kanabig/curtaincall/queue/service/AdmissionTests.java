@@ -215,20 +215,38 @@ class AdmissionTests extends QueueIntegrationTest {
     }
 
     @Test
-    @DisplayName("[QUE-6] 입장한 사용자가 대기 포기를 부르면 활성에서도 빠져 자리가 돌아온다")
-    void leaveAfterAdmittedFreesSlot() {
+    @DisplayName("[QUE-6] 입장한 뒤의 대기 포기는 활성 수를 바꾸지 않는다(토큰은 회수할 수 없다)")
+    void leaveAfterAdmittedKeepsSlot() {
         putConf(-1000, 10, 1);
         enterUsers(1, 2);
         Instant t0 = startOfSecond();
         admission.admitAll(t0);
-        assertThat(isActive(1)).isTrue();
-        assertThat(activeCount()).isEqualTo(1);
 
         queue.leave(sessionId, 1);
-        assertThat(activeCount()).isZero();
+        queue.leave(sessionId, 1);
+        assertThat(activeCount()).isEqualTo(1);
+        assertThat(isActive(1)).isTrue();
 
         admission.admitAll(t0.plusSeconds(1));
-        assertThat(isActive(2)).isTrue();
+        assertThat(isActive(2)).isFalse();
+    }
+
+    @Test
+    @DisplayName("[QUE-4] 폴링이 끊긴 대기자를 한 틱에 지우는 수는 상한까지고, 상한에 닿으면 그 틱은 멈춘다")
+    void dropLimitStopsTick() {
+        putConf(-1000, 2);
+        enterUsers(1, 10);
+        Instant t0 = startOfSecond();
+        pollUntil(1, 10, t0.minusSeconds(60));
+        AdmissionService limited = new AdmissionService(
+                repository,
+                new QueueProperties(
+                        properties.zone(), properties.entryTtl(), properties.staleAfter(), Duration.ofSeconds(15), 3));
+
+        // 2명씩 꺼내 지우므로 2, 4명째에 상한 3을 넘어 멈춘다. 나머지 6명은 다음 틱이 맡는다
+        assertThat(limited.admitAll(t0)).isZero();
+        assertThat(redis.opsForZSet().zCard(key("waiting"))).isEqualTo(6);
+        assertThat(activeCount()).isZero();
     }
 
     @Test
