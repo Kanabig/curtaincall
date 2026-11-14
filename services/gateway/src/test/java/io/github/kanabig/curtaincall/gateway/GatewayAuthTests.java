@@ -40,6 +40,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
             "curtaincall.jwt.access-secret=" + GatewayAuthTests.SECRET,
+            "curtaincall.jwt.entry-secret=test-entry-secret-0123456789abcdef-test",
             "management.server.port=0",
             "logging.level.io.github.kanabig.curtaincall.gateway.filter=DEBUG"
         })

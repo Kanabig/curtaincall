@@ -32,6 +32,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
             "curtaincall.jwt.access-secret=" + RateLimitTests.SECRET,
+            "curtaincall.jwt.entry-secret=test-entry-secret-0123456789abcdef-test",
             "management.server.port=0",
             "curtaincall.rate-limit.ip.rate-per-second=0.1",
             "curtaincall.rate-limit.ip.burst=6",
