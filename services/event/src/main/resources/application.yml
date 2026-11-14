@@ -17,3 +17,19 @@ management:
     distribution:
       percentiles-histogram:
         "[http.server.requests]": true
+curtaincall:
+  kopis:
+    # auto: 키가 있으면 live, 없으면 fixture
+    mode: auto
+    api-key: ${KOPIS_API_KEY:}
+    base-url: http://www.kopis.or.kr/openApi/restful
+    connect-timeout: 3s
+    read-timeout: 10s
+    daily-limit: 100
+    sync-max-calls: 60
+    window-days: 90
+    list-rows: 100
+    facility-refresh: 30d
+    detail-max-attempts: 3
+    cron: "0 0 4 * * *"
+    zone: Asia/Seoul
