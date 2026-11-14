@@ -1,6 +1,14 @@
 spring:
   application:
     name: user
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
 server:
   port: 8081
 logging:
@@ -17,3 +25,13 @@ management:
     distribution:
       percentiles-histogram:
         "[http.server.requests]": true
+curtaincall:
+  jwt:
+    # 비밀값이라 기본값을 두지 않는다. 환경변수 CURTAINCALL_JWT_ACCESS_SECRET으로 넣는다
+    access-ttl: 30m
+  user:
+    refresh-ttl: 14d
+    # 둘 다 있을 때만 ADMIN 시드 계정을 만든다(USR-4)
+    admin:
+      email: ${CURTAINCALL_ADMIN_EMAIL:}
+      password: ${CURTAINCALL_ADMIN_PASSWORD:}
