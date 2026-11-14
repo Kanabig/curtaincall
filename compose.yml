@@ -114,7 +114,6 @@ services:
       SPRING_FLYWAY_PASSWORD: ${USER_FLYWAY_PASSWORD}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
-      PAYMENT_PG_BASE_URL: http://mock-pg:8090
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -135,7 +134,6 @@ services:
       SPRING_FLYWAY_PASSWORD: ${EVENT_FLYWAY_PASSWORD}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
-      PAYMENT_PG_BASE_URL: http://mock-pg:8090
       # 비워 두면 fixture 모드로 동작한다
       KOPIS_API_KEY: ${KOPIS_API_KEY:-}
     depends_on:
@@ -168,7 +166,6 @@ services:
       SPRING_FLYWAY_PASSWORD: ${RESERVATION_FLYWAY_PASSWORD}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
-      PAYMENT_PG_BASE_URL: http://mock-pg:8090
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -222,7 +219,6 @@ services:
       SPRING_FLYWAY_PASSWORD: ${NOTIFICATION_FLYWAY_PASSWORD}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
-      PAYMENT_PG_BASE_URL: http://mock-pg:8090
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
     depends_on:
