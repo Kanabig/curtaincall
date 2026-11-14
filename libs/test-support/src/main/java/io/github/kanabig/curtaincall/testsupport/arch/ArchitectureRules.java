@@ -10,6 +10,7 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.util.Set;
 
 /**
  * 모든 모듈이 공유하는 아키텍처 규칙. 각 모듈 테스트가 {@code ArchTests.in(ArchitectureRules.class)}로 가져다 쓴다.
@@ -21,6 +22,8 @@ public final class ArchitectureRules {
 
     static final String ROOT = "io.github.kanabig.curtaincall.";
     static final String COMMON = "common";
+    /** 서비스가 아니라 공유 라이브러리인 패키지. 서비스가 의존해도 경계 위반이 아니다. */
+    static final Set<String> SHARED_LIBRARIES = Set.of(COMMON, "outbox", "testsupport");
 
     /** controller는 아무도 부르지 않고, client(외부·내부 API 호출)는 service에서만 호출한다. repository는 service 등 허용된 계층만 호출한다. */
     @ArchTest
@@ -66,7 +69,7 @@ public final class ArchitectureRules {
             classes().should(notDependOnOtherModules()).allowEmptyShould(true);
 
     private static ArchCondition<JavaClass> notDependOnOtherModules() {
-        return new ArchCondition<>("not depend on another service package (only common.* is shared)") {
+        return new ArchCondition<>("not depend on another service package (only shared libraries are allowed)") {
             @Override
             public void check(JavaClass item, ConditionEvents events) {
                 String origin = module(item.getPackageName());
@@ -75,7 +78,7 @@ public final class ArchitectureRules {
                 }
                 for (Dependency dependency : item.getDirectDependenciesFromSelf()) {
                     String target = module(dependency.getTargetClass().getPackageName());
-                    if (target != null && !target.equals(origin) && !target.equals(COMMON)) {
+                    if (target != null && !target.equals(origin) && !SHARED_LIBRARIES.contains(target)) {
                         events.add(SimpleConditionEvent.violated(item, dependency.getDescription()));
                     }
                 }
