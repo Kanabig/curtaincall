@@ -57,6 +57,15 @@ public final class MetricNames {
     /** Bulkhead가 거절한 PG 호출 수. Counter. payment가 등록한다. */
     public static final String PAYMENT_PG_BULKHEAD_REJECTED = "payment.pg.bulkhead.rejected";
 
+    /** KOPIS 호출 수. Counter. 태그 result = success, failure. event가 등록한다. 하루 한도(100)와 비교한다. */
+    public static final String KOPIS_CALLS = "kopis.calls";
+
+    /** 응답 파싱에 실패한 건수(목록 항목, 상세, 시설상세). Counter(태그 없음). event가 등록한다. */
+    public static final String KOPIS_PARSE_FAILURES = "kopis.parse.failures";
+
+    /** 상세 조회를 기다리는 공연 수. Gauge. 호출 상한 때문에 밀린 양을 본다. event가 등록한다. */
+    public static final String KOPIS_DETAIL_PENDING = "kopis.detail.pending";
+
     public static final String TAG_RESULT = "result";
     public static final String TAG_SCHEDULE = "schedule";
     public static final String TAG_STATE = "state";
