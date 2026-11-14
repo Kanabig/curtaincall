@@ -24,17 +24,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
-/** RSV-1~4 좌석 점유. 동시성 테스트는 반복 실행해 전부 통과해야 하고, 교착과 락 대기 타임아웃은 InnoDB 지표로 센다. */
-@SpringBootTest(
-        properties = {
-            "spring.kafka.listener.auto-startup=false",
-            "curtaincall.inventory.scheduler.enabled=false",
-            "curtaincall.order.scheduler.enabled=false",
-            "curtaincall.outbox.relay.auto-start=false"
-        })
-class SeatHoldServiceTests extends InventoryIntegrationTest {
+/**
+ * RSV-1~4 좌석 점유. 동시성 테스트는 반복 실행해 전부 통과해야 하고, 교착과 락 대기 타임아웃은 InnoDB 지표로 센다. 점유 전략마다 하위 클래스가 같은 시나리오를 돌린다.
+ */
+abstract class AbstractSeatHoldTests extends InventoryIntegrationTest {
 
     static final int REPEAT = 30;
     static final long SESSION = 1L;
@@ -249,7 +243,7 @@ class SeatHoldServiceTests extends InventoryIntegrationTest {
         List<Object> results = runConcurrently(tasks);
 
         assertThat(results.stream().filter(r -> r instanceof SeatHold)).hasSize(1);
-        assertThat(results.stream().filter(SeatHoldServiceTests::isSeatConflict))
+        assertThat(results.stream().filter(AbstractSeatHoldTests::isSeatConflict))
                 .hasSize(49);
         assertThat(jdbc.queryForObject(
                         "SELECT COUNT(*) FROM seat_inventory WHERE session_id = ? AND status = 'HELD'",
@@ -313,13 +307,58 @@ class SeatHoldServiceTests extends InventoryIntegrationTest {
         List<Object> results = runConcurrently(tasks);
 
         assertThat(results.stream().filter(r -> r instanceof SeatHold)).hasSize(2);
-        assertThat(results.stream().filter(r -> !(r instanceof SeatHold)).allMatch(SeatHoldServiceTests::isLimit))
+        assertThat(results.stream().filter(r -> !(r instanceof SeatHold)).allMatch(AbstractSeatHoldTests::isLimit))
                 .isTrue();
         assertThat(jdbc.queryForObject(
                         "SELECT COUNT(*) FROM seat_inventory WHERE session_id = ? AND holder_id = 77",
                         Integer.class,
                         SESSION))
                 .isEqualTo(4);
+        assertThat(innodbMetric("lock_deadlocks") - deadlocks).isZero();
+        assertThat(innodbMetric("lock_timeouts") - timeouts).isZero();
+    }
+
+    /** 결제 승인 뒤 확정. 만료 시각은 보지 않고 hold_id가 아직 내 것인지만 본다. */
+    int confirm(String holdId) {
+        return jdbc.update(
+                "UPDATE seat_inventory SET status = 'SOLD', version = version + 1 WHERE hold_id = ? AND status = 'HELD'",
+                holdId);
+    }
+
+    @RepeatedTest(REPEAT)
+    @DisplayName("만료된 점유의 확정과 다른 사용자의 재점유가 겹치면 한쪽만 이긴다")
+    void confirmRacesWithReholdAfterExpiry() throws Exception {
+        seed(SESSION, 10);
+        SeatHold first = service.hold(SESSION, 100L, List.of(1L, 2L));
+        jdbc.update(
+                "UPDATE seat_inventory SET expires_at = NOW(6) - INTERVAL 1 SECOND WHERE hold_id = ?", first.holdId());
+        long deadlocks = innodbMetric("lock_deadlocks");
+        long timeouts = innodbMetric("lock_timeouts");
+
+        List<Callable<Object>> tasks =
+                List.of(() -> confirm(first.holdId()), () -> service.hold(SESSION, 200L, List.of(1L, 2L)));
+        List<Object> results = runConcurrently(tasks);
+
+        int confirmed = (Integer) results.get(0);
+        boolean reheld = results.get(1) instanceof SeatHold;
+        assertThat(reheld ^ (confirmed == 2))
+                .as("확정 %d행, 재점유 %s", confirmed, results.get(1))
+                .isTrue();
+        if (reheld) {
+            assertThat(confirmed).isZero();
+            assertThat(jdbc.queryForObject(
+                            "SELECT COUNT(*) FROM seat_inventory WHERE session_id = ? AND status = 'HELD' AND holder_id = 200",
+                            Integer.class,
+                            SESSION))
+                    .isEqualTo(2);
+        } else {
+            assertThat(isSeatConflict(results.get(1))).isTrue();
+            assertThat(jdbc.queryForObject(
+                            "SELECT COUNT(*) FROM seat_inventory WHERE session_id = ? AND status = 'SOLD' AND holder_id = 100",
+                            Integer.class,
+                            SESSION))
+                    .isEqualTo(2);
+        }
         assertThat(innodbMetric("lock_deadlocks") - deadlocks).isZero();
         assertThat(innodbMetric("lock_timeouts") - timeouts).isZero();
     }

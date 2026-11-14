@@ -70,6 +70,38 @@ public class SeatHoldRepository {
                 args.toArray());
     }
 
+    /**
+     * 요청한 좌석 행을 {@code seat_id} 오름차순으로 잠그고 현재 상태를 돌려준다(비관적 락 전략). 모든 점유가 같은 순서로 잠가야 서로를 기다리기만 하고 교착하지 않는다. 없는
+     * 좌석은 결과에 빠진다.
+     *
+     * <p>{@code FORCE INDEX (PRIMARY)}가 필요하다. 없으면 옵티마이저가 {@code idx_seat_inventory_holder}로 회차 전체를 훑고 filesort해, {@code holder_id} 순서로
+     * 필요 없는 행까지 잠가 교착이 났다(동시성 테스트로 재현, EXPLAIN으로 확인).
+     */
+    public List<LockedSeat> lockSeats(long sessionId, List<Long> seatIds) {
+        List<Object> args = new ArrayList<>();
+        args.add(sessionId);
+        args.addAll(seatIds);
+        return jdbc.query(
+                "SELECT seat_id, status, expires_at FROM seat_inventory FORCE INDEX (PRIMARY) WHERE session_id = ? AND seat_id IN ("
+                        + placeholders(seatIds.size()) + ") ORDER BY seat_id FOR UPDATE",
+                (rs, row) -> new LockedSeat(
+                        rs.getLong("seat_id"),
+                        rs.getString("status"),
+                        rs.getTimestamp("expires_at") == null
+                                ? null
+                                : rs.getTimestamp("expires_at").toInstant()),
+                args.toArray());
+    }
+
+    /** 잠근 좌석 행의 상태. */
+    public record LockedSeat(long seatId, String status, Instant expiresAt) {
+
+        public boolean holdable(Instant now) {
+            return "AVAILABLE".equals(status)
+                    || ("HELD".equals(status) && expiresAt != null && expiresAt.isBefore(now));
+        }
+    }
+
     /** 요청한 좌석 중 이 회차에 없는 좌석 ID. */
     public List<Long> findMissing(long sessionId, List<Long> seatIds) {
         List<Object> args = new ArrayList<>();
