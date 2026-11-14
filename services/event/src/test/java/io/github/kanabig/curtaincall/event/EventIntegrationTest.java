@@ -15,6 +15,8 @@ public abstract class EventIntegrationTest {
 
     @BeforeEach
     void cleanTables() {
+        jdbc.update("DELETE FROM hall_seat");
+        jdbc.update("DELETE FROM hall_layout");
         jdbc.update("DELETE FROM hall");
         jdbc.update("DELETE FROM venue");
         jdbc.update("DELETE FROM performance");
