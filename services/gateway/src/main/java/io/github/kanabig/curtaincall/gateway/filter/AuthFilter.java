@@ -1,18 +1,14 @@
 package io.github.kanabig.curtaincall.gateway.filter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.server.PathContainer;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
@@ -59,11 +55,11 @@ public class AuthFilter implements GlobalFilter, Ordered {
             new PublicRoute(HttpMethod.POST, "/api/v1/search/assist"));
 
     private final ReactiveJwtDecoder decoder;
-    private final ObjectMapper objectMapper;
+    private final ProblemWriter problems;
 
-    public AuthFilter(ReactiveJwtDecoder decoder, ObjectMapper objectMapper) {
+    public AuthFilter(ReactiveJwtDecoder decoder, ProblemWriter problems) {
         this.decoder = decoder;
-        this.objectMapper = objectMapper;
+        this.problems = problems;
     }
 
     @Override
@@ -87,7 +83,7 @@ public class AuthFilter implements GlobalFilter, Ordered {
         }
         HttpMethod method = stripped.getRequest().getMethod();
         if (PUBLIC_ROUTES.stream().anyMatch(route -> route.matches(method, container))) {
-            return chain.filter(stripped);
+            return chain.filter(withoutAuthorization(stripped));
         }
 
         String authorization = stripped.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
@@ -111,6 +107,8 @@ public class AuthFilter implements GlobalFilter, Ordered {
                 .request(request -> request.headers(headers -> {
                     headers.set(USER_ID, jwt.getSubject());
                     headers.set(USER_ROLE, role);
+                    // 검증은 여기서 끝났다. 서비스는 X-User-*만 쓰므로 토큰이 하위 로그에 남지 않게 지운다
+                    headers.remove(HttpHeaders.AUTHORIZATION);
                 }))
                 .build();
         return chain.filter(authenticated);
@@ -150,19 +148,14 @@ public class AuthFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> reject(ServerWebExchange exchange, HttpStatus status, String code, String detail) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setTitle(status.getReasonPhrase());
-        problem.setProperty("code", code);
-        byte[] body;
-        try {
-            body = objectMapper.writeValueAsBytes(problem);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            throw new IllegalStateException(e);
-        }
-        exchange.getResponse().setStatusCode(status);
-        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_PROBLEM_JSON);
-        DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(body);
-        return exchange.getResponse().writeWith(Mono.just(buffer));
+        return problems.write(exchange, status, code, detail);
+    }
+
+    /** 공개 경로는 검증하지 않지만, 토큰을 실어 보낸 요청이어도 하위 서비스로는 넘기지 않는다. */
+    private static ServerWebExchange withoutAuthorization(ServerWebExchange exchange) {
+        return exchange.mutate()
+                .request(request -> request.headers(headers -> headers.remove(HttpHeaders.AUTHORIZATION)))
+                .build();
     }
 
     @Override

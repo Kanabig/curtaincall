@@ -13,6 +13,8 @@ dependencies {
     implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webflux'
     // JWT 검증만 쓴다. Spring Security 필터 체인은 두지 않는다(user와 같은 방식)
     implementation 'org.springframework.security:spring-security-oauth2-jose'
+    // [GW-2] 속도 제한 상태는 Redis에 둔다
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
     // Reactor Context의 추적 ID를 로그 MDC로 옮긴다
     implementation 'io.micrometer:context-propagation'
 }

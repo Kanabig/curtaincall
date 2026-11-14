@@ -26,15 +26,37 @@ spring:
               uri: ${SEARCH_ASSIST_SERVICE_URL:http://search-assist:8087}
               predicates:
                 - Path=/api/v1/search/**
+  data:
+    redis:
+      # Redis가 느리거나 죽어도 요청이 오래 붙잡히지 않게 짧게 둔다(속도 제한은 fail-open)
+      timeout: 100ms
+      connect-timeout: 100ms
 server:
   port: 8080
 logging:
   pattern:
     level: "%5p [${spring.application.name},%X{requestId:-}]"
 curtaincall:
+  rate-limit:
+    # IP는 같은 공유기 뒤의 여러 사용자가 함께 쓰므로 계정보다 넉넉하게 둔다. 한 대에서 부하를 거는 측정 때는 환경변수로 올린다
+    ip:
+      rate-per-second: ${RATE_LIMIT_IP_PER_SECOND:50}
+      burst: ${RATE_LIMIT_IP_BURST:100}
+    user:
+      rate-per-second: ${RATE_LIMIT_USER_PER_SECOND:10}
+      burst: ${RATE_LIMIT_USER_BURST:20}
+    timeout: 100ms
+    # 실패 뒤 이 시간 동안은 Redis를 부르지 않고 통과시킨다
+    circuit-open: 5s
+    # gateway가 가장 앞단이면 false. X-Forwarded-For는 클라이언트가 임의로 보낼 수 있다
+    trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:false}
   jwt:
     # 비밀값이라 기본값을 두지 않는다. 환경변수 CURTAINCALL_JWT_ACCESS_SECRET으로 넣는다(user와 같은 값)
 management:
+  health:
+    redis:
+      # 속도 제한은 Redis 없이도 통과하므로 Redis 장애가 gateway 헬스체크를 내리지 않게 한다
+      enabled: false
   server:
     # actuator는 외부 진입 포트(8080)와 분리한다. compose 내부망에서만 접근한다
     port: 8089
