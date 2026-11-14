@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * [RSV-10] 회차 좌석 판매 상태. 회차별 스냅샷을 {@code cacheTtl} 동안 인스턴스 메모리에 둔다. 만료 뒤 첫 요청만 DB를 읽고 나머지는 그 결과를 기다리므로(single-flight)
- * 폴링이 몰려도 회차당 TTL마다 한 번만 읽는다. 만료된 점유는 읽는 시점에 가능으로 본다(ADR-0004).
+ * 폴링이 몰려도 회차당 TTL마다 한 번만 읽는다. 만료된 점유는 읽는 시점에 가능으로 본다.
  */
 @Service
 public class SeatStatusService {
