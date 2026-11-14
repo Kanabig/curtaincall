@@ -95,6 +95,49 @@ public class SessionRepository {
                         s.suspended()));
     }
 
+    /** 공연의 판매할 수 있는 회차(중지되지 않았고 아직 시작 전). 시작 시각순이고 가격표를 함께 읽는다. */
+    public List<SaleSession> findSellable(long performanceId, Instant now) {
+        List<SaleSession> sessions = jdbc.query(
+                SELECT + " WHERE s.performance_id = ? AND s.suspended = FALSE AND s.start_at > ?"
+                        + " ORDER BY s.start_at, s.id",
+                (rs, i) -> new SaleSession(
+                        rs.getLong("id"),
+                        rs.getLong("performance_id"),
+                        rs.getString("mt13id"),
+                        rs.getTimestamp("start_at").toInstant(),
+                        rs.getTimestamp("sale_open_at").toInstant(),
+                        List.of(),
+                        rs.getInt("admission_per_second"),
+                        rs.getInt("max_active_users"),
+                        rs.getBoolean("suspended")),
+                performanceId,
+                Timestamp.from(now));
+        if (sessions.isEmpty()) {
+            return sessions;
+        }
+        java.util.Map<Long, List<Price>> byId = new java.util.HashMap<>();
+        jdbc.query(
+                "SELECT session_id, grade, price FROM session_price WHERE session_id IN ("
+                        + "?,".repeat(sessions.size() - 1) + "?) ORDER BY price DESC, grade",
+                rs -> {
+                    byId.computeIfAbsent(rs.getLong(1), k -> new java.util.ArrayList<>())
+                            .add(new Price(rs.getString(2), rs.getInt(3)));
+                },
+                sessions.stream().map(SaleSession::id).toArray());
+        return sessions.stream()
+                .map(s -> new SaleSession(
+                        s.id(),
+                        s.performanceId(),
+                        s.venueId(),
+                        s.startAt(),
+                        s.saleOpenAt(),
+                        byId.getOrDefault(s.id(), List.of()),
+                        s.admissionPerSecond(),
+                        s.maxActiveUsers(),
+                        s.suspended()))
+                .toList();
+    }
+
     private List<Price> prices(long sessionId) {
         return jdbc.query(
                 "SELECT grade, price FROM session_price WHERE session_id = ? ORDER BY price DESC, grade",
