@@ -53,8 +53,7 @@ public class PerformanceQueryService {
 
     public PerformancePage list(Filter filter, int page, int size) {
         if (page < 0 || size < 1 || size > MAX_SIZE) {
-            throw new BusinessException(
-                    CommonErrorCode.INVALID_REQUEST, "page는 0 이상, size는 1~%d".formatted(MAX_SIZE));
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST, "page는 0 이상, size는 1~%d".formatted(MAX_SIZE));
         }
         if (filter.from() != null && filter.to() != null && filter.from().isAfter(filter.to())) {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST, "from이 to보다 늦다");
@@ -87,9 +86,7 @@ public class PerformanceQueryService {
     }
 
     public PerformanceDetail get(long id) {
-        var row = performances
-                .find(id)
-                .orElseThrow(() -> new BusinessException(EventErrorCode.PERFORMANCE_NOT_FOUND));
+        var row = performances.find(id).orElseThrow(() -> new BusinessException(EventErrorCode.PERFORMANCE_NOT_FOUND));
         Instant now = clock.instant();
         List<SessionItem> items = sessions.findSellable(id, now).stream()
                 .map(s -> new SessionItem(

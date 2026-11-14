@@ -11,7 +11,13 @@ public final class PerformanceQueryDtos {
 
     /** 목록 조건. null인 항목은 걸지 않는다. */
     public record Filter(
-            String region, String genre, LocalDate from, LocalDate to, String state, Integer maxPrice, String keyword) {}
+            String region,
+            String genre,
+            LocalDate from,
+            LocalDate to,
+            String state,
+            Integer maxPrice,
+            String keyword) {}
 
     public record PerformanceItem(
             long id,
@@ -30,11 +36,7 @@ public final class PerformanceQueryDtos {
     public record PriceItem(String grade, int price) {}
 
     public record SessionItem(
-            long id,
-            String startAt,
-            String saleOpenAt,
-            SaleState saleState,
-            List<PriceItem> prices) {}
+            long id, String startAt, String saleOpenAt, SaleState saleState, List<PriceItem> prices) {}
 
     public record PerformanceDetail(
             long id,

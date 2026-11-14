@@ -20,8 +20,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class PerformanceQueryRepository {
 
-    private static final String FROM =
-            " FROM sale_performance sp JOIN performance p ON p.mt20id = sp.mt20id";
+    private static final String FROM = " FROM sale_performance sp JOIN performance p ON p.mt20id = sp.mt20id";
 
     private final JdbcTemplate jdbc;
 
@@ -78,8 +77,9 @@ public class PerformanceQueryRepository {
         }
         if (f.maxPrice() != null) {
             // 판매할 수 있는 회차 중 최저 등급가가 maxPrice 이하인 회차가 하나라도 있는 공연
-            sb.append(" AND EXISTS (SELECT 1 FROM session s JOIN session_price pr ON pr.session_id = s.id"
-                    + " WHERE s.performance_id = sp.id AND s.suspended = FALSE AND s.start_at > ? AND pr.price <= ?)");
+            sb.append(
+                    " AND EXISTS (SELECT /*+ NO_SEMIJOIN() */ 1 FROM session s JOIN session_price pr ON pr.session_id = s.id"
+                            + " WHERE s.performance_id = sp.id AND s.suspended = FALSE AND s.start_at > ? AND pr.price <= ?)");
             args.add(Timestamp.from(now));
             args.add(f.maxPrice());
         }
@@ -109,7 +109,8 @@ public class PerformanceQueryRepository {
         if (items.isEmpty()) {
             return items;
         }
-        Map<Long, Integer> min = minPrices(items.stream().map(PerformanceItem::id).toList(), now);
+        Map<Long, Integer> min =
+                minPrices(items.stream().map(PerformanceItem::id).toList(), now);
         return items.stream()
                 .map(i -> new PerformanceItem(
                         i.id(),
