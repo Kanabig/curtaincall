@@ -4,7 +4,7 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-/** {@code payment.*} 설정. 기본값은 ADR-0008의 PG 회복력 표다. */
+/** {@code payment.*} 설정. 기본값은 PG 회복력 기준(timeout, 재시도, Bulkhead)이다. */
 @ConfigurationProperties("payment")
 public record PaymentProperties(
         @DefaultValue Pg pg,
