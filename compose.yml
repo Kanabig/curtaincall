@@ -114,6 +114,10 @@ services:
       SPRING_FLYWAY_PASSWORD: ${USER_FLYWAY_PASSWORD}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      # access token 서명 키. gateway가 같은 값으로 검증한다
+      CURTAINCALL_JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      CURTAINCALL_ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      CURTAINCALL_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
