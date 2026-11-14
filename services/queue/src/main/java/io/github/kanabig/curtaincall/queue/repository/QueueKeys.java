@@ -23,6 +23,11 @@ final class QueueKeys {
         return "q:" + sid + ":active";
     }
 
+    /** 같은 초에 입장 처리를 한 번만 하도록 잡는 키. */
+    static String tick(long sid, long epochSecond) {
+        return "q:" + sid + ":tick:" + epochSecond;
+    }
+
     static String conf(long sid) {
         return "q:" + sid + ":conf";
     }

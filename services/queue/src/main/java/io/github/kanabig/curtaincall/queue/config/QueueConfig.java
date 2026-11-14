@@ -6,9 +6,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(QueueProperties.class)
+@EnableScheduling
+@EnableConfigurationProperties({QueueProperties.class, JwtProperties.class})
 public class QueueConfig {
 
     @Bean
@@ -30,6 +32,19 @@ public class QueueConfig {
     DefaultRedisScript<Long> applyConfScript() {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
         script.setLocation(new ClassPathResource("redis/apply-conf.lua"));
+        script.setResultType(Long.class);
+        return script;
+    }
+
+    @Bean
+    DefaultRedisScript<java.util.List> admitScript() {
+        return script("redis/admit.lua");
+    }
+
+    @Bean
+    DefaultRedisScript<Long> removeStaleScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("redis/remove-stale.lua"));
         script.setResultType(Long.class);
         return script;
     }

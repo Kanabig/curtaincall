@@ -4,13 +4,15 @@ import io.github.kanabig.curtaincall.queue.dto.QueueStatusResponse;
 import io.github.kanabig.curtaincall.queue.service.QueueService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** [QUE-1~3] 사용자 ID는 gateway가 검증해 넘기는 {@code X-User-Id}다. */
+/** [QUE-1~3, QUE-6] 사용자 ID는 gateway가 검증해 넘기는 {@code X-User-Id}다. */
 @RestController
 public class QueueController {
 
@@ -27,6 +29,13 @@ public class QueueController {
         QueueService.Entered entered = service.enter(sessionId, userId);
         return ResponseEntity.status(entered.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(entered.response());
+    }
+
+    /** 대기 포기. 이미 나갔어도 204다. 입장한 뒤에는 토큰이 만료될 때까지 활성 목록에 남는다. */
+    @DeleteMapping("/api/v1/queue/sessions/{sessionId}/entries/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leave(@PathVariable long sessionId, @RequestHeader("X-User-Id") long userId) {
+        service.leave(sessionId, userId);
     }
 
     /** 호출이 곧 heartbeat다. */

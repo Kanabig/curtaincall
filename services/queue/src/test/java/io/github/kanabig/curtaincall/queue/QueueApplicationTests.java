@@ -14,7 +14,11 @@ import org.springframework.http.ResponseEntity;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "spring.kafka.listener.auto-startup=false")
+        properties = {
+            "spring.kafka.listener.auto-startup=false",
+            "curtaincall.queue.scheduling.enabled=false",
+            "curtaincall.jwt.entry-secret=" + QueueIntegrationTest.ENTRY_SECRET
+        })
 @Import(TestContainersConfig.class)
 class QueueApplicationTests {
 
