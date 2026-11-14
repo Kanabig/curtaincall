@@ -45,6 +45,12 @@ public class PgController {
         return transactionService.findByMerchantOrderId(merchantOrderId);
     }
 
+    /** 망취소. 거래가 없는 주문번호도 취소로 기록하고 성공을 돌려준다. */
+    @PostMapping("/transactions/cancel")
+    public TransactionResponse cancelByMerchantOrderId(@RequestParam String merchantOrderId) {
+        return transactionService.cancelByMerchantOrderId(merchantOrderId);
+    }
+
     @PostMapping("/transactions/{tid}/cancel")
     public TransactionResponse cancel(@PathVariable String tid) {
         return transactionService.cancel(tid);

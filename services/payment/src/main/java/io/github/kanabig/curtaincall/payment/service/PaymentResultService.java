@@ -70,33 +70,58 @@ public class PaymentResultService {
         }
     }
 
-    /** 거래 조회로도 결과를 얻지 못했다. 다음 조회를 예약하고, 제한 시간을 넘기면 UNKNOWN으로 남긴다. */
-    @Transactional
-    public void inquiryMissed(String paymentId) {
-        Payment payment = lock(paymentId);
-        Instant now = clock.instant();
-        if (payment.getStatus() != PaymentStatus.UNKNOWN) {
-            return;
-        }
-        Instant deadline = payment.getInquiryStartedAt().plus(inquiry.maxDuration());
-        Instant next = now.plus(inquiry.delayAfter(payment.getInquiryAttempts() + 1));
-        payment.inquiryMissed(now, next, deadline);
-        if (payment.isInquiryExhausted()) {
-            onInquiryExhausted(payment);
-        }
+    /** 거래 조회로도 결과를 얻지 못했을 때 다음에 할 일. */
+    public enum InquiryMiss {
+        /** 다음 조회가 예약됐다. */
+        CONTINUE,
+        /** 제한 시간을 넘겼고 조회가 내내 404였다. 망취소 대상이다. */
+        EXHAUSTED_ALL_NOT_FOUND,
+        /** 제한 시간을 넘겼고 오류가 섞였다. 결과를 알 수 없으므로 UNKNOWN으로 남긴다. */
+        EXHAUSTED_UNKNOWN
     }
 
     /**
-     * 거래 조회 제한 시간 안에 결과를 얻지 못했을 때의 처리. UNKNOWN으로 남기고 메트릭만 올린다. 소진 정책(계속 UNKNOWN으로 둘지 확정할지)은 이 메서드 한 곳에서
-     * 바꾼다.
+     * 거래 조회로도 결과를 얻지 못했다. 다음 조회를 예약하고, 제한 시간을 넘기면 소진 처리를 한다.
+     *
+     * @param notFound PG가 404("거래 없음")로 답했으면 true, 오류나 예상 밖 응답이면 false
      */
-    private void onInquiryExhausted(Payment payment) {
+    @Transactional
+    public InquiryMiss inquiryMissed(String paymentId, boolean notFound) {
+        Payment payment = lock(paymentId);
+        Instant now = clock.instant();
+        if (payment.getStatus() != PaymentStatus.UNKNOWN) {
+            return InquiryMiss.CONTINUE;
+        }
+        Instant deadline = payment.getInquiryStartedAt().plus(inquiry.maxDuration());
+        Instant next = now.plus(inquiry.delayAfter(payment.getInquiryAttempts() + 1));
+        payment.inquiryMissed(now, next, deadline, notFound);
+        return payment.isInquiryExhausted() ? onInquiryExhausted(payment) : InquiryMiss.CONTINUE;
+    }
+
+    /**
+     * 거래 조회 제한 시간 안에 결과를 얻지 못했을 때의 처리 정책. 내내 404였으면 망취소로 실패를 확정하게 하고, 오류가 섞였으면 UNKNOWN으로 남기고 메트릭을 올린다.
+     */
+    private InquiryMiss onInquiryExhausted(Payment payment) {
+        if (payment.isInquiryAllNotFound()) {
+            log.warn(
+                    "거래 조회가 끝까지 거래 없음이었다. 망취소로 실패를 확정한다: paymentId={}, orderId={}",
+                    payment.getPaymentId(),
+                    payment.getOrderId());
+            return InquiryMiss.EXHAUSTED_ALL_NOT_FOUND;
+        }
         metrics.unknownExhausted();
         log.error(
                 "거래 조회 제한 시간 안에 결과를 얻지 못했다. UNKNOWN으로 남긴다: paymentId={}, orderId={}, attempts={}",
                 payment.getPaymentId(),
                 payment.getOrderId(),
                 payment.getInquiryAttempts());
+        return InquiryMiss.EXHAUSTED_UNKNOWN;
+    }
+
+    /** 망취소에 실패했다. 실패로 확정하지 못하므로 UNKNOWN으로 남기고 메트릭을 올린다. */
+    public void netCancelFailed(String paymentId) {
+        metrics.unknownExhausted();
+        log.error("망취소에 실패했다. UNKNOWN으로 남긴다: paymentId={}", paymentId);
     }
 
     private Payment lock(String paymentId) {

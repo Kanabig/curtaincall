@@ -37,7 +37,14 @@ public class TransactionService {
         faultService.beforeApproval();
 
         Transaction candidate = newTransaction(request);
-        Transaction existing = repository.insertIfAbsent(candidate).orElse(null);
+        Transaction existing;
+        try {
+            existing = repository.insertIfAbsent(candidate).orElse(null);
+        } catch (TransactionRepository.OrderPreCancelledException e) {
+            // 망취소가 먼저 기록된 주문이다. 늦게 도착한 승인은 무효다
+            log.info("사전 취소된 주문의 승인을 거절한다: merchantOrderId={}", request.merchantOrderId());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "order was cancelled", e);
+        }
         Transaction result = existing != null ? existing : candidate;
         boolean duplicate = existing != null;
         log.info(
@@ -65,6 +72,18 @@ public class TransactionService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "transaction is not approved");
         }
         return TransactionResponse.from(transaction);
+    }
+
+    /**
+     * 가맹점 주문번호로 취소한다(망취소). 거래가 있으면 tid 취소와 같고, 없으면 사전 취소로 기록한 뒤 그 뒤에 들어오는 같은 주문번호의 승인을 거절한다. 반복 호출해도
+     * 같은 결과다.
+     */
+    public TransactionResponse cancelByMerchantOrderId(String merchantOrderId) {
+        Transaction existing = repository.preCancelIfAbsent(merchantOrderId).orElse(null);
+        if (existing == null) {
+            return TransactionResponse.preCancelled(merchantOrderId, clock.instant());
+        }
+        return cancel(existing.getTid());
     }
 
     public void clear() {

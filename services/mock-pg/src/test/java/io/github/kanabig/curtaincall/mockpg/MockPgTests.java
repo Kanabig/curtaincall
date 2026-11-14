@@ -117,6 +117,32 @@ class MockPgTests {
     }
 
     @Test
+    @DisplayName("거래가 없는 주문번호를 취소하면 사전 취소로 기록하고, 그 뒤 같은 주문번호의 승인은 409로 거절한다")
+    void preCancelRejectsLateApproval() {
+        ResponseEntity<Map<String, Object>> first = post("/pg/v1/transactions/cancel?merchantOrderId=o-pre");
+        ResponseEntity<Map<String, Object>> again = post("/pg/v1/transactions/cancel?merchantOrderId=o-pre");
+        ResponseEntity<Map<String, Object>> late = approve("o-pre", "tok_approve");
+
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(first.getBody()).containsEntry("status", "CANCELLED");
+        assertThat(again.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(late.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(get("/pg/v1/transactions?merchantOrderId=o-pre").getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("이미 거래가 있는 주문번호의 망취소는 그 거래를 취소한다")
+    void cancelByMerchantOrderIdCancelsExisting() {
+        approve("o-exist", "tok_approve");
+
+        ResponseEntity<Map<String, Object>> cancelled = post("/pg/v1/transactions/cancel?merchantOrderId=o-exist");
+
+        assertThat(cancelled.getBody()).containsEntry("status", "CANCELLED");
+        assertThat(get("/pg/v1/transactions?merchantOrderId=o-exist").getBody()).containsEntry("status", "CANCELLED");
+    }
+
+    @Test
     @DisplayName("장애 설정을 API로 바꾸고 읽고 끌 수 있다. 범위를 벗어난 값은 400이다")
     void faultSettingsCanBeToggled() {
         ResponseEntity<Map<String, Object>> put =
