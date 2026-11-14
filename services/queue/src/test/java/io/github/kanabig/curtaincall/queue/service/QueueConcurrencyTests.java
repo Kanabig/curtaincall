@@ -16,9 +16,18 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.TestPropertySource;
 
-/** [QUE-2] 진입 번호는 Lua 안에서 INCR로 발급되므로 동시 진입에도 순번이 겹치거나 빠지지 않는다. */
+/**
+ * [QUE-2] 진입 번호는 Lua 안에서 INCR로 발급되므로 동시 진입에도 순번이 겹치거나 빠지지 않는다.
+ *
+ * <p>가상 스레드 1만 개가 연결 하나로 명령을 보내면 코어가 적은 환경에서는 대기만으로 운영 timeout(500ms)을 넘긴다.
+ * 이 테스트는 순번을 보는 것이라 명령 timeout만 늘린다.
+ */
+@TestPropertySource(properties = "spring.data.redis.timeout=" + QueueConcurrencyTests.COMMAND_TIMEOUT)
 class QueueConcurrencyTests extends QueueIntegrationTest {
+
+    static final String COMMAND_TIMEOUT = "10s";
 
     private static final Logger log = LoggerFactory.getLogger(QueueConcurrencyTests.class);
 
