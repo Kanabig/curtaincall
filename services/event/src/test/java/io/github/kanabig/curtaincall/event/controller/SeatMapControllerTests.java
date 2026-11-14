@@ -222,6 +222,32 @@ class SeatMapControllerTests extends EventIntegrationTest {
         assertThat(internal.getBody().get(0).get("price").isInt()).isTrue();
     }
 
+    /** reservation의 SeatMapEntry(seatId, grade, price)와 같은 모양. 모든 좌석이 이 세 필드를 빠짐없이 가져야 한다. */
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    record ReservationSeat(long seatId, String grade, int price) {}
+
+    @Autowired
+    com.fasterxml.jackson.databind.ObjectMapper mapper;
+
+    @Test
+    @DisplayName("내부 API 응답의 모든 좌석이 reservation이 읽는 형식(seatId 숫자, grade 문자열, price 정수)이다")
+    void internalSeatMapContract() {
+        JsonNode seats =
+                get("/internal/sessions/" + sessionId + "/seat-map", null).getBody();
+        com.fasterxml.jackson.databind.ObjectMapper strict = mapper.copy()
+                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS);
+
+        for (JsonNode seat : seats) {
+            assertThat(seat.get("seatId").isIntegralNumber()).isTrue();
+            assertThat(seat.get("grade").isTextual()).isTrue();
+            assertThat(seat.get("price").isInt()).isTrue();
+            ReservationSeat parsed = strict.convertValue(seat, ReservationSeat.class);
+            assertThat(parsed.grade()).isNotBlank();
+            assertThat(parsed.price()).isPositive();
+        }
+    }
+
     @Test
     @DisplayName("없는 회차는 404 SESSION_NOT_FOUND다")
     void unknownSession() {

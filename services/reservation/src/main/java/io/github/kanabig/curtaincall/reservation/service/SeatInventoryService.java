@@ -11,7 +11,10 @@ import io.github.kanabig.curtaincall.reservation.repository.SeatInventoryReposit
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,6 +63,59 @@ public class SeatInventoryService {
     /** 회차 수정 이벤트로 시작 시각을 맞춘다. */
     public void updateStartAt(long sessionId, Instant startAt) {
         repository.updateStartAt(sessionId, startAt);
+    }
+
+    /** 회차 수정 이벤트로 가격 반영을 요청한다. event 호출은 {@link #syncPrices()}가 한다. */
+    public void requestPriceSync(long sessionId, Instant occurredAt) {
+        repository.requestPriceSync(sessionId, occurredAt);
+    }
+
+    /**
+     * 가격 수정이 남은 회차의 재고 등급·가격을 event의 최신 배치로 맞춘다. 요청마다 최신 배치를 읽으므로 같은 요청을 다시 처리하거나 이벤트가 뒤집혀 와도 결과가 같다. 가격은 오픈 전에만
+     * 바뀌어 점유가 없으므로 AVAILABLE이 아닌 행은 건드리지 않고, 그런 행에 바꿀 값이 있으면 경고만 남긴다.
+     *
+     * @return 이번에 반영을 마친 회차 수
+     */
+    public int syncPrices() {
+        int done = 0;
+        for (SeatInventoryRepository.PriceSyncRequest request : repository.findDuePriceSync(properties.maxPerRun())) {
+            try {
+                syncPrices(request);
+                done++;
+            } catch (RuntimeException e) {
+                log.warn("재고 가격 반영에 실패했다. 다음 주기에 다시 시도한다: sessionId={}", request.sessionId(), e);
+            }
+        }
+        return done;
+    }
+
+    private void syncPrices(SeatInventoryRepository.PriceSyncRequest request) {
+        long sessionId = request.sessionId();
+        List<SeatMapEntry> seatMap = eventClient.fetchSeatMap(sessionId);
+        if (seatMap.isEmpty()) {
+            throw new IllegalStateException("좌석 배치가 비어 있다");
+        }
+        Map<Long, SeatInventoryRepository.StoredSeat> stored = new HashMap<>();
+        repository.findStoredSeats(sessionId).forEach(seat -> stored.put(seat.seatId(), seat));
+        List<NewSeat> changes = new ArrayList<>();
+        int lockedChanges = 0;
+        for (SeatMapEntry entry : seatMap) {
+            SeatInventoryRepository.StoredSeat current = stored.get(entry.seatId());
+            if (current == null || (current.grade().equals(entry.grade()) && current.price() == entry.price())) {
+                continue;
+            }
+            if ("AVAILABLE".equals(current.status())) {
+                changes.add(new NewSeat(entry.seatId(), entry.grade(), entry.price()));
+            } else {
+                lockedChanges++;
+            }
+        }
+        int updated = repository.updatePricesIfAvailable(sessionId, changes, properties.insertBatchSize());
+        if (lockedChanges > 0) {
+            log.warn("점유·판매된 좌석은 가격을 바꾸지 않았다: sessionId={} seats={}", sessionId, lockedChanges);
+        }
+        repository.markPriceSynced(sessionId, request.requestedAt());
+        log.info("회차 재고 가격을 맞췄다: sessionId={} updated={}", sessionId, updated);
     }
 
     /**
