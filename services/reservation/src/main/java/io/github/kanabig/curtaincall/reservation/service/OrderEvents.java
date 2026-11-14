@@ -3,6 +3,7 @@ package io.github.kanabig.curtaincall.reservation.service;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxWriter;
 import io.github.kanabig.curtaincall.reservation.config.OrderTopicsConfig;
 import io.github.kanabig.curtaincall.reservation.entity.Order;
+import io.github.kanabig.curtaincall.reservation.entity.Reservation;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -44,6 +45,17 @@ class OrderEvents {
         payload.put("seatIds", order.seatIds());
         payload.put("amount", order.amount());
         outbox.append(OrderTopicsConfig.ORDER_TOPIC, order.orderId(), "ReservationConfirmed", payload);
+    }
+
+    void reservationCancelled(Order order, Reservation reservation) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reservationId", reservation.reservationId());
+        payload.put("orderId", order.orderId());
+        payload.put("userId", reservation.userId());
+        payload.put("sessionId", reservation.sessionId());
+        payload.put("seatIds", reservation.seatIds());
+        payload.put("amount", reservation.amount());
+        outbox.append(OrderTopicsConfig.ORDER_TOPIC, order.orderId(), "ReservationCancelled", payload);
     }
 
     void orderRefunded(Order order) {
