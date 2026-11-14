@@ -3,7 +3,7 @@ package io.github.kanabig.curtaincall.queue.dto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * 대기 상태 응답. {@code WAITING}이면 순번 필드, {@code ADMITTED}면 {@code expiresAt}, {@code EXPIRED}면 상태만 채운다. 입장 토큰은 입장 처리와 함께
+ * 대기 상태 응답. {@code WAITING}이면 순번 필드, {@code ADMITTED}면 {@code expiresAt}, {@code EXPIRED}면 상태만 채운다. {@code ADMITTED}에는 입장 토큰이
  * 붙는다.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -20,8 +20,8 @@ public record QueueStatusResponse(
         return new QueueStatusResponse("WAITING", ahead + 1, ahead, etaSeconds, pollAfterMs, null, null);
     }
 
-    public static QueueStatusResponse admitted(String expiresAt) {
-        return new QueueStatusResponse("ADMITTED", null, null, null, null, null, expiresAt);
+    public static QueueStatusResponse admitted(String entryToken, String expiresAt) {
+        return new QueueStatusResponse("ADMITTED", null, null, null, null, entryToken, expiresAt);
     }
 
     public static QueueStatusResponse expired() {

@@ -32,5 +32,12 @@ management:
 curtaincall:
   topics:
     session: event.session
+    order: reservation.order
   queue:
     zone: Asia/Seoul
+    entry-ttl: 10m
+    stale-after: 60s
+    admit-stale-after: 15s
+    admit-drop-limit: 1000
+  jwt:
+    # 비밀값이라 기본값을 두지 않는다. 환경변수 CURTAINCALL_JWT_ENTRY_SECRET으로 넣는다(gateway와 같은 값)

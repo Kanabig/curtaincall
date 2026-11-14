@@ -38,7 +38,7 @@ class OrderServiceTests extends OrderIntegrationTest {
     void createOrder() {
         var hold = hold(USER, 1L, 2L);
 
-        OrderResponse order = orderService.createOrder(USER, key(), hold.holdId());
+        OrderResponse order = orderService.createOrder(USER, SESSION, key(), hold.holdId());
 
         assertThat(order.amount()).isEqualTo(220_000);
         assertThat(order.status().name()).isEqualTo("PENDING_PAYMENT");
@@ -51,11 +51,11 @@ class OrderServiceTests extends OrderIntegrationTest {
     void holdNotFound() {
         var other = hold(USER + 1, 3L);
 
-        assertThatThrownBy(() -> orderService.createOrder(USER, key(), "no-such-hold"))
+        assertThatThrownBy(() -> orderService.createOrder(USER, SESSION, key(), "no-such-hold"))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.HOLD_NOT_FOUND));
-        assertThatThrownBy(() -> orderService.createOrder(USER, key(), other.holdId()))
+        assertThatThrownBy(() -> orderService.createOrder(USER, SESSION, key(), other.holdId()))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.HOLD_NOT_FOUND));
@@ -66,15 +66,16 @@ class OrderServiceTests extends OrderIntegrationTest {
     void expiredHold() {
         var expiredAtCreate = hold(USER, 1L);
         setHoldExpiry(expiredAtCreate.holdId(), Instant.now().minusSeconds(5));
-        assertThatThrownBy(() -> orderService.createOrder(USER, key(), expiredAtCreate.holdId()))
+        assertThatThrownBy(() -> orderService.createOrder(USER, SESSION, key(), expiredAtCreate.holdId()))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.HOLD_EXPIRED));
 
         var hold = hold(USER, 2L);
-        String orderId = orderService.createOrder(USER, key(), hold.holdId()).orderId();
+        String orderId =
+                orderService.createOrder(USER, SESSION, key(), hold.holdId()).orderId();
         setHoldExpiry(hold.holdId(), Instant.now().minusSeconds(5));
-        assertThatThrownBy(() -> orderService.startPayment(USER, orderId, key(), "tok_approve"))
+        assertThatThrownBy(() -> orderService.startPayment(USER, SESSION, orderId, key(), "tok_approve"))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.HOLD_EXPIRED));
@@ -86,10 +87,11 @@ class OrderServiceTests extends OrderIntegrationTest {
     @DisplayName("점유 남은 시간이 30초 미만이면 결제를 시작하지 않는다(HOLD_EXPIRING)")
     void holdExpiring() {
         var hold = hold(USER, 1L);
-        String orderId = orderService.createOrder(USER, key(), hold.holdId()).orderId();
+        String orderId =
+                orderService.createOrder(USER, SESSION, key(), hold.holdId()).orderId();
         setHoldExpiry(hold.holdId(), Instant.now().plusSeconds(10));
 
-        assertThatThrownBy(() -> orderService.startPayment(USER, orderId, key(), "tok_approve"))
+        assertThatThrownBy(() -> orderService.startPayment(USER, SESSION, orderId, key(), "tok_approve"))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.HOLD_EXPIRING));
@@ -100,9 +102,10 @@ class OrderServiceTests extends OrderIntegrationTest {
     @DisplayName("결제 시작은 PAYMENT_REQUESTED로 바꾸고 ApprovePayment를 outbox에 남긴다")
     void startPayment() throws Exception {
         var hold = hold(USER, 1L, 2L);
-        String orderId = orderService.createOrder(USER, key(), hold.holdId()).orderId();
+        String orderId =
+                orderService.createOrder(USER, SESSION, key(), hold.holdId()).orderId();
 
-        var response = orderService.startPayment(USER, orderId, key(), "tok_approve");
+        var response = orderService.startPayment(USER, SESSION, orderId, key(), "tok_approve");
 
         assertThat(response.status().name()).isEqualTo("PAYMENT_REQUESTED");
         assertThat(status(orderId)).isEqualTo("PAYMENT_REQUESTED");
@@ -123,11 +126,11 @@ class OrderServiceTests extends OrderIntegrationTest {
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.ORDER_NOT_FOUND));
-        assertThatThrownBy(() -> orderService.startPayment(USER + 1, orderId, key(), "tok_approve"))
+        assertThatThrownBy(() -> orderService.startPayment(USER + 1, SESSION, orderId, key(), "tok_approve"))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.ORDER_NOT_FOUND));
-        assertThatThrownBy(() -> orderService.startPayment(USER, orderId, key(), "tok_approve"))
+        assertThatThrownBy(() -> orderService.startPayment(USER, SESSION, orderId, key(), "tok_approve"))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.ORDER_NOT_PAYABLE));
@@ -140,12 +143,12 @@ class OrderServiceTests extends OrderIntegrationTest {
         var hold = hold(USER, 1L);
         String key = key();
 
-        OrderResponse first = orderService.createOrder(USER, key, hold.holdId());
-        OrderResponse again = orderService.createOrder(USER, key, hold.holdId());
+        OrderResponse first = orderService.createOrder(USER, SESSION, key, hold.holdId());
+        OrderResponse again = orderService.createOrder(USER, SESSION, key, hold.holdId());
 
         assertThat(again).isEqualTo(first);
         assertThat(count("orders")).isEqualTo(1);
-        assertThatThrownBy(() -> orderService.createOrder(USER, key(), hold.holdId()))
+        assertThatThrownBy(() -> orderService.createOrder(USER, SESSION, key(), hold.holdId()))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ReservationErrorCode.ORDER_ALREADY_EXISTS));
@@ -155,11 +158,12 @@ class OrderServiceTests extends OrderIntegrationTest {
     @DisplayName("같은 Idempotency-Key로 결제를 시작해도 ApprovePayment는 한 번만 나간다")
     void payIdempotentByKey() {
         var hold = hold(USER, 1L);
-        String orderId = orderService.createOrder(USER, key(), hold.holdId()).orderId();
+        String orderId =
+                orderService.createOrder(USER, SESSION, key(), hold.holdId()).orderId();
         String key = key();
 
-        var first = orderService.startPayment(USER, orderId, key, "tok_approve");
-        var again = orderService.startPayment(USER, orderId, key, "tok_approve");
+        var first = orderService.startPayment(USER, SESSION, orderId, key, "tok_approve");
+        var again = orderService.startPayment(USER, SESSION, orderId, key, "tok_approve");
 
         assertThat(again).isEqualTo(first);
         assertThat(outboxTypes(orderId)).containsExactly("ApprovePayment");
@@ -172,7 +176,7 @@ class OrderServiceTests extends OrderIntegrationTest {
         String createKey = key();
         List<Callable<OrderResponse>> creates = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
-            creates.add(() -> orderService.createOrder(USER, createKey, hold.holdId()));
+            creates.add(() -> orderService.createOrder(USER, SESSION, createKey, hold.holdId()));
         }
         List<Object> created = runConcurrently(creates);
         assertThat(created).allSatisfy(r -> assertThat(r).isInstanceOf(OrderResponse.class));
@@ -183,7 +187,7 @@ class OrderServiceTests extends OrderIntegrationTest {
         String payKey = key();
         List<Callable<Object>> pays = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
-            pays.add(() -> orderService.startPayment(USER, orderId, payKey, "tok_approve"));
+            pays.add(() -> orderService.startPayment(USER, SESSION, orderId, payKey, "tok_approve"));
         }
         List<Object> paid = runConcurrently(pays);
 
@@ -198,7 +202,7 @@ class OrderServiceTests extends OrderIntegrationTest {
         var hold = hold(USER, 1L, 2L);
         List<Callable<Object>> creates = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
-            creates.add(() -> orderService.createOrder(USER, key(), hold.holdId()));
+            creates.add(() -> orderService.createOrder(USER, SESSION, key(), hold.holdId()));
         }
 
         List<Object> results = runConcurrently(creates);
@@ -216,10 +220,11 @@ class OrderServiceTests extends OrderIntegrationTest {
     @DisplayName("키가 다른 결제 시작이 동시에 와도 하나만 성공하고 나머지는 ORDER_NOT_PAYABLE이다")
     void concurrentDifferentKeys() throws Exception {
         var hold = hold(USER, 1L);
-        String orderId = orderService.createOrder(USER, key(), hold.holdId()).orderId();
+        String orderId =
+                orderService.createOrder(USER, SESSION, key(), hold.holdId()).orderId();
         List<Callable<Object>> pays = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
-            pays.add(() -> orderService.startPayment(USER, orderId, key(), "tok_approve"));
+            pays.add(() -> orderService.startPayment(USER, SESSION, orderId, key(), "tok_approve"));
         }
 
         List<Object> results = runConcurrently(pays);
@@ -261,7 +266,8 @@ class OrderServiceTests extends OrderIntegrationTest {
     @DisplayName("결제를 시작하지 않은 주문은 점유가 만료되면 EXPIRED로 정리되고, 결제 중인 주문은 그대로다")
     void expireOverdue() {
         var held = hold(USER, 1L);
-        String pending = orderService.createOrder(USER, key(), held.holdId()).orderId();
+        String pending =
+                orderService.createOrder(USER, SESSION, key(), held.holdId()).orderId();
         String paying = orderInPayment(USER + 1, 2L);
         jdbc.update(
                 "UPDATE orders SET hold_expires_at = ? WHERE order_id IN (?, ?)",

@@ -21,7 +21,12 @@ import org.springframework.context.annotation.Import;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
 
-@SpringBootTest(properties = "spring.kafka.listener.auto-startup=true")
+@SpringBootTest(
+        properties = {
+            "spring.kafka.listener.auto-startup=true",
+            "curtaincall.queue.scheduling.enabled=false",
+            "curtaincall.jwt.entry-secret=" + QueueIntegrationTest.ENTRY_SECRET
+        })
 @Import({TestContainersConfig.class, SessionEventListenerTests.Topics.class})
 class SessionEventListenerTests extends QueueIntegrationTest {
 

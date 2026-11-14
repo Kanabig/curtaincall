@@ -50,18 +50,23 @@ public class OrderService {
         this.clock = clock;
     }
 
-    public OrderResponse createOrder(long userId, String idempotencyKey, String holdId) {
+    public OrderResponse createOrder(long userId, Long entrySessionId, String idempotencyKey, String holdId) {
         return idempotency.execute(
-                userId, "order:create", idempotencyKey, OrderResponse.class, () -> create(userId, holdId));
+                userId,
+                "order:create",
+                idempotencyKey,
+                OrderResponse.class,
+                () -> create(userId, entrySessionId, holdId));
     }
 
-    public PaymentStartedResponse startPayment(long userId, String orderId, String idempotencyKey, String cardToken) {
+    public PaymentStartedResponse startPayment(
+            long userId, Long entrySessionId, String orderId, String idempotencyKey, String cardToken) {
         return idempotency.execute(
                 userId,
                 "order:pay:" + orderId,
                 idempotencyKey,
                 PaymentStartedResponse.class,
-                () -> beginPayment(userId, orderId, cardToken));
+                () -> beginPayment(userId, entrySessionId, orderId, cardToken));
     }
 
     @Transactional(readOnly = true)
@@ -79,7 +84,7 @@ public class OrderService {
         return orders.expirePending(clock.instant());
     }
 
-    private OrderResponse create(long userId, String holdId) {
+    private OrderResponse create(long userId, Long entrySessionId, String holdId) {
         List<HeldSeat> held = seats.lockByHold(holdId);
         // 좌석 락을 잡은 뒤에 확인해야 앞선 트랜잭션이 커밋한 주문이 보인다(잠금 읽기 전에 읽으면 RR 읽기 뷰가 먼저 잡힌다)
         if (orders.existsByHold(holdId)) {
@@ -91,6 +96,7 @@ public class OrderService {
                                 || !Long.valueOf(userId).equals(s.holderId()))) {
             throw new BusinessException(ReservationErrorCode.HOLD_NOT_FOUND);
         }
+        EntrySession.require(entrySessionId, held.get(0).sessionId());
         Instant now = clock.instant();
         Instant expiresAt = earliestExpiry(held);
         if (!expiresAt.isAfter(now)) {
@@ -116,11 +122,12 @@ public class OrderService {
         return OrderResponse.from(order);
     }
 
-    private PaymentStartedResponse beginPayment(long userId, String orderId, String cardToken) {
+    private PaymentStartedResponse beginPayment(long userId, Long entrySessionId, String orderId, String cardToken) {
         Order order = orders.lock(orderId).orElseThrow(OrderService::notFound);
         if (order.userId() != userId) {
             throw notFound();
         }
+        EntrySession.require(entrySessionId, order.sessionId());
         if (order.status() != OrderStatus.PENDING_PAYMENT) {
             throw new BusinessException(ReservationErrorCode.ORDER_NOT_PAYABLE);
         }

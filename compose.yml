@@ -105,6 +105,8 @@ services:
       <<: *service-env
       # user가 서명한 access token을 같은 키로 검증한다
       CURTAINCALL_JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      # queue가 서명한 입장 토큰을 같은 키로 검증한다
+      CURTAINCALL_JWT_ENTRY_SECRET: ${JWT_ENTRY_SECRET}
     healthcheck:
       <<: *java-health
       # actuator는 외부 포트(8080)와 분리된 관리 포트에서만 연다
@@ -160,6 +162,10 @@ services:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: queue } }
     image: curtaincall/queue:local
+    environment:
+      <<: *service-env
+      # 입장 토큰 서명 키. gateway가 같은 값으로 검증한다
+      CURTAINCALL_JWT_ENTRY_SECRET: ${JWT_ENTRY_SECRET}
     depends_on:
       redis: { condition: service_healthy }
       kafka: { condition: service_healthy }

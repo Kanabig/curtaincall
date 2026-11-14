@@ -2,6 +2,7 @@ package io.github.kanabig.curtaincall.queue.controller;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +51,19 @@ class QueueControllerTests extends QueueIntegrationTest {
 
         org.assertj.core.api.Assertions.assertThat(redis.opsForZSet().zCard("q:" + sessionId + ":waiting"))
                 .isZero();
+    }
+
+    @Test
+    @DisplayName("[QUE-6] 대기 포기는 204로 대기열에서 빼고, 다시 해도 204다")
+    void leave() throws Exception {
+        putConf(-1000, 50);
+        mvc.perform(post(entries()).header("X-User-Id", 1)).andExpect(status().isCreated());
+
+        mvc.perform(delete(entries() + "/me").header("X-User-Id", 1)).andExpect(status().isNoContent());
+        mvc.perform(delete(entries() + "/me").header("X-User-Id", 1)).andExpect(status().isNoContent());
+        mvc.perform(get(entries() + "/me").header("X-User-Id", 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXPIRED"));
     }
 
     @Test

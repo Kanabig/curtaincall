@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
-/** [QUE-1~3] 대기열 진입과 순번 조회. Redis가 응답하지 않으면 503으로 돌려 진입만 멈춘다(NFR-11). */
+/** [QUE-1~3, QUE-5] 대기열 진입과 순번 조회, 입장하면 입장 토큰을 붙인다. Redis가 응답하지 않으면 503으로 돌려 진입만 멈춘다(NFR-11). */
 @Service
 public class QueueService {
 
@@ -25,30 +25,42 @@ public class QueueService {
     private final PollPolicy pollPolicy =
             new PollPolicy(() -> ThreadLocalRandom.current().nextDouble());
     private final ZoneId zone;
+    private final EntryTokenIssuer tokenIssuer;
 
-    public QueueService(QueueRepository repository, QueueProperties properties) {
+    public QueueService(QueueRepository repository, QueueProperties properties, EntryTokenIssuer tokenIssuer) {
         this.repository = repository;
+        this.tokenIssuer = tokenIssuer;
         this.zone = properties.zone();
     }
 
     /** 이미 대기 중이면 기존 순번을 그대로 돌려준다. {@link Entered#created()}는 이번 호출로 새로 들어왔는지다. */
     public Entered enter(long sessionId, long userId) {
         EntryResult result = call(() -> repository.enter(sessionId, userId));
-        return new Entered(toResponse(result), result.created());
+        return new Entered(toResponse(result, sessionId, userId), result.created());
     }
 
     public QueueStatusResponse status(long sessionId, long userId) {
-        return toResponse(call(() -> repository.status(sessionId, userId)));
+        return toResponse(call(() -> repository.status(sessionId, userId)), sessionId, userId);
     }
 
-    private QueueStatusResponse toResponse(EntryResult r) {
+    /** 대기 포기. 대기 중이 아니거나 이미 입장했어도 오류 없이 끝난다. */
+    public void leave(long sessionId, long userId) {
+        call(() -> {
+            repository.leave(sessionId, userId);
+            return null;
+        });
+    }
+
+    private QueueStatusResponse toResponse(EntryResult r, long sessionId, long userId) {
         return switch (r.kind()) {
             case WAITING ->
                 QueueStatusResponse.waiting(
                         r.rank(),
                         pollPolicy.etaSeconds(r.rank(), r.admissionPerSecond()),
                         pollPolicy.pollAfterMs(r.rank(), r.admissionPerSecond()));
-            case ADMITTED -> QueueStatusResponse.admitted(format(r.epochMs()));
+            case ADMITTED ->
+                QueueStatusResponse.admitted(
+                        tokenIssuer.issue(userId, sessionId, Instant.ofEpochMilli(r.epochMs())), format(r.epochMs()));
             case NOT_IN_QUEUE -> QueueStatusResponse.expired();
             case SESSION_NOT_FOUND -> throw new BusinessException(QueueErrorCode.SESSION_NOT_FOUND);
             case NOT_ON_SALE -> throw new BusinessException(QueueErrorCode.SESSION_NOT_ON_SALE);

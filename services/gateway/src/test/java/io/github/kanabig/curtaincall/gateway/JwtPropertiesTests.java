@@ -12,9 +12,19 @@ class JwtPropertiesTests {
     @Test
     @DisplayName("키가 32바이트 미만이거나 없으면 기동에 실패한다")
     void rejectsShortSecret() {
-        assertThatThrownBy(() -> new JwtProperties("short")).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new JwtProperties(null)).isInstanceOf(IllegalStateException.class);
-        assertThatCode(() -> new JwtProperties("0123456789abcdef0123456789abcdef"))
-                .doesNotThrowAnyException();
+        String ok = "0123456789abcdef0123456789abcdef";
+        String other = "fedcba9876543210fedcba9876543210";
+        assertThatThrownBy(() -> new JwtProperties("short", other)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new JwtProperties(null, other)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new JwtProperties(ok, "short")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new JwtProperties(ok, null)).isInstanceOf(IllegalStateException.class);
+        assertThatCode(() -> new JwtProperties(ok, other)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("두 키가 같으면 기동에 실패한다")
+    void rejectsSameSecret() {
+        String ok = "0123456789abcdef0123456789abcdef";
+        assertThatThrownBy(() -> new JwtProperties(ok, ok)).isInstanceOf(IllegalStateException.class);
     }
 }
