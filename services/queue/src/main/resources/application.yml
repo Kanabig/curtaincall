@@ -1,6 +1,18 @@
 spring:
   application:
     name: queue
+  data:
+    redis:
+      # 장애 때 요청이 오래 매달리지 않게 한다(NFR-5 p95 200ms)
+      timeout: 500ms
+      connect-timeout: 500ms
+  kafka:
+    consumer:
+      group-id: queue
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
 server:
   port: 8083
 logging:
@@ -17,3 +29,8 @@ management:
     distribution:
       percentiles-histogram:
         "[http.server.requests]": true
+curtaincall:
+  topics:
+    session: event.session
+  queue:
+    zone: Asia/Seoul

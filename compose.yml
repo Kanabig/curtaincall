@@ -158,6 +158,7 @@ services:
     image: curtaincall/queue:local
     depends_on:
       redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
     healthcheck:
       <<: *java-health
       test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health"]
