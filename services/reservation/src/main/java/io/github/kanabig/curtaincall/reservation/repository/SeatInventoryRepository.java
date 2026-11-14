@@ -1,5 +1,6 @@
 package io.github.kanabig.curtaincall.reservation.repository;
 
+import io.github.kanabig.curtaincall.reservation.dto.ReservationDetailResponse;
 import io.github.kanabig.curtaincall.reservation.entity.NewSeat;
 import io.github.kanabig.curtaincall.reservation.entity.PendingStock;
 import java.sql.Timestamp;
@@ -39,6 +40,23 @@ public class SeatInventoryRepository {
     /** 회차 시작 시각을 바꾼다. 아직 등록되지 않은 회차면 아무것도 하지 않는다. */
     public void updateStartAt(long sessionId, Instant startAt) {
         jdbc.update("UPDATE session_stock SET start_at = ? WHERE session_id = ?", Timestamp.from(startAt), sessionId);
+    }
+
+    /** 좌석별 등급·가격을 seat_id 순으로 읽는다. */
+    public List<ReservationDetailResponse.SeatLine> findSeatLines(long sessionId, List<Long> seatIds) {
+        if (seatIds.isEmpty()) {
+            return List.of();
+        }
+        List<Object> args = new ArrayList<>();
+        args.add(sessionId);
+        args.addAll(seatIds);
+        String marks = String.join(",", java.util.Collections.nCopies(seatIds.size(), "?"));
+        return jdbc.query(
+                "SELECT seat_id, grade, price FROM seat_inventory WHERE session_id = ? AND seat_id IN (" + marks
+                        + ") ORDER BY seat_id",
+                (rs, row) -> new ReservationDetailResponse.SeatLine(
+                        rs.getLong("seat_id"), rs.getString("grade"), rs.getInt("price")),
+                args.toArray());
     }
 
     public Optional<Instant> findStartAt(long sessionId) {
