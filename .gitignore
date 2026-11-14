@@ -39,4 +39,4 @@ out/
 ### Local ###
 CLAUDE.md
 .env
-perf/seat-hold/results/
+perf/seat-hold/results*/
