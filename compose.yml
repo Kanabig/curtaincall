@@ -44,8 +44,12 @@ services:
 
   redis:
     image: redis:8.0.6
+    # 재시작 때 대기열 순번과 회차 설정이 사라지지 않게 AOF를 켠다
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -158,6 +162,7 @@ services:
     image: curtaincall/queue:local
     depends_on:
       redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
     healthcheck:
       <<: *java-health
       test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health"]
@@ -286,3 +291,4 @@ services:
 volumes:
   mysql-data:
   kafka-data:
+  redis-data:
