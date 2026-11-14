@@ -1,10 +1,15 @@
 package io.github.kanabig.curtaincall.reservation.service;
 
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
+import io.github.kanabig.curtaincall.common.web.error.CommonErrorCode;
 import io.github.kanabig.curtaincall.reservation.dto.CancelResponse;
+import io.github.kanabig.curtaincall.reservation.dto.ReservationDetailResponse;
+import io.github.kanabig.curtaincall.reservation.dto.ReservationPage;
+import io.github.kanabig.curtaincall.reservation.dto.ReservationResponse;
 import io.github.kanabig.curtaincall.reservation.entity.Order;
 import io.github.kanabig.curtaincall.reservation.entity.Reservation;
 import io.github.kanabig.curtaincall.reservation.entity.ReservationStatus;
+import io.github.kanabig.curtaincall.reservation.entity.ReservationView;
 import io.github.kanabig.curtaincall.reservation.error.ReservationErrorCode;
 import io.github.kanabig.curtaincall.reservation.repository.OrderRepository;
 import io.github.kanabig.curtaincall.reservation.repository.ReservationRepository;
@@ -12,9 +17,11 @@ import io.github.kanabig.curtaincall.reservation.repository.SeatInventoryReposit
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * [RSV-9] 예매 취소. 예매를 CANCEL_REQUESTED로 두고 환불을 요청할 뿐 좌석은 풀지 않는다. 좌석 해제와 CANCELLED는 PaymentCancelled를 받는
@@ -24,6 +31,9 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ReservationService {
+
+    public static final int DEFAULT_PAGE_SIZE = 20;
+    public static final int MAX_PAGE_SIZE = 50;
 
     static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
@@ -58,6 +68,25 @@ public class ReservationService {
                 idempotencyKey,
                 CancelResponse.class,
                 () -> requestCancel(userId, reservationId));
+    }
+
+    /** 내 예매 목록. 예매 일시 내림차순이고 status가 null이면 취소된 예매까지 모두 담는다. */
+    @Transactional(readOnly = true)
+    public ReservationPage list(long userId, ReservationStatus status, int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST, "page는 0 이상, size는 1~" + MAX_PAGE_SIZE);
+        }
+        long total = reservations.count(userId, status);
+        List<ReservationResponse> items = reservations.findPage(userId, status, size, (long) page * size).stream()
+                .map(ReservationResponse::from)
+                .toList();
+        return new ReservationPage(items, page, size, total, (int) ((total + size - 1) / size));
+    }
+
+    @Transactional(readOnly = true)
+    public ReservationDetailResponse get(long userId, String reservationId) {
+        ReservationView view = reservations.findView(userId, reservationId).orElseThrow(ReservationService::notFound);
+        return ReservationDetailResponse.from(view, inventory.findSeatLines(view.sessionId(), view.seatIds()));
     }
 
     private CancelResponse requestCancel(long userId, String reservationId) {
