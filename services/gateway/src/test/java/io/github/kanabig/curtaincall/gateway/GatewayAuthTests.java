@@ -403,6 +403,29 @@ class GatewayAuthTests {
     }
 
     @Test
+    @DisplayName("Authorization 헤더는 검증 뒤 서비스로 넘기지 않는다(공개 경로 포함)")
+    void authorizationIsNotForwarded() {
+        String token = token("7", "USER", Instant.now(), Instant.now().plusSeconds(600), SECRET);
+        client.get()
+                .uri("/api/v1/users/me")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus()
+                .isOk();
+        assertThat(RECEIVED.get("/api/v1/users/me"))
+                .containsEntry("x-user-id", "7")
+                .doesNotContainKey("authorization");
+
+        client.get()
+                .uri("/api/v1/performances")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus()
+                .isOk();
+        assertThat(RECEIVED.get("/api/v1/performances")).doesNotContainKey("authorization");
+    }
+
+    @Test
     @DisplayName("요청 ID가 gateway 로그의 MDC에 남는다")
     void requestIdInLogs(CapturedOutput output) {
         client.get()
