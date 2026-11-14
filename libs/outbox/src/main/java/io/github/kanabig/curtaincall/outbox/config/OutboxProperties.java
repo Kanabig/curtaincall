@@ -26,5 +26,6 @@ public record OutboxProperties(
             @DefaultValue("1s") Duration backoffInitial,
             @DefaultValue("2.0") double backoffMultiplier,
             @DefaultValue("3") int maxRetries,
-            @DefaultValue("7d") Duration processedEventRetention) {}
+            @DefaultValue("7d") Duration processedEventRetention,
+            @DefaultValue(".DLT") String dltSuffix) {}
 }

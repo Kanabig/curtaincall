@@ -1,12 +1,27 @@
 spring:
   application:
     name: notification
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      # SMTP가 멈춰도 소비 스레드가 붙잡히지 않게 모든 단계에 timeout을 둔다
+      mail.smtp.connectiontimeout: 2000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
 server:
   port: 8086
 logging:
   pattern:
     level: "%5p [${spring.application.name},%X{requestId:-}]"
 management:
+  health:
+    mail:
+      # SMTP 장애가 서비스 헬스를 내리지 않는다(알림 실패는 예매에 영향이 없고, 재시도·DLT가 맡는다)
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -17,3 +32,15 @@ management:
     distribution:
       percentiles-histogram:
         "[http.server.requests]": true
+curtaincall:
+  outbox:
+    consumer:
+      enabled: true
+      # reservation.order는 queue도 읽는다. 재투입 때 소비자를 구분하도록 DLT를 나눈다
+      dlt-suffix: .notification.DLT
+  user:
+    base-url: http://localhost:8081
+    connect-timeout: 1s
+    read-timeout: 3s
+  notification:
+    from: no-reply@curtaincall.local
