@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -40,6 +41,8 @@ import org.springframework.test.context.DynamicPropertySource;
             "curtaincall.event.read-timeout=1s"
         })
 @Import({TestContainersConfig.class, SeatInventoryRecoveryTests.Topics.class})
+// 스케줄러가 켜진 컨텍스트를 캐시에 남기면 다른 테스트의 PENDING 행을 가져간다
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class SeatInventoryRecoveryTests {
 
     private static final AtomicBoolean EVENT_UP = new AtomicBoolean();
