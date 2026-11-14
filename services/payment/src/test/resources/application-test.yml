@@ -1,0 +1,21 @@
+# 컨테이너와 가짜 PG는 테스트 JVM에서 공유한다. 컨텍스트가 여러 개여도 서로의 메시지를 가져가지 않게 리스너와 릴레이는 테스트가 직접 돌린다
+payment:
+  command-listener:
+    auto-start: false
+  pg:
+    connect-timeout: 500ms
+    # 운영 값(5s)의 1/10. 지연 주입은 이 값의 6배 이상으로 둬서 같은 비율을 유지한다
+    read-timeout: 500ms
+  inquiry:
+    initial-delay: 100ms
+    max-interval: 300ms
+    max-duration: 30s
+    poll-interval: 50ms
+    lease: 5s
+    requested-stale-after: 5s
+curtaincall:
+  outbox:
+    relay:
+      auto-start: false
+    consumer:
+      backoff-initial: 50ms

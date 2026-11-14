@@ -39,6 +39,12 @@ public final class MetricNames {
     /** 결제 결과 중 주의가 필요한 것의 발생 수. Counter. 태그 status = UNKNOWN, CANCEL_FAILED. */
     public static final String PAYMENT_ATTENTION = "payment.attention";
 
+    /** 결과를 모른 채 남아 있는 결제 수(현재 UNKNOWN 상태인 건). Gauge. payment가 등록한다. */
+    public static final String PAYMENT_UNKNOWN = "payment.unknown";
+
+    /** Bulkhead가 거절한 PG 호출 수. Counter. payment가 등록한다. */
+    public static final String PAYMENT_PG_BULKHEAD_REJECTED = "payment.pg.bulkhead.rejected";
+
     public static final String TAG_RESULT = "result";
     public static final String TAG_SCHEDULE = "schedule";
     public static final String TAG_STATE = "state";

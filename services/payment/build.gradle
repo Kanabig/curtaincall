@@ -2,6 +2,17 @@ plugins {
     id 'curtaincall.service-conventions'
 }
 
+// Resilience4j는 Spring Cloud BOM(2025.0.x)이 2.2.0으로 고정하므로 BOM을 가져오지 않고 core 모듈만 직접 지정한다
+def resilience4jVersion = '2.4.0'
+
 dependencies {
     implementation project(':libs:common-web')
+    implementation project(':libs:outbox')
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4jVersion}"
+    implementation "io.github.resilience4j:resilience4j-bulkhead:${resilience4jVersion}"
+    implementation "io.github.resilience4j:resilience4j-micrometer:${resilience4jVersion}"
+    runtimeOnly 'com.mysql:mysql-connector-j'
 }

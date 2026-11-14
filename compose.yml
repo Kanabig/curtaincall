@@ -188,6 +188,7 @@ services:
       SPRING_FLYWAY_PASSWORD: ${PAYMENT_FLYWAY_PASSWORD}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      PAYMENT_PG_BASE_URL: http://mock-pg:8090
     depends_on:
       mysql: { condition: service_healthy }
       kafka: { condition: service_healthy }
