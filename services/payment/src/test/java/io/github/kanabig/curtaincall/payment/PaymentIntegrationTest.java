@@ -79,6 +79,19 @@ abstract class PaymentIntegrationTest {
                         Map.of("orderId", orderId, "userId", "7", "amount", 120000, "cardToken", cardToken)));
     }
 
+    /** reservation이 보내는 CancelPayment 봉투. */
+    EventEnvelope cancelCommand(String orderId, String reason) {
+        String paymentId =
+                jdbc.queryForObject("SELECT payment_id FROM payment WHERE order_id = ?", String.class, orderId);
+        return new EventEnvelope(
+                UUID.randomUUID().toString(),
+                "CancelPayment",
+                "2026-11-14T12:00:00.000+09:00",
+                orderId,
+                objectMapper.valueToTree(
+                        Map.of("orderId", orderId, "paymentId", paymentId, "amount", 120000, "reason", reason)));
+    }
+
     /** 컨슈머가 하는 일에서 Kafka만 뺀 것: 한 트랜잭션으로 명령을 처리한다. */
     void deliver(EventEnvelope envelope) {
         tx.executeWithoutResult(status -> commandService.handle(envelope));

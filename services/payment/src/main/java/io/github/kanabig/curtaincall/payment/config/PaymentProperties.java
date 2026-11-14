@@ -7,7 +7,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /** {@code payment.*} 설정. 기본값은 ADR-0008의 PG 회복력 표다. */
 @ConfigurationProperties("payment")
 public record PaymentProperties(
-        @DefaultValue Pg pg, @DefaultValue Inquiry inquiry) {
+        @DefaultValue Pg pg,
+        @DefaultValue Inquiry inquiry,
+        @DefaultValue Cancel cancel) {
 
     public record Pg(
             @DefaultValue("http://localhost:8090") String baseUrl,
@@ -39,6 +41,25 @@ public record PaymentProperties(
 
         public Duration delayAfter(int attempts) {
             long factor = 1L << Math.min(attempts, 20);
+            Duration delay = initialDelay.multipliedBy(factor);
+            return delay.compareTo(maxInterval) > 0 ? maxInterval : delay;
+        }
+    }
+
+    /**
+     * PG 취소(환불) 재시도. n번째 재시도 간격은 {@code initialDelay * 2^n}이고 maxInterval을 넘지 않는다. maxAttempts번 시도해도 취소하지 못하면 CANCEL_FAILED로 두고
+     * 수동 처리한다. lease는 처리 중인 건을 다른 인스턴스나 스케줄러가 다시 집지 않게 하는 시간이다.
+     */
+    public record Cancel(
+            @DefaultValue("1s") Duration initialDelay,
+            @DefaultValue("30s") Duration maxInterval,
+            @DefaultValue("8") int maxAttempts,
+            @DefaultValue("1s") Duration pollInterval,
+            @DefaultValue("50") int batchSize,
+            @DefaultValue("30s") Duration lease) {
+
+        public Duration delayAfter(int attempts) {
+            long factor = 1L << Math.min(Math.max(attempts - 1, 0), 20);
             Duration delay = initialDelay.multipliedBy(factor);
             return delay.compareTo(maxInterval) > 0 ? maxInterval : delay;
         }

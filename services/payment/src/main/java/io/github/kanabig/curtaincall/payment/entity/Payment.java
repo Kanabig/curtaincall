@@ -62,6 +62,21 @@ public class Payment {
     @Column(name = "inquiry_error_seen", nullable = false)
     private boolean inquiryErrorSeen;
 
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "cancel_reason")
+    private CancelReason cancelReason;
+
+    @Column(name = "cancel_attempts", nullable = false)
+    private int cancelAttempts;
+
+    /** CANCELLING일 때 다음 PG 취소 시도 시각. 처리 중에는 임대 기간만큼 뒤로 밀려 있다. */
+    @Column(name = "next_cancel_at")
+    private Instant nextCancelAt;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -104,6 +119,66 @@ public class Payment {
         this.nextInquiryAt = null;
         this.updatedAt = now;
         return true;
+    }
+
+    /**
+     * 환불을 시작한다(PAY-5). 승인된 결제와 수동 처리 대상(CANCEL_FAILED)에서만 시작할 수 있다. 시도 횟수를 0으로 되돌리고, 다음 시도 시각은 임대 기간 뒤로 둔다. 바로 시도하는
+     * 호출이 따로 있고, 그 호출이 사라져도 임대가 끝나면 스케줄러가 이어받는다.
+     */
+    public boolean startCancel(CancelReason reason, Instant now, Duration lease) {
+        if (status != PaymentStatus.APPROVED && status != PaymentStatus.CANCEL_FAILED) {
+            return false;
+        }
+        this.status = PaymentStatus.CANCELLING;
+        this.cancelReason = reason;
+        this.cancelAttempts = 0;
+        this.nextCancelAt = now.plus(lease);
+        this.updatedAt = now;
+        return true;
+    }
+
+    /** 다음 시도 예약이 사라진 CANCELLING을 다시 시작한다. 시도 횟수는 이어 간다. */
+    public boolean restartCancel(Instant now, Duration lease) {
+        if (status != PaymentStatus.CANCELLING || nextCancelAt != null) {
+            return false;
+        }
+        this.nextCancelAt = now.plus(lease);
+        this.updatedAt = now;
+        return true;
+    }
+
+    public boolean cancelled(Instant now) {
+        if (status != PaymentStatus.CANCELLING) {
+            return false;
+        }
+        this.status = PaymentStatus.CANCELLED;
+        this.cancelledAt = now;
+        this.nextCancelAt = null;
+        this.updatedAt = now;
+        return true;
+    }
+
+    /** 취소 대상으로 뽑은 뒤 다른 인스턴스가 같은 건을 집지 않도록 다음 시도 시각을 임대 기간만큼 미룬다. */
+    public void leaseCancel(Instant until) {
+        this.nextCancelAt = until;
+    }
+
+    /**
+     * 취소를 확인하지 못했다. 시도 횟수를 올리고, 한도에 닿으면 CANCEL_FAILED로 두고 true를 돌려준다. 아니면 다음 시도를 예약한다.
+     */
+    public boolean cancelMissed(Instant now, Instant nextAt, int maxAttempts) {
+        if (status != PaymentStatus.CANCELLING) {
+            return false;
+        }
+        this.cancelAttempts++;
+        this.updatedAt = now;
+        if (cancelAttempts >= maxAttempts) {
+            this.status = PaymentStatus.CANCEL_FAILED;
+            this.nextCancelAt = null;
+            return true;
+        }
+        this.nextCancelAt = nextAt;
+        return false;
     }
 
     /** 승인 호출의 결과를 모를 때. REQUESTED에서만 UNKNOWN이 되고 거래 조회를 예약한다. */
@@ -194,6 +269,18 @@ public class Payment {
 
     public FailureReason getFailureReason() {
         return failureReason;
+    }
+
+    public CancelReason getCancelReason() {
+        return cancelReason;
+    }
+
+    public int getCancelAttempts() {
+        return cancelAttempts;
+    }
+
+    public Instant getNextCancelAt() {
+        return nextCancelAt;
     }
 
     public Instant getApprovedAt() {

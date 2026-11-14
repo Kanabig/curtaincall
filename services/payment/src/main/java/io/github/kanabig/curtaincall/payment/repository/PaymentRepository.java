@@ -39,5 +39,15 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
                     """, nativeQuery = true)
     List<Payment> claimStaleRequests(@Param("before") Instant before, @Param("limit") int limit);
 
+    /** 취소 시각이 된 CANCELLING. 다른 인스턴스가 잡은 행은 건너뛴다(SKIP LOCKED). */
+    @Query(value = """
+                    SELECT * FROM payment
+                    WHERE status = 'CANCELLING' AND next_cancel_at IS NOT NULL AND next_cancel_at <= :now
+                    ORDER BY next_cancel_at
+                    LIMIT :limit
+                    FOR UPDATE SKIP LOCKED
+                    """, nativeQuery = true)
+    List<Payment> claimDueCancels(@Param("now") Instant now, @Param("limit") int limit);
+
     long countByStatus(PaymentStatus status);
 }
