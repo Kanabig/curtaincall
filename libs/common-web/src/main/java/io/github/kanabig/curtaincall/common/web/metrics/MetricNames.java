@@ -18,11 +18,20 @@ public final class MetricNames {
     /** 입장 토큰을 가진 활성 사용자 수. Gauge. 태그 schedule(회차). */
     public static final String QUEUE_ACTIVE_USERS = "queue.active.users";
 
-    /** 아직 발행하지 못한 Outbox 행 수. Gauge. */
-    public static final String OUTBOX_PENDING = "outbox.pending";
+    /** 아직 발행하지 못한 Outbox 행 수. Gauge. outbox 모듈이 등록한다. */
+    public static final String OUTBOX_UNPUBLISHED = "outbox.unpublished";
 
-    /** DLT로 보낸 메시지 수. Counter. 태그 topic(원래 토픽). */
-    public static final String MESSAGING_DLT = "messaging.dlt";
+    /** 릴레이가 발행한 건수. Counter. outbox 모듈이 등록한다. */
+    public static final String OUTBOX_RELAY_PUBLISHED = "outbox.relay.published";
+
+    /** 릴레이가 발행에 실패한 건수. Counter. outbox 모듈이 등록한다. */
+    public static final String OUTBOX_RELAY_FAILED = "outbox.relay.failed";
+
+    /** 컨슈머가 멱등 처리로 건너뛴 중복 메시지 수. Counter. outbox 모듈이 등록한다. */
+    public static final String OUTBOX_CONSUMER_DUPLICATES = "outbox.consumer.duplicates";
+
+    /** DLT로 보낸 메시지 수. Counter(태그 없음). outbox 모듈이 등록한다. */
+    public static final String OUTBOX_CONSUMER_DLT = "outbox.consumer.dlt";
 
     /** 상태별 주문 수. Gauge. 태그 state(주문 상태 = Saga 상태). */
     public static final String ORDER_COUNT = "order.count";
@@ -32,7 +41,6 @@ public final class MetricNames {
 
     public static final String TAG_RESULT = "result";
     public static final String TAG_SCHEDULE = "schedule";
-    public static final String TAG_TOPIC = "topic";
     public static final String TAG_STATE = "state";
     public static final String TAG_STATUS = "status";
 
