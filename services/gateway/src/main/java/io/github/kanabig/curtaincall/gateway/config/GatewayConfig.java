@@ -4,7 +4,9 @@ import io.github.kanabig.curtaincall.gateway.filter.RequestIdFilter;
 import io.micrometer.context.ContextRegistry;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.MDC;
@@ -16,6 +18,8 @@ import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
@@ -43,8 +47,10 @@ public class GatewayConfig {
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
         // 서비스가 같은 호스트의 컨테이너라 시계 오차를 허용하지 않는다(기본값은 60초)
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                List.of(new JwtTimestampValidator(Duration.ZERO), this::hasUserIdAndRole)));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(List.of(
+                new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull),
+                new JwtTimestampValidator(Duration.ZERO),
+                this::hasUserIdAndRole)));
         return decoder;
     }
 

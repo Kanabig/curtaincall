@@ -39,6 +39,7 @@ public class AuthFilter implements GlobalFilter, Ordered {
     static final String USER_ID = "X-User-Id";
     static final String USER_ROLE = "X-User-Role";
     static final String ENTRY_SESSION_ID = "X-Entry-Session-Id";
+    private static final String USER_HEADER_PREFIX = "X-User-";
     private static final String BEARER = "Bearer ";
     private static final Logger log = LoggerFactory.getLogger(AuthFilter.class);
 
@@ -52,9 +53,9 @@ public class AuthFilter implements GlobalFilter, Ordered {
             new PublicRoute(HttpMethod.POST, "/api/v1/auth/refresh"),
             new PublicRoute(HttpMethod.POST, "/api/v1/auth/logout"),
             new PublicRoute(HttpMethod.GET, "/api/v1/performances"),
-            new PublicRoute(HttpMethod.GET, "/api/v1/performances/{id}"),
-            new PublicRoute(HttpMethod.GET, "/api/v1/sessions/{id}"),
-            new PublicRoute(HttpMethod.GET, "/api/v1/sessions/{id}/seat-map"),
+            new PublicRoute(HttpMethod.GET, "/api/v1/performances/{id:[0-9]+}"),
+            new PublicRoute(HttpMethod.GET, "/api/v1/sessions/{id:[0-9]+}"),
+            new PublicRoute(HttpMethod.GET, "/api/v1/sessions/{id:[0-9]+}/seat-map"),
             new PublicRoute(HttpMethod.POST, "/api/v1/search/assist"));
 
     private final ReactiveJwtDecoder decoder;
@@ -69,17 +70,18 @@ public class AuthFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerWebExchange stripped = exchange.mutate()
                 .request(request -> request.headers(headers -> {
-                    headers.remove(USER_ID);
-                    headers.remove(USER_ROLE);
+                    headers.keySet()
+                            .removeIf(name ->
+                                    name.regionMatches(true, 0, USER_HEADER_PREFIX, 0, USER_HEADER_PREFIX.length()));
                     headers.remove(ENTRY_SESSION_ID);
                 }))
                 .build();
 
-        String path = stripped.getRequest().getURI().getPath();
-        if (isAmbiguous(path)) {
+        // 라우트 predicate와 같은 RequestPath(원본 경로를 세그먼트로 나눈 뒤 한 번만 디코드)로 판정한다
+        PathContainer container = stripped.getRequest().getPath().pathWithinApplication();
+        if (isAmbiguous(container)) {
             return reject(stripped, HttpStatus.BAD_REQUEST, "BAD_REQUEST", "허용하지 않는 경로 형식");
         }
-        PathContainer container = PathContainer.parsePath(path);
         if (INTERNAL.matches(container)) {
             return reject(stripped, HttpStatus.NOT_FOUND, "NOT_FOUND", "존재하지 않는 경로");
         }
@@ -117,13 +119,26 @@ public class AuthFilter implements GlobalFilter, Ordered {
     /**
      * 서비스(Tomcat)가 정규화해서 라우팅 규칙과 다른 경로로 읽을 수 있는 형식은 막는다. /api/v1/../internal/... 이 /internal/... 이 되는 경로가 대표적이다.
      */
-    private static boolean isAmbiguous(String decodedPath) {
-        if (decodedPath.indexOf(';') >= 0 || decodedPath.indexOf('\\') >= 0 || decodedPath.contains("//")) {
-            return true;
-        }
-        for (String segment : decodedPath.split("/")) {
-            if (segment.equals(".") || segment.equals("..")) {
-                return true;
+    private static boolean isAmbiguous(PathContainer path) {
+        boolean previousSeparator = false;
+        for (PathContainer.Element element : path.elements()) {
+            if (element instanceof PathContainer.PathSegment segment) {
+                String raw = segment.value();
+                String decoded = segment.valueToMatch();
+                if (raw.indexOf(';') >= 0
+                        || decoded.equals(".")
+                        || decoded.equals("..")
+                        || decoded.indexOf('/') >= 0
+                        || decoded.indexOf('\\') >= 0
+                        || decoded.indexOf(';') >= 0) {
+                    return true;
+                }
+                previousSeparator = false;
+            } else {
+                if (previousSeparator) {
+                    return true;
+                }
+                previousSeparator = true;
             }
         }
         return false;

@@ -137,6 +137,31 @@ class GatewayAuthTests {
     }
 
     @Test
+    @DisplayName("exp가 없는 토큰은 서명이 맞아도 401")
+    void tokenWithoutExp() {
+        String token = token("7", "USER", Instant.now(), null, SECRET);
+        client.get()
+                .uri("/api/v1/users/me")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus()
+                .isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("X-User- 접두 헤더는 이름과 대소문자에 상관없이 전달되지 않는다")
+    void stripsAnyUserHeader() {
+        client.post()
+                .uri("/api/v1/auth/login")
+                .header("x-user-email", "a@b.c")
+                .header("X-USER-Foo", "1")
+                .exchange()
+                .expectStatus()
+                .isOk();
+        assertThat(RECEIVED.get("/api/v1/auth/login")).doesNotContainKeys("x-user-email", "x-user-foo");
+    }
+
+    @Test
     @DisplayName("role 클레임이 없는 토큰은 서명이 맞아도 401")
     void tokenWithoutRole() {
         String token = token("7", null, Instant.now(), Instant.now().plusSeconds(600), SECRET);
@@ -280,6 +305,9 @@ class GatewayAuthTests {
             "/api/v1/performances/%2e%2e/%2e%2e/internal/users/1",
             "/api/v1/users/..;/..;/internal/users/1",
             "/api/v1/performances//x",
+            "/api/v1/performances/%2F..%2F..%2Finternal/users/1",
+            "/api/v1/performances/%5c..%5cinternal",
+            "/api/v1/performances/x%3b/y",
         }) {
             client.method(HttpMethod.GET)
                     .uri(URI.create("http://localhost:" + port + path))
@@ -287,6 +315,23 @@ class GatewayAuthTests {
                     .exchange()
                     .expectStatus()
                     .isBadRequest();
+        }
+        assertThat(RECEIVED).isEmpty();
+    }
+
+    @Test
+    @DisplayName("이중 인코딩된 경로로 공개 경로 판정을 우회할 수 없다")
+    void doubleEncodedPathIsNotPublic() {
+        for (String path : new String[] {
+            "/api/v1/sessions/1%252Fseat-status",
+            "/api/v1/sessions/1%252F..%252Fholds",
+            "/api/v1/performances/%252e%252e"
+        }) {
+            client.method(HttpMethod.GET)
+                    .uri(URI.create("http://localhost:" + port + path))
+                    .exchange()
+                    .expectStatus()
+                    .isUnauthorized();
         }
         assertThat(RECEIVED).isEmpty();
     }
@@ -376,8 +421,10 @@ class GatewayAuthTests {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .subject(sub)
                 .id(UUID.randomUUID().toString())
-                .issuedAt(issuedAt)
-                .expiresAt(expiresAt);
+                .issuedAt(issuedAt);
+        if (expiresAt != null) {
+            claims.expiresAt(expiresAt);
+        }
         if (role != null) {
             claims.claim("role", role);
         }
