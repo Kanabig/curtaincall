@@ -72,7 +72,7 @@ class QueueControllerTests extends QueueIntegrationTest {
 
     @Test
     @DisplayName("[QUE-3] 상태 조회는 순번, 앞 사람 수, 예상 대기 시간, 폴링 간격을 준다")
-    void status() throws Exception {
+    void pollStatus() throws Exception {
         putConf(-1000, 1);
         for (int user = 1; user <= 12; user++) {
             mvc.perform(post(entries()).header("X-User-Id", user)).andExpect(status().isCreated());
@@ -85,9 +85,10 @@ class QueueControllerTests extends QueueIntegrationTest {
                 .andExpect(jsonPath("$.ahead").value(11))
                 .andExpect(jsonPath("$.etaSeconds").value(11))
                 // 앞 사람 11명 > 초당 1명 x 10초 이므로 3초 구간(2400~3600ms)
-                .andExpect(jsonPath("$.pollAfterMs").value(org.hamcrest.Matchers.allOf(
-                        org.hamcrest.Matchers.greaterThanOrEqualTo(2400),
-                        org.hamcrest.Matchers.lessThanOrEqualTo(3600))));
+                .andExpect(jsonPath("$.pollAfterMs")
+                        .value(org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.greaterThanOrEqualTo(2400),
+                                org.hamcrest.Matchers.lessThanOrEqualTo(3600))));
     }
 
     @Test
@@ -124,17 +125,12 @@ class QueueControllerTests extends QueueIntegrationTest {
     @Test
     @DisplayName("[NFR-11] Redis 호출이 실패하면 진입과 조회는 503 QUEUE_UNAVAILABLE")
     void redisDown() throws Exception {
-        doThrow(new RedisConnectionFailureException("down"))
-                .when(repository)
-                .enter(anyLong(), anyLong());
-        doThrow(new RedisConnectionFailureException("down"))
-                .when(repository)
-                .status(anyLong(), anyLong());
+        doThrow(new RedisConnectionFailureException("down")).when(repository).enter(anyLong(), anyLong());
+        doThrow(new RedisConnectionFailureException("down")).when(repository).status(anyLong(), anyLong());
 
         mvc.perform(post(entries()).header("X-User-Id", 1))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("QUEUE_UNAVAILABLE"));
-        mvc.perform(get(entries() + "/me").header("X-User-Id", 1))
-                .andExpect(status().isServiceUnavailable());
+        mvc.perform(get(entries() + "/me").header("X-User-Id", 1)).andExpect(status().isServiceUnavailable());
     }
 }

@@ -41,20 +41,14 @@ class SessionEventListenerTests extends QueueIntegrationTest {
 
     private static String envelope(String type, long sid, String occurredAt, String payload) {
         return """
-                {"eventId":"%s","eventType":"%s","occurredAt":"%s","aggregateId":"%d","payload":%s}"""
-                .formatted(UUID.randomUUID(), type, occurredAt, sid, payload);
+                {"eventId":"%s","eventType":"%s","occurredAt":"%s","aggregateId":"%d","payload":%s}""".formatted(UUID.randomUUID(), type, occurredAt, sid, payload);
     }
 
     private String created(String occurredAt, int admission) {
-        return envelope(
-                "SessionCreated",
-                sessionId,
-                occurredAt,
-                """
+        return envelope("SessionCreated", sessionId, occurredAt, """
                 {"sessionId":%d,"performanceId":1,"venueId":"FC1","startAt":"2027-01-01T20:00:00+09:00",
                  "saleOpenAt":"2026-12-01T20:00:00+09:00","prices":[{"grade":"R","price":100000}],
-                 "admissionPerSecond":%d,"maxActiveUsers":300}"""
-                        .formatted(sessionId, admission));
+                 "admissionPerSecond":%d,"maxActiveUsers":300}""".formatted(sessionId, admission));
     }
 
     @Test

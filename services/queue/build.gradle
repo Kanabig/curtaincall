@@ -7,4 +7,7 @@ dependencies {
     // 저장소는 Redis만 쓴다. outbox 모듈(JDBC 의존)은 쓰지 않고 회차 이벤트를 직접 소비한다
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.kafka:spring-kafka'
+
+    // 공용 TestContainersConfig가 MySQL 컨테이너도 띄우므로 드라이버가 클래스패스에 있어야 한다
+    testRuntimeOnly 'com.mysql:mysql-connector-j'
 }

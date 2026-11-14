@@ -13,10 +13,14 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /** [QUE-2] 진입 번호는 Lua 안에서 INCR로 발급되므로 동시 진입에도 순번이 겹치거나 빠지지 않는다. */
 class QueueConcurrencyTests extends QueueIntegrationTest {
+
+    private static final Logger log = LoggerFactory.getLogger(QueueConcurrencyTests.class);
 
     @Autowired
     QueueService service;
@@ -26,7 +30,8 @@ class QueueConcurrencyTests extends QueueIntegrationTest {
     void sameUserConcurrently() throws Exception {
         putConf(-1000, 50);
 
-        List<Long> positions = runConcurrently(100, i -> service.enter(sessionId, 7L).response().position());
+        List<Long> positions = runConcurrently(
+                100, i -> service.enter(sessionId, 7L).response().position());
 
         assertThat(positions).containsOnly(1L);
         assertThat(redis.opsForZSet().zCard("q:" + sessionId + ":waiting")).isEqualTo(1);
@@ -40,16 +45,15 @@ class QueueConcurrencyTests extends QueueIntegrationTest {
         int users = 10_000;
 
         long start = System.nanoTime();
-        List<Long> positions = runConcurrently(users, i -> service.enter(sessionId, 1000L + i)
-                .response()
-                .position());
+        List<Long> positions = runConcurrently(
+                users, i -> service.enter(sessionId, 1000L + i).response().position());
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
         Set<Long> distinct = positions.stream().collect(Collectors.toSet());
         assertThat(distinct).hasSize(users);
         assertThat(distinct).allMatch(p -> p >= 1 && p <= users);
         assertThat(redis.opsForZSet().zCard("q:" + sessionId + ":waiting")).isEqualTo(users);
-        System.out.println("10,000 concurrent entries took " + elapsedMs + " ms");
+        log.info("10,000 concurrent entries took {} ms", elapsedMs);
     }
 
     private interface Call {
