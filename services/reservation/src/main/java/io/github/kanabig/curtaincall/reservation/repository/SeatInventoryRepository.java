@@ -58,6 +58,76 @@ public class SeatInventoryRepository {
                 args.toArray());
     }
 
+    /**
+     * 가격 반영이 필요하다고 표시한다. 요청 시각은 줄어들지 않으므로 이벤트가 뒤집혀 와도, 같은 이벤트가 다시 와도 결과가 같다. 아직 등록되지 않은 회차면 아무것도 하지 않는다(재고를 만들
+     * 때 최신 배치를 읽는다).
+     */
+    public void requestPriceSync(long sessionId, Instant occurredAt) {
+        jdbc.update(
+                "UPDATE session_stock SET price_requested_at = GREATEST(COALESCE(price_requested_at, ?), ?)"
+                        + " WHERE session_id = ?",
+                Timestamp.from(occurredAt),
+                Timestamp.from(occurredAt),
+                sessionId);
+    }
+
+    /** 가격을 아직 반영하지 못한 READY 회차. */
+    public List<PriceSyncRequest> findDuePriceSync(int limit) {
+        return jdbc.query(
+                "SELECT session_id, price_requested_at FROM session_stock WHERE status = 'READY'"
+                        + " AND price_requested_at IS NOT NULL"
+                        + " AND (price_synced_at IS NULL OR price_synced_at < price_requested_at)"
+                        + " ORDER BY price_requested_at LIMIT ?",
+                (rs, i) -> new PriceSyncRequest(
+                        rs.getLong("session_id"),
+                        rs.getTimestamp("price_requested_at").toInstant()),
+                limit);
+    }
+
+    /** 재고의 현재 상태·등급·가격. */
+    public List<StoredSeat> findStoredSeats(long sessionId) {
+        return jdbc.query(
+                "SELECT seat_id, status, grade, price FROM seat_inventory WHERE session_id = ?",
+                (rs, i) -> new StoredSeat(
+                        rs.getLong("seat_id"), rs.getString("status"), rs.getString("grade"), rs.getInt("price")),
+                sessionId);
+    }
+
+    /** AVAILABLE인 행만 등급·가격을 바꾼다. 그 사이 점유된 행은 건드리지 않는다. */
+    public int updatePricesIfAvailable(long sessionId, List<NewSeat> seats, int batchSize) {
+        int updated = 0;
+        for (int[] counts : jdbc.batchUpdate(
+                "UPDATE seat_inventory SET grade = ?, price = ? WHERE session_id = ? AND seat_id = ?"
+                        + " AND status = 'AVAILABLE'",
+                seats,
+                batchSize,
+                (ps, seat) -> {
+                    ps.setString(1, seat.grade());
+                    ps.setInt(2, seat.price());
+                    ps.setLong(3, sessionId);
+                    ps.setLong(4, seat.seatId());
+                })) {
+            for (int count : counts) {
+                updated += Math.max(count, 0);
+            }
+        }
+        return updated;
+    }
+
+    /** {@code requestedAt}까지 반영했다고 표시한다. 더 늦은 값이 이미 있으면 줄이지 않는다. */
+    public void markPriceSynced(long sessionId, Instant requestedAt) {
+        jdbc.update(
+                "UPDATE session_stock SET price_synced_at = GREATEST(COALESCE(price_synced_at, ?), ?)"
+                        + " WHERE session_id = ?",
+                Timestamp.from(requestedAt),
+                Timestamp.from(requestedAt),
+                sessionId);
+    }
+
+    public record PriceSyncRequest(long sessionId, Instant requestedAt) {}
+
+    public record StoredSeat(long seatId, String status, String grade, int price) {}
+
     public Optional<Instant> findStartAt(long sessionId) {
         return jdbc
                 .query(

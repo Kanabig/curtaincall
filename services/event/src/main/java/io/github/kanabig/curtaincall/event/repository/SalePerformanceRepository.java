@@ -2,6 +2,7 @@ package io.github.kanabig.curtaincall.event.repository;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -39,5 +40,15 @@ public class SalePerformanceRepository {
                         id)
                 .stream()
                 .findFirst();
+    }
+
+    /** 등록된 공연의 KOPIS 가격 안내 원문. 원문이 없으면 null이다. */
+    public String findPriceGuidance(long id) {
+        List<String> found = jdbc.query(
+                "SELECT p.price_guidance FROM sale_performance s JOIN performance p ON p.mt20id = s.mt20id"
+                        + " WHERE s.id = ?",
+                (rs, i) -> rs.getString(1),
+                id);
+        return found.isEmpty() ? null : found.get(0);
     }
 }

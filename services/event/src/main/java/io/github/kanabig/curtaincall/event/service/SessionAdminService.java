@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +44,8 @@ public class SessionAdminService {
     private final SalePerformanceRepository performances;
     private final OutboxWriter outbox;
     private final KopisProperties properties;
+    private final PriceGuidanceParser priceParser;
+    private final SeatMapService seatMaps;
     private final Clock clock;
 
     public SessionAdminService(
@@ -50,11 +53,15 @@ public class SessionAdminService {
             SalePerformanceRepository performances,
             OutboxWriter outbox,
             KopisProperties properties,
+            PriceGuidanceParser priceParser,
+            SeatMapService seatMaps,
             Clock clock) {
         this.sessions = sessions;
         this.performances = performances;
         this.outbox = outbox;
         this.properties = properties;
+        this.priceParser = priceParser;
+        this.seatMaps = seatMaps;
         this.clock = clock;
     }
 
@@ -73,6 +80,7 @@ public class SessionAdminService {
             throw invalid("공연 시작은 판매 오픈보다 뒤여야 한다");
         }
         List<Price> prices = toPrices(request.prices());
+        checkGrades(performanceId, prices);
         long id = sessions.insert(
                 performanceId,
                 startAt,
@@ -111,6 +119,9 @@ public class SessionAdminService {
             throw invalid("공연 시작은 판매 오픈보다 뒤여야 한다");
         }
         List<Price> prices = request.prices() == null ? null : toPrices(request.prices());
+        if (prices != null) {
+            checkGrades(current.performanceId(), prices);
+        }
         SaleSession next = new SaleSession(
                 id,
                 current.performanceId(),
@@ -122,6 +133,7 @@ public class SessionAdminService {
                 request.maxActiveUsers() == null ? current.maxActiveUsers() : request.maxActiveUsers(),
                 current.suspended());
         sessions.update(next, prices, now);
+        seatMaps.evictAfterCommit(id);
         SaleSession saved = sessions.find(id).orElseThrow();
         outbox.append(EventTopicsConfig.SESSION_TOPIC, String.valueOf(id), UPDATED, payload(saved));
         return saved;
@@ -134,6 +146,7 @@ public class SessionAdminService {
             throw new BusinessException(EventErrorCode.SESSION_ALREADY_OPENED);
         }
         sessions.delete(id);
+        seatMaps.evictAfterCommit(id);
         outbox.append(EventTopicsConfig.SESSION_TOPIC, String.valueOf(id), DELETED, Map.of("sessionId", id));
     }
 
@@ -146,6 +159,25 @@ public class SessionAdminService {
         }
         sessions.suspend(id, clock.instant());
         outbox.append(EventTopicsConfig.SESSION_TOPIC, String.valueOf(id), SUSPENDED, Map.of("sessionId", id));
+    }
+
+    /**
+     * 가격표의 등급은 공연의 등급표(배치의 등급)와 같아야 한다. 배치의 모든 등급에 가격이 있어야 좌석 가격이 비지 않고, 배치에 없는 등급은 어느 좌석에도 붙지 않는다.
+     */
+    private void checkGrades(long performanceId, List<Price> prices) {
+        String guidance = performances.findPriceGuidance(performanceId);
+        Set<String> expected = new HashSet<>();
+        priceParser.parse(guidance).tiers().forEach(t -> expected.add(t.grade()));
+        Set<String> given = new HashSet<>();
+        prices.forEach(p -> given.add(p.grade()));
+        if (!expected.equals(given)) {
+            Set<String> missing = new TreeSet<>(expected);
+            missing.removeAll(given);
+            Set<String> extra = new TreeSet<>(given);
+            extra.removeAll(expected);
+            throw new BusinessException(
+                    EventErrorCode.PRICE_GRADE_MISMATCH, "가격이 없는 등급 " + missing + ", 배치에 없는 등급 " + extra);
+        }
     }
 
     private SaleSession lock(long id) {
