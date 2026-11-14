@@ -2,9 +2,12 @@ package io.github.kanabig.curtaincall.outbox;
 
 import io.github.kanabig.curtaincall.outbox.config.OutboxAutoConfiguration;
 import io.github.kanabig.curtaincall.outbox.consumer.IdempotentConsumer;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.slf4j.MDC;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -19,6 +22,8 @@ class TestListeners {
     static final String IDEM_TOPIC = "test.idem";
     static final String FAIL_TOPIC = "test.fail";
     static final String BAD_TOPIC = "test.bad";
+    static final String TRACE_TOPIC = "test.trace";
+    static final String TRACE_GROUP = "test-trace-group";
     static final String IDEM_GROUP = "test-idem-group";
     static final String FAIL_GROUP = "test-fail-group";
     static final String BAD_GROUP = "test-bad-group";
@@ -26,6 +31,7 @@ class TestListeners {
     final AtomicInteger idemAttempts = new AtomicInteger();
     final AtomicInteger failAttempts = new AtomicInteger();
     final AtomicInteger badAttempts = new AtomicInteger();
+    final BlockingQueue<String> traceIds = new LinkedBlockingQueue<>();
 
     @Bean
     NewTopic idemTopic() {
@@ -40,6 +46,11 @@ class TestListeners {
     @Bean
     NewTopic failDlt() {
         return TopicBuilder.name(FAIL_TOPIC + ".DLT").partitions(1).replicas(1).build();
+    }
+
+    @Bean
+    NewTopic traceTopic() {
+        return TopicBuilder.name(TRACE_TOPIC).partitions(1).replicas(1).build();
     }
 
     @Bean
@@ -77,6 +88,10 @@ class TestListeners {
             return counters.failAttempts;
         }
 
+        BlockingQueue<String> traceIds() {
+            return counters.traceIds;
+        }
+
         AtomicInteger badAttempts() {
             return counters.badAttempts;
         }
@@ -107,6 +122,15 @@ class TestListeners {
                         "INSERT INTO test_effect (event_id, note) VALUES (?, 'before failure')", envelope.eventId());
                 throw new IllegalStateException("처리 실패");
             });
+        }
+
+        @KafkaListener(
+                topics = TRACE_TOPIC,
+                groupId = TRACE_GROUP,
+                containerFactory = OutboxAutoConfiguration.LISTENER_CONTAINER_FACTORY)
+        void onTrace(ConsumerRecord<String, String> record, Acknowledgment ack) {
+            // 처리 중인 스레드의 MDC에 들어 있는 추적 ID를 그대로 기록한다
+            consumer.consume(record, ack, envelope -> counters.traceIds.add(String.valueOf(MDC.get("requestId"))));
         }
 
         @KafkaListener(

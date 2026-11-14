@@ -9,6 +9,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.kafka.KafkaConnectionDetails;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,6 +19,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 컨테이너는 테스트 JVM에서 공유하므로 테스트마다 테이블을 비우고 토픽 이름을 새로 만든다.
  */
 @SpringBootTest
+@AutoConfigureObservability
 @Import({TestContainersConfig.class, TestListeners.class})
 abstract class OutboxIntegrationTest {
 
