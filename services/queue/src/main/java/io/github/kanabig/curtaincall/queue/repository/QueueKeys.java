@@ -1,6 +1,6 @@
 package io.github.kanabig.curtaincall.queue.repository;
 
-/** 회차별 Redis 키(ADR-0007). */
+/** 회차별 Redis 키. */
 final class QueueKeys {
 
     static final String OPEN = "q:open";

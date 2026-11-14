@@ -63,7 +63,7 @@ class SessionConfServiceTests extends QueueIntegrationTest {
     }
 
     @Test
-    @DisplayName("중지하면 판매 중 집합에서 빠지고 이후 SessionUpdated는 값만 바꾸며 다시 열지 않는다")
+    @DisplayName("중지하면 판매 중 집합에서 빠지고 이후 SessionUpdated는 무시해 다시 열지 않는다")
     void suspendIsTerminal() {
         service.apply(upsert(1000, 1_800_000_000_000L, 50, 300));
         service.apply(new SessionConf(sessionId, Type.SUSPEND, 2000, 0, 0, 0));
@@ -72,7 +72,7 @@ class SessionConfServiceTests extends QueueIntegrationTest {
         assertThat(open()).isFalse();
 
         service.apply(upsert(3000, 1_800_000_000_000L, 70, 300));
-        assertThat(conf()).containsEntry("status", "SUSPENDED").containsEntry("admissionPerSecond", "70");
+        assertThat(conf()).containsEntry("status", "SUSPENDED").containsEntry("admissionPerSecond", "50");
         assertThat(open()).isFalse();
     }
 
@@ -83,6 +83,30 @@ class SessionConfServiceTests extends QueueIntegrationTest {
         service.apply(upsert(1000, 1_800_000_000_000L, 50, 300));
 
         assertThat(conf()).containsEntry("status", "SUSPENDED");
+        assertThat(open()).isFalse();
+    }
+
+    @Test
+    @DisplayName("SessionUpdated가 먼저 처리돼도 더 오래된 SessionSuspended는 반영하고, 저장된 ver는 큰 값으로 남는다")
+    void suspendAppliedEvenIfOlderThanUpdate() {
+        service.apply(upsert(1000, 1_800_000_000_000L, 50, 300));
+        service.apply(upsert(101_000, 1_800_000_000_000L, 70, 300));
+        service.apply(new SessionConf(sessionId, Type.SUSPEND, 100_000, 0, 0, 0));
+
+        assertThat(conf()).containsEntry("status", "SUSPENDED").containsEntry("ver", "101000");
+        assertThat(open()).isFalse();
+    }
+
+    @Test
+    @DisplayName("SessionUpdated가 먼저 처리돼도 더 오래된 SessionDeleted는 반영해 대기열 키를 지운다")
+    void deleteAppliedEvenIfOlderThanUpdate() {
+        service.apply(upsert(1000, 1_800_000_000_000L, 50, 300));
+        redis.opsForZSet().add("q:" + sessionId + ":waiting", "1", 1);
+        service.apply(upsert(101_000, 1_800_000_000_000L, 70, 300));
+        service.apply(new SessionConf(sessionId, Type.DELETE, 100_000, 0, 0, 0));
+
+        assertThat(conf()).containsEntry("status", "DELETED").containsEntry("ver", "101000");
+        assertThat(redis.hasKey("q:" + sessionId + ":waiting")).isFalse();
         assertThat(open()).isFalse();
     }
 

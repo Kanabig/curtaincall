@@ -2,7 +2,7 @@ package io.github.kanabig.curtaincall.queue.service;
 
 import java.util.function.DoubleSupplier;
 
-/** [QUE-3] 앞 사람 수에 따라 다음 폴링 간격을 1·3·5초로 정하고 ±20% 지터를 붙인다(ADR-0007). */
+/** [QUE-3] 앞 사람 수에 따라 다음 폴링 간격을 1·3·5초로 정하고 ±20% 지터를 붙인다. */
 public class PollPolicy {
 
     static final long NEAR_MS = 1000;
