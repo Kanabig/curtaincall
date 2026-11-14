@@ -61,9 +61,9 @@ public abstract class OrderIntegrationTest extends InventoryIntegrationTest {
     /** 점유 → 주문 → 결제 시작까지 진행하고 주문 ID를 돌려준다. */
     protected String orderInPayment(long userId, Long... seatIds) {
         String orderId = orderService
-                .createOrder(userId, key(), hold(userId, seatIds).holdId())
+                .createOrder(userId, SESSION, key(), hold(userId, seatIds).holdId())
                 .orderId();
-        orderService.startPayment(userId, orderId, key(), "tok_approve");
+        orderService.startPayment(userId, SESSION, orderId, key(), "tok_approve");
         return orderId;
     }
 
