@@ -82,13 +82,21 @@ public class PaymentResultService {
         Instant next = now.plus(inquiry.delayAfter(payment.getInquiryAttempts() + 1));
         payment.inquiryMissed(now, next, deadline);
         if (payment.isInquiryExhausted()) {
-            metrics.unknownExhausted();
-            log.error(
-                    "거래 조회 제한 시간 안에 결과를 얻지 못했다. UNKNOWN으로 남긴다: paymentId={}, orderId={}, attempts={}",
-                    paymentId,
-                    payment.getOrderId(),
-                    payment.getInquiryAttempts());
+            onInquiryExhausted(payment);
         }
+    }
+
+    /**
+     * 거래 조회 제한 시간 안에 결과를 얻지 못했을 때의 처리. UNKNOWN으로 남기고 메트릭만 올린다. 소진 정책(계속 UNKNOWN으로 둘지 확정할지)은 이 메서드 한 곳에서
+     * 바꾼다.
+     */
+    private void onInquiryExhausted(Payment payment) {
+        metrics.unknownExhausted();
+        log.error(
+                "거래 조회 제한 시간 안에 결과를 얻지 못했다. UNKNOWN으로 남긴다: paymentId={}, orderId={}, attempts={}",
+                payment.getPaymentId(),
+                payment.getOrderId(),
+                payment.getInquiryAttempts());
     }
 
     private Payment lock(String paymentId) {

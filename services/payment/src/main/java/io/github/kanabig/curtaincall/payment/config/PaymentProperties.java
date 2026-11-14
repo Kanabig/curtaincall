@@ -13,7 +13,8 @@ public record PaymentProperties(
             @DefaultValue("http://localhost:8090") String baseUrl,
             @DefaultValue("1s") Duration connectTimeout,
             @DefaultValue("5s") Duration readTimeout,
-            @DefaultValue("20") int maxConcurrentCalls,
+            @DefaultValue("20") int maxConcurrentApprovals,
+            @DefaultValue("10") int maxConcurrentQueries,
             @DefaultValue Breaker breaker) {}
 
     /** 최근 windowSize건 중 실패율이 임계치 이상이면 openDuration 동안 열린다. */

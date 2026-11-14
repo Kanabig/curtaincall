@@ -23,19 +23,25 @@ public class PgClient {
     private static final Logger log = LoggerFactory.getLogger(PgClient.class);
 
     private final RestClient restClient;
-    private final Bulkhead bulkhead;
+    private final Bulkhead approvalBulkhead;
+    private final Bulkhead queryBulkhead;
     private final CircuitBreaker approvalBreaker;
 
-    public PgClient(RestClient pgRestClient, Bulkhead pgBulkhead, CircuitBreaker pgApprovalBreaker) {
+    public PgClient(
+            RestClient pgRestClient,
+            Bulkhead pgApprovalBulkhead,
+            Bulkhead pgQueryBulkhead,
+            CircuitBreaker pgApprovalBreaker) {
         this.restClient = pgRestClient;
-        this.bulkhead = pgBulkhead;
+        this.approvalBulkhead = pgApprovalBulkhead;
+        this.queryBulkhead = pgQueryBulkhead;
         this.approvalBreaker = pgApprovalBreaker;
     }
 
     public ApprovalOutcome approve(String merchantOrderId, long amount, String cardToken) {
         try {
             PgApproval response = Bulkhead.decorateSupplier(
-                            bulkhead,
+                            approvalBulkhead,
                             CircuitBreaker.decorateSupplier(
                                     approvalBreaker, () -> requestApproval(merchantOrderId, amount, cardToken)))
                     .get();
@@ -44,6 +50,10 @@ public class PgClient {
             return new ApprovalOutcome.NotSent(ApprovalOutcome.Reason.BULKHEAD_FULL);
         } catch (CallNotPermittedException e) {
             return new ApprovalOutcome.NotSent(ApprovalOutcome.Reason.CIRCUIT_OPEN);
+        } catch (HttpClientErrorException e) {
+            // 승인 요청에 대한 4xx는 PG가 요청을 처리하지 않았다는 뜻이다
+            log.warn("PG가 승인 요청을 거절했다: merchantOrderId={}, status={}", merchantOrderId, e.getStatusCode());
+            return new ApprovalOutcome.Rejected(e.getStatusCode().value());
         } catch (RuntimeException e) {
             // 타임아웃, premature EOF, 5xx 모두 PG가 처리했는지 알 수 없다
             log.warn("PG 승인 결과를 받지 못했다: merchantOrderId={}, cause={}", merchantOrderId, e.toString());
@@ -53,7 +63,8 @@ public class PgClient {
 
     public InquiryOutcome inquire(String merchantOrderId) {
         try {
-            PgTransaction transaction = Bulkhead.decorateSupplier(bulkhead, () -> requestTransaction(merchantOrderId))
+            PgTransaction transaction = Bulkhead.decorateSupplier(
+                            queryBulkhead, () -> requestTransaction(merchantOrderId))
                     .get();
             if (transaction == null) {
                 return new InquiryOutcome.Failed("empty body");

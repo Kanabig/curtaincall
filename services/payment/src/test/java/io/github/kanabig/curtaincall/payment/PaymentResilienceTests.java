@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -22,6 +23,9 @@ class PaymentResilienceTests extends PaymentIntegrationTest {
 
     @Autowired
     TestRestTemplate restTemplate;
+
+    @Autowired
+    Bulkhead pgApprovalBulkhead;
 
     @Test
     @DisplayName("최근 20건이 모두 실패하면 서킷이 열리고, 이후 승인은 PG에 보내지 않고 PaymentFailed(PG_UNAVAILABLE)로 끝난다")
@@ -55,12 +59,47 @@ class PaymentResilienceTests extends PaymentIntegrationTest {
     }
 
     @Test
+    @DisplayName("승인 Bulkhead가 가득 차도 조회는 별도 Bulkhead라 통과해 UNKNOWN이 풀리고, 새 승인은 거절된다")
+    void queriesAreNotStarvedByApprovals() {
+        Bulkhead approvalBulkhead = pgApprovalBulkhead;
+        int permits = 0;
+        while (approvalBulkhead.tryAcquirePermission()) {
+            permits++;
+        }
+        try {
+            assertThat(permits).isEqualTo(20);
+            String unknownOrder = newOrderId();
+            PG.seed(unknownOrder, 120000);
+            jdbc.update("""
+                    INSERT INTO payment (payment_id, order_id, user_id, amount, card_token, status,
+                                         inquiry_started_at, next_inquiry_at, created_at, updated_at)
+                    VALUES (?, ?, '7', 120000, 'tok_approve', 'UNKNOWN',
+                            UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))
+                    """, "pay_" + unknownOrder, unknownOrder);
+
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(status(unknownOrder)).isEqualTo("APPROVED"));
+
+            String newOrder = newOrderId();
+            deliver(approveCommand(newOrder, "tok_approve"));
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(status(newOrder)).isEqualTo("FAILED"));
+            assertThat(PG.approvalRequestsFor(newOrder)).isZero();
+        } finally {
+            for (int i = 0; i < permits; i++) {
+                approvalBulkhead.onComplete();
+            }
+        }
+    }
+
+    @Test
     @DisplayName("PG가 응답하지 않아도 동시 호출은 20개로 제한되고 나머지는 바로 거절되며, 컨슈머 처리와 HTTP는 느려지지 않는다")
     void bulkheadLimitsPgCallsAndKeepsOtherWorkResponsive() throws Exception {
         PG.hang = true;
         PG.hangMs = 3000;
-        double rejectedBefore =
-                meterRegistry.counter("payment.pg.bulkhead.rejected").count();
+        double rejectedBefore = meterRegistry
+                .counter("payment.pg.bulkhead.rejected", "bulkhead", "pg-approval")
+                .count();
         List<String> orderIds = new ArrayList<>();
         List<CompletableFuture<Void>> deliveries = new ArrayList<>();
         try (ExecutorService executor = Executors.newFixedThreadPool(40)) {
@@ -84,7 +123,7 @@ class PaymentResilienceTests extends PaymentIntegrationTest {
 
         await().atMost(Duration.ofSeconds(10))
                 .untilAsserted(() -> assertThat(meterRegistry
-                                        .counter("payment.pg.bulkhead.rejected")
+                                        .counter("payment.pg.bulkhead.rejected", "bulkhead", "pg-approval")
                                         .count()
                                 - rejectedBefore)
                         .isGreaterThanOrEqualTo(1.0));

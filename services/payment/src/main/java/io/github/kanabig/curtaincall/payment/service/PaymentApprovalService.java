@@ -55,6 +55,10 @@ public class PaymentApprovalService {
                     log.info("PG가 승인을 거절했다: orderId={}, code={}", payment.getOrderId(), declined.failureCode());
                     results.failed(paymentId, FailureReason.DECLINED);
                 }
+                case ApprovalOutcome.Rejected rejected -> {
+                    log.warn("PG가 승인 요청을 거절했다: orderId={}, status={}", payment.getOrderId(), rejected.httpStatus());
+                    results.failed(paymentId, FailureReason.PG_REJECTED);
+                }
                 case ApprovalOutcome.NotSent notSent -> {
                     log.warn("PG에 승인을 보내지 않았다: orderId={}, reason={}", payment.getOrderId(), notSent.reason());
                     results.failed(paymentId, FailureReason.PG_UNAVAILABLE);

@@ -95,6 +95,10 @@ final class FakePg {
                 respond(exchange, 504, "{}");
                 return;
             }
+            if (!"tok_approve".equals(cardToken) && !"tok_decline".equals(cardToken)) {
+                respond(exchange, 400, "{}");
+                return;
+            }
             if (fail) {
                 respond(exchange, 500, "{}");
                 return;

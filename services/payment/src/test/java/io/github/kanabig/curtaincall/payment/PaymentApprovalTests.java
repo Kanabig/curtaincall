@@ -49,6 +49,20 @@ class PaymentApprovalTests extends PaymentIntegrationTest {
     }
 
     @Test
+    @DisplayName("PG가 요청 자체를 거절하면(4xx) 승인되지 않은 것이 확실하므로 FAILED(PG_REJECTED)이고 서킷 실패율에 들어가지 않는다")
+    void clientErrorFailsAsRejected() throws Exception {
+        String orderId = newOrderId();
+
+        deliver(approveCommand(orderId, "tok_bogus"));
+
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("FAILED"));
+        assertThat(publishedPayload(orderId, "PaymentFailed").get("reason").asText())
+                .isEqualTo("PG_REJECTED");
+        assertThat(pgApprovalBreaker.getMetrics().getNumberOfFailedCalls()).isZero();
+    }
+
+    @Test
     @DisplayName("같은 ApprovePayment를 10번 보내도 PG 승인은 1건이고 결제 행도 하나다")
     void tenSequentialCommandsApproveOnce() {
         String orderId = newOrderId();

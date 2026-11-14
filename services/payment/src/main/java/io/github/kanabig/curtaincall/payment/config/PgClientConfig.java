@@ -19,6 +19,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /** PG 호출에 쓰는 HTTP 클라이언트, 서킷 브레이커, Bulkhead, 호출 전용 실행기. */
@@ -52,6 +53,8 @@ public class PgClientConfig {
                 .failureRateThreshold(breaker.failureRateThreshold())
                 .waitDurationInOpenState(breaker.openDuration())
                 .permittedNumberOfCallsInHalfOpenState(3)
+                // PG가 요청 자체를 거절한 4xx는 PG 장애가 아니므로 실패율에 넣지 않는다
+                .ignoreExceptions(HttpClientErrorException.class)
                 .build();
         CircuitBreakerRegistry registry = CircuitBreakerRegistry.of(config);
         TaggedCircuitBreakerMetrics.ofCircuitBreakerRegistry(registry).bindTo(meterRegistry);
@@ -63,22 +66,37 @@ public class PgClientConfig {
         return pgCircuitBreakerRegistry.circuitBreaker("pg-approval");
     }
 
-    /** 가득 차면 기다리지 않고 바로 거절한다(maxWaitDuration 0). 느린 PG 때문에 호출이 쌓이지 않게 한다. */
+    /**
+     * 승인과 조회·취소의 Bulkhead를 나눈다. 승인이 느려져 가득 차도 조회가 굶지 않아야 UNKNOWN을 풀 수 있다. 가득 차면 기다리지 않고 바로 거절한다(maxWaitDuration 0).
+     */
     @Bean
-    BulkheadRegistry pgBulkheadRegistry(PaymentProperties properties, MeterRegistry meterRegistry) {
-        BulkheadConfig config = BulkheadConfig.custom()
-                .maxConcurrentCalls(properties.pg().maxConcurrentCalls())
-                .maxWaitDuration(Duration.ZERO)
-                .build();
-        BulkheadRegistry registry = BulkheadRegistry.of(config);
+    BulkheadRegistry pgBulkheadRegistry(MeterRegistry meterRegistry) {
+        BulkheadRegistry registry = BulkheadRegistry.ofDefaults();
         TaggedBulkheadMetrics.ofBulkheadRegistry(registry).bindTo(meterRegistry);
         return registry;
     }
 
     @Bean
-    Bulkhead pgBulkhead(BulkheadRegistry pgBulkheadRegistry, MeterRegistry meterRegistry) {
-        Bulkhead bulkhead = pgBulkheadRegistry.bulkhead("pg");
+    Bulkhead pgApprovalBulkhead(
+            BulkheadRegistry pgBulkheadRegistry, PaymentProperties properties, MeterRegistry meterRegistry) {
+        return bulkhead(pgBulkheadRegistry, "pg-approval", properties.pg().maxConcurrentApprovals(), meterRegistry);
+    }
+
+    @Bean
+    Bulkhead pgQueryBulkhead(
+            BulkheadRegistry pgBulkheadRegistry, PaymentProperties properties, MeterRegistry meterRegistry) {
+        return bulkhead(pgBulkheadRegistry, "pg-query", properties.pg().maxConcurrentQueries(), meterRegistry);
+    }
+
+    private static Bulkhead bulkhead(BulkheadRegistry registry, String name, int max, MeterRegistry meterRegistry) {
+        Bulkhead bulkhead = registry.bulkhead(
+                name,
+                BulkheadConfig.custom()
+                        .maxConcurrentCalls(max)
+                        .maxWaitDuration(Duration.ZERO)
+                        .build());
         Counter rejected = Counter.builder(MetricNames.PAYMENT_PG_BULKHEAD_REJECTED)
+                .tag("bulkhead", name)
                 .description("Bulkhead가 거절한 PG 호출 수")
                 .register(meterRegistry);
         bulkhead.getEventPublisher().onCallRejected(event -> rejected.increment());
