@@ -36,7 +36,14 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    // 측정용 테스트(@Tag("perf"))는 기본 빌드에서 빠지고 -Pperf를 줄 때만 돈다
+    useJUnitPlatform {
+        if (project.hasProperty('perf')) {
+            includeTags 'perf'
+        } else {
+            excludeTags 'perf'
+        }
+    }
     finalizedBy tasks.named('jacocoTestReport')
 }
 
