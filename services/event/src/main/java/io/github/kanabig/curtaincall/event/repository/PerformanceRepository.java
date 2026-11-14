@@ -124,4 +124,20 @@ public class PerformanceRepository {
     public int count() {
         return jdbc.queryForObject("SELECT COUNT(*) FROM performance", Integer.class);
     }
+
+    /** 판매 등록에 필요한 값. 공연이 없으면 비어 있다. */
+    public Optional<Registrable> findRegistrable(String mt20id) {
+        return jdbc
+                .query(
+                        "SELECT name, mt13id, detail_status FROM performance WHERE mt20id = ?",
+                        (rs, i) -> new Registrable(
+                                rs.getString("name"),
+                                rs.getString("mt13id"),
+                                "DONE".equals(rs.getString("detail_status"))),
+                        mt20id)
+                .stream()
+                .findFirst();
+    }
+
+    public record Registrable(String name, String mt13id, boolean detailDone) {}
 }
