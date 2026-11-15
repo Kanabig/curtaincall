@@ -123,8 +123,8 @@ class SessionEventListenerTests extends InventoryIntegrationTest {
 
         assertThat(statusOf(421L)).isEqualTo("DELETED");
         assertThat(statusOf(422L)).isEqualTo("DELETED");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM session_stock WHERE status = 'PENDING'", Integer.class))
-                .isZero();
+        assertThat(inventoryCount(421L)).isZero();
+        assertThat(inventoryCount(422L)).isZero();
     }
 
     /** 뒤에 보낸 마커 회차가 처리되면 같은 파티션의 앞선 레코드도 모두 소비된 것이다. */
