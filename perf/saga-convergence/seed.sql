@@ -14,8 +14,9 @@ DELETE FROM payment_db.payment;
 DELETE FROM payment_db.outbox;
 DELETE FROM payment_db.processed_event;
 
-INSERT INTO reservation_db.session_stock (session_id, status, seat_count, next_attempt_at, ready_at)
-VALUES (7, 'READY', 2000, NOW(6), NOW(6));
+-- 앱은 시각을 UTC로 쓴다. MySQL 컨테이너는 KST라 NOW()를 쓰면 9시간 어긋난다. start_at이 비면 취소가 거절된다.
+INSERT INTO reservation_db.session_stock (session_id, status, seat_count, next_attempt_at, ready_at, start_at)
+VALUES (7, 'READY', 2000, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6) + INTERVAL 30 DAY);
 
 INSERT INTO reservation_db.seat_inventory (session_id, seat_id, grade, price)
 WITH RECURSIVE n (i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000)

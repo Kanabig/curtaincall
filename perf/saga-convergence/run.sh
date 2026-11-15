@@ -221,9 +221,9 @@ s_seat-loss() { # 승인 지연 중에 점유가 만료되고 다른 사용자�
     set_faults 4000 0 0 0
     drive 1 "$ORDERS" 0 tok_approve 1
     log "앞 $half건의 점유를 만료시키고 다른 사용자가 점유"
-    echo "UPDATE reservation_db.seat_inventory SET expires_at = NOW(6) - INTERVAL 1 SECOND
+    echo "UPDATE reservation_db.seat_inventory SET expires_at = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND
           WHERE holder_id BETWEEN 1 AND $half" | sql
-    HOLD_ONLY=1 drive 100001 "$half" 0 tok_approve 0
+    HOLD_ONLY=1 drive 100001 "$half" 0 tok_approve 0 || { echo "FAIL(다른 사용자의 점유 요청 실패)"; FAILED=1; }
     local t0; t0=$(date +%s)
     finish_scenario "$t0"
     local kept; kept=$(echo "SELECT COUNT(*) FROM reservation_db.seat_inventory WHERE status = 'HELD' AND holder_id > 100000" | sql)
@@ -236,10 +236,12 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
     drive 1 "$ORDERS" 0 tok_approve 1
     wait_converged "$(date +%s)" || true
     log "mock-pg 정지 후 사용자 취소"; compose pause mock-pg > /dev/null
+    : > "$OUT/cancel-failed.txt"
     echo "SELECT reservation_id, user_id FROM reservation_db.reservation" | sql | while read -r rid uid; do
         rsv curl -fsS -o /dev/null -X POST "localhost:8084/api/v1/reservations/$rid/cancel" -H "X-User-Id: $uid" \
-            -H "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)" || echo "취소 요청 실패: $rid"
+            -H "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)" < /dev/null || echo "취소 요청 실패: $rid" | tee -a "$OUT/cancel-failed.txt"
     done
+    [ ! -s "$OUT/cancel-failed.txt" ] || { echo "FAIL(취소 요청 거절 $(wc -l < "$OUT/cancel-failed.txt")건)"; FAILED=1; }
     sleep 20
     local sold; sold=$(echo "SELECT COUNT(*) FROM reservation_db.seat_inventory WHERE status = 'SOLD'" | sql)
     echo "PG 정지 중 SOLD 좌석: $sold (기대 $((ORDERS * 2)))" | tee "$OUT/during-outage.txt"
@@ -257,7 +259,7 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
     # 같은 취소를 한 번 더 보내도 두 번 환불되지 않는다
     echo "SELECT reservation_id, user_id FROM reservation_db.reservation LIMIT 3" | sql | while read -r rid uid; do
         rsv curl -s -o /dev/null -X POST "localhost:8084/api/v1/reservations/$rid/cancel" -H "X-User-Id: $uid" \
-            -H "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)"
+            -H "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)" < /dev/null
     done
     sleep 5
     local avail; avail=$(echo "SELECT COUNT(*) FROM reservation_db.seat_inventory WHERE status = 'AVAILABLE'" | sql)
@@ -265,6 +267,7 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
     local verdict=PASS
     [ "$CONVERGE_S" -ge 0 ] || verdict="FAIL(취소 수렴 상한 초과)"
     [ "$avail" = 2000 ] || verdict="FAIL(좌석 복구 $avail)"
+    [ ! -s "$OUT/cancel-failed.txt" ] || verdict="FAIL(취소 요청 거절)"
     # 주문은 CONFIRMED로 남고 예매가 CANCELLED가 된다. verify.sql의 SOLD 대조는 취소 뒤 0 = 0이다
     save_logs
     sql_table < "$DIR/verify.sql" > "$OUT/verify.txt"
