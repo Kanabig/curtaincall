@@ -38,25 +38,36 @@ api() { # api METHOD PATH [token] [json] [extra header...]  → 본문 출력, �
 
 signup_login() { # signup_login 이메일 → access token
     api POST /api/v1/users "" "{\"email\":\"$1\",\"password\":\"password-1234\",\"name\":\"fault\"}" > /dev/null
-    api POST /api/v1/auth/login "" "{\"email\":\"$1\",\"password\":\"password-1234\"}" | jq -r .accessToken
+    api POST /api/v1/auth/login "" "{\"email\":\"$1\",\"password\":\"password-1234\"}" | jq -r '.accessToken // empty'
 }
 
 admin_login() {
     local email password
     email=$(grep -s '^ADMIN_EMAIL=' .env | cut -d= -f2); password=$(grep -s '^ADMIN_PASSWORD=' .env | cut -d= -f2)
-    api POST /api/v1/auth/login "" "{\"email\":\"$email\",\"password\":\"$password\"}" | jq -r .accessToken
+    api POST /api/v1/auth/login "" "{\"email\":\"$email\",\"password\":\"$password\"}" | jq -r '.accessToken // empty'
 }
 
-# 판매 오픈이 $1초 뒤인 회차를 만들고 ID를 출력한다. fixture 공연(PF305735)을 등록한다
+# 판매 오픈이 $1초 뒤인 회차를 만들고 ID를 출력한다. fixture 공연(PF305720, 가격 등급 1층석)을 쓴다.
+# PF305718·PF305735는 공연장 배치를 만들 수 없어(HALL_LAYOUT_UNAVAILABLE) 쓰지 않는다. 등록이 거절되면 KOPIS 동기화를 한 번 돌리고 다시 시도한다.
+# 실패하면 아무것도 출력하지 않는다(호출한 쪽의 check가 잡는다).
 make_session() {
-    local open_in="${1:-20}" admin perf start open
+    local open_in="${1:-20}" admin perf start open sid body
     admin=$(admin_login)
-    perf=$(api POST /api/v1/admin/performances "$admin" '{"kopisId":"PF305735"}' | jq -r '.performanceId // .id')
+    [ -n "$admin" ] && [ "$admin" != null ] || return 0
+    perf=$(api POST /api/v1/admin/performances "$admin" '{"kopisId":"PF305720"}' | jq -r '.id // empty')
+    if [ -z "$perf" ]; then
+        api POST /api/v1/admin/kopis/sync "$admin" "" > /dev/null; sleep 20
+        perf=$(api POST /api/v1/admin/performances "$admin" '{"kopisId":"PF305720"}' | jq -r '.id // empty')
+    fi
+    # 이미 등록돼 있으면(재실행) 목록에서 찾는다
+    [ -n "$perf" ] || perf=$(api GET "/api/v1/performances?size=50" "" "" | jq -r '[.content[] | select(.kopisId == "PF305720")][0].id // empty')
+    [ -n "$perf" ] || return 0
     open=$(date -d "+${open_in} seconds" --iso-8601=seconds)
     start=$(date -d "+3 days" --iso-8601=seconds)
-    api POST "/api/v1/admin/performances/$perf/sessions" "$admin" \
-        "{\"startAt\":\"$start\",\"saleOpenAt\":\"$open\",\"prices\":[{\"grade\":\"R\",\"price\":10000}],\"admissionPerSecond\":50,\"maxActiveUsers\":300}" \
-        | jq -r '.sessionId // .id'
+    body=$(api POST "/api/v1/admin/performances/$perf/sessions" "$admin" \
+        "{\"startAt\":\"$start\",\"saleOpenAt\":\"$open\",\"prices\":[{\"grade\":\"1층석\",\"price\":10000}],\"admissionPerSecond\":50,\"maxActiveUsers\":300}")
+    sid=$(echo "$body" | jq -r '.sessionId // .id // empty')
+    [ "$(last_code)" = 201 ] && echo "$sid" || echo "make_session 실패($(last_code)): $body" >&2
 }
 
 # 회차의 실제 좌석 ID를 reservation 재고에서 읽는다(hall_seat.seat_id는 자동 증가라 1부터라고 가정하지 않는다). 재고 생성은 비동기라 최대 90초 기다린다
@@ -210,6 +221,7 @@ scenario_aux() {
     compose up -d --build --wait
     local sid a ta order mails
     sid=$(make_session 15); wait_open 15
+    check_re "회차 ID" '^[0-9]+$' "$sid"
     a=$(signup_login "fault-aux-$$@example.com"); ta=$(enter_token "$sid" "$a")
     check_re "준비: 회차·사용자·입장 토큰" '^.+$' "$sid$a$ta"
     local seats; read -ra seats <<< "$(seat_ids "$sid" 4)"
@@ -241,6 +253,7 @@ scenario_redis() {
     compose up -d --build --wait
     local sid a b ta tb
     sid=$(make_session 15); wait_open 15
+    check_re "회차 ID" '^[0-9]+$' "$sid"
     a=$(signup_login "fault-a-$$@example.com"); b=$(signup_login "fault-b-$$@example.com")
     ta=$(enter_token "$sid" "$a")
     check_re "준비: 회차·사용자" '^.+$' "$sid$a$b"
@@ -305,6 +318,7 @@ scenario_pg() {
     local sid pg i b buyers=() tokens=() orders=() o a ta base
     pg="http://localhost:${MOCK_PG_HOST_PORT:-$(grep -s '^MOCK_PG_HOST_PORT=' .env | cut -d= -f2)}"
     sid=$(make_session 15); wait_open 15
+    check_re "회차 ID" '^[0-9]+$' "$sid"
     check_re "준비: 회차" '^.+$' "$sid"
     for i in $(seq 1 25); do
         b=$(new_buyer "$sid" "$i"); buyers+=("${b% *}"); tokens+=("${b#* }")
@@ -393,6 +407,7 @@ scenario_kopis() {
     before=$(count_perf)
     check_re "기준 공연 수" '^[1-9][0-9]*$' "$before"
     sid=$(make_session 15); wait_open 15
+    check_re "회차 ID" '^[0-9]+$' "$sid"
     a=$(signup_login "fault-kopis-$$@example.com")
     check_re "준비: 회차·사용자" '^.+$' "$sid$a"
     local seats; read -ra seats <<< "$(seat_ids "$sid" 3)"
