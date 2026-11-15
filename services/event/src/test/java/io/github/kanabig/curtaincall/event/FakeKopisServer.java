@@ -28,6 +28,8 @@ public final class FakeKopisServer {
     public volatile String overrideBody;
     /** 이 공연 ID의 상세는 깨진 XML로 답한다. */
     public volatile String brokenDetailId;
+    /** 이 시설 ID의 상세는 깨진 XML로 답한다. */
+    public volatile String brokenFacilityId;
     /** afterdate가 붙은 목록에도 이 본문을 돌려준다(바뀐 공연이 있는 상황). */
     public volatile String afterdateListBody;
 
@@ -57,6 +59,7 @@ public final class FakeKopisServer {
         delayMs = 0;
         overrideBody = null;
         brokenDetailId = null;
+        brokenFacilityId = null;
         afterdateListBody = null;
     }
 
@@ -99,6 +102,9 @@ public final class FakeKopisServer {
         String query = uri.getQuery() == null ? "" : uri.getQuery();
         String[] parts = path.split("/");
         if (path.startsWith("/prfplc/")) {
+            if (parts[2].equals(brokenFacilityId)) {
+                return "<dbs><db><mt10id>" + parts[2] + "</mt10id>";
+            }
             return fixture("prfplc-" + parts[2] + ".xml");
         }
         if (parts.length >= 3) {

@@ -232,8 +232,11 @@ public class KopisSyncService {
     private void syncDetails(CallBudget budget, Progress progress, LocalDate endedAfter, LocalDate today) {
         Set<String> triedVenues = new HashSet<>();
         // 지난 실행에서 상세는 받았지만 시설을 못 받은 공연과 오래된 시설을 먼저 채운다. 밀린 상세가 호출을 다 써도 시설이 굶지 않게 하려는 순서다
-        for (String mt10id :
-                venues.findNeedingFetch(clock.instant().minus(properties.facilityRefresh()), endedAfter, 1000)) {
+        for (String mt10id : venues.findNeedingFetch(
+                clock.instant().minus(properties.facilityRefresh()),
+                endedAfter,
+                properties.detailMaxAttempts(),
+                1000)) {
             fetchFacility(budget, progress, mt10id, triedVenues);
         }
         List<String> failed = new ArrayList<>();
@@ -268,7 +271,9 @@ public class KopisSyncService {
 
     private void fetchFacility(CallBudget budget, Progress progress, String mt10id, Set<String> tried) {
         Instant refreshBefore = clock.instant().minus(properties.facilityRefresh());
-        if (venues.isFresh(mt10id, refreshBefore) || !tried.add(mt10id)) {
+        if (venues.isFresh(mt10id, refreshBefore)
+                || venues.isExhausted(mt10id, properties.detailMaxAttempts(), refreshBefore)
+                || !tried.add(mt10id)) {
             return;
         }
         String xml = call(budget, () -> client.facilityDetail(mt10id));
@@ -278,6 +283,7 @@ public class KopisSyncService {
             progress.facilitiesFetched++;
         } catch (KopisParseException e) {
             log.warn("공연시설상세 파싱 실패 {}: {}", mt10id, e.getMessage());
+            venues.recordFailure(mt10id, clock.instant(), refreshBefore);
             countParseFailure(progress, 1);
         }
     }

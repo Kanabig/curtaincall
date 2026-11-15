@@ -27,12 +27,14 @@ public class QueueService {
     private final ZoneId zone;
     private final long soldOutPollAfterMs;
     private final EntryTokenIssuer tokenIssuer;
+    private final RedisCircuit circuit;
 
     public QueueService(QueueRepository repository, QueueProperties properties, EntryTokenIssuer tokenIssuer) {
         this.repository = repository;
         this.tokenIssuer = tokenIssuer;
         this.zone = properties.zone();
         this.soldOutPollAfterMs = properties.soldOutPollAfter().toMillis();
+        this.circuit = new RedisCircuit(properties.redisCircuitOpen(), System::nanoTime);
     }
 
     /** 이미 대기 중이면 기존 순번을 그대로 돌려준다. {@link Entered#created()}는 이번 호출로 새로 들어왔는지다. */
@@ -76,12 +78,22 @@ public class QueueService {
         return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMs), zone).toString();
     }
 
-    private static <T> T call(java.util.function.Supplier<T> action) {
+    /** 서킷이 열려 있으면 Redis를 부르지 않고 바로 503. 장애 중 WARN 로그는 서킷이 열릴 때만 남긴다. */
+    private <T> T call(java.util.function.Supplier<T> action) {
+        if (!circuit.tryAcquire()) {
+            throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
+        }
         try {
-            return action.get();
+            T result = action.get();
+            circuit.onSuccess();
+            return result;
         } catch (DataAccessException e) {
             log.warn("Redis 호출 실패로 대기열을 사용할 수 없다: {}", e.toString());
+            circuit.onFailure();
             throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
+        } catch (RuntimeException e) {
+            circuit.release();
+            throw e;
         }
     }
 

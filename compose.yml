@@ -171,7 +171,8 @@ services:
       kafka: { condition: service_healthy }
     healthcheck:
       <<: *java-health
-      test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health"]
+      # Redis가 내려가도 queue는 503으로 응답하며 살아 있어야 하므로 liveness로 확인한다
+      test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health/liveness"]
 
   reservation:
     <<: *service

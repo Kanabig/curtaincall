@@ -19,6 +19,11 @@ logging:
   pattern:
     level: "%5p [${spring.application.name},%X{requestId:-}]"
 management:
+  endpoint:
+    health:
+      # liveness는 프로세스만, readiness는 트래픽 수락 상태만 본다. Redis·Kafka 상태는 /actuator/health에만 나온다
+      probes:
+        enabled: true
   endpoints:
     web:
       exposure:

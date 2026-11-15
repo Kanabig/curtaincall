@@ -236,6 +236,33 @@ class KopisSyncServiceTests extends EventIntegrationTest {
     }
 
     @Test
+    @DisplayName("[NFR-8] 시설 상세가 계속 깨지는 시설은 시도 한도까지만 다시 받고, 다른 시설은 계속 받는다")
+    void brokenFacilityStopsAtAttemptLimit() {
+        SERVER.brokenFacilityId = "FC001535";
+
+        SyncRun first = syncService.sync("TEST");
+        assertThat(first.status()).isEqualTo(SyncStatus.SUCCESS);
+        assertThat(first.parseFailures()).isEqualTo(1);
+        assertThat(count("venue")).isEqualTo(2);
+
+        syncService.sync("TEST");
+        syncService.sync("TEST");
+        assertThat(facilityRequests("FC001535")).isEqualTo(3);
+        assertThat(jdbc.queryForObject(
+                        "SELECT attempts FROM venue_fetch_failure WHERE mt10id = 'FC001535'", Integer.class))
+                .isEqualTo(3);
+
+        syncService.sync("TEST");
+        assertThat(facilityRequests("FC001535")).isEqualTo(3);
+    }
+
+    private long facilityRequests(String mt10id) {
+        return SERVER.requests().stream()
+                .filter(uri -> uri.getPath().equals("/prfplc/" + mt10id))
+                .count();
+    }
+
+    @Test
     @DisplayName("다른 인스턴스가 락을 잡고 있으면 동기화하지 않고 건너뛴다")
     void skipsWhenLocked() {
         Instant now = clock.instant();

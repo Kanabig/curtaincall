@@ -18,6 +18,7 @@ public class VenueRepository {
 
     /** 시설과 공연장을 upsert하고, KOPIS 응답에 더는 없는 공연장은 지운다. */
     public void upsert(KopisFacility facility, Instant now) {
+        jdbc.update("DELETE FROM venue_fetch_failure WHERE mt10id = ?", facility.mt10id());
         jdbc.update(
                 "INSERT INTO venue (mt10id, name, hall_count, seat_scale, address, latitude, longitude, fetched_at)"
                         + " VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name),"
@@ -47,15 +48,41 @@ public class VenueRepository {
     /**
      * 시설 상세를 새로 받아야 하는 시설 ID. 공연이 참조하는데 아직 없거나 refreshBefore보다 오래된 것. 끝난 공연만 참조하는 시설은 갱신하지 않는다.
      */
-    public List<String> findNeedingFetch(Instant refreshBefore, java.time.LocalDate endedAfter, int limit) {
+    public List<String> findNeedingFetch(
+            Instant refreshBefore, java.time.LocalDate endedAfter, int maxAttempts, int limit) {
         return jdbc.queryForList(
                 "SELECT DISTINCT p.mt10id FROM performance p LEFT JOIN venue v ON v.mt10id = p.mt10id"
+                        + " LEFT JOIN venue_fetch_failure f ON f.mt10id = p.mt10id"
                         + " WHERE p.mt10id IS NOT NULL AND p.end_date >= ? AND (v.mt10id IS NULL OR v.fetched_at < ?)"
+                        + " AND (f.mt10id IS NULL OR f.attempts < ? OR f.last_failed_at < ?)"
                         + " ORDER BY p.mt10id LIMIT ?",
                 String.class,
                 java.sql.Date.valueOf(endedAfter),
                 Timestamp.from(refreshBefore),
+                maxAttempts,
+                Timestamp.from(refreshBefore),
                 limit);
+    }
+
+    /** 시설 상세 파싱 실패를 센다. 한도를 넘긴 시설은 refreshBefore가 지나기 전에는 다시 받지 않는다. */
+    public void recordFailure(String mt10id, Instant now, Instant refreshBefore) {
+        jdbc.update(
+                "INSERT INTO venue_fetch_failure (mt10id, attempts, last_failed_at) VALUES (?, 1, ?)"
+                        + " ON DUPLICATE KEY UPDATE attempts = IF(last_failed_at < ?, 1, attempts + 1),"
+                        + " last_failed_at = VALUES(last_failed_at)",
+                mt10id,
+                Timestamp.from(now),
+                Timestamp.from(refreshBefore));
+    }
+
+    public boolean isExhausted(String mt10id, int maxAttempts, Instant refreshBefore) {
+        Integer found = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM venue_fetch_failure WHERE mt10id = ? AND attempts >= ? AND last_failed_at >= ?",
+                Integer.class,
+                mt10id,
+                maxAttempts,
+                Timestamp.from(refreshBefore));
+        return found != null && found > 0;
     }
 
     public boolean isFresh(String mt10id, Instant refreshBefore) {
