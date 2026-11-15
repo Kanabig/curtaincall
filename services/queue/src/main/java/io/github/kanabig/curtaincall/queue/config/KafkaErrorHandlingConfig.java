@@ -13,16 +13,10 @@ import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 @Configuration(proxyBeanMethods = false)
 public class KafkaErrorHandlingConfig {
 
-    /** 다른 서비스도 읽는 토픽(event.session, reservation.order)은 {토픽}.queue.DLT, queue만 읽는 reservation.session은 {토픽}.DLT. */
-    static String deadLetterTopic(String topic) {
-        boolean shared = "event.session".equals(topic) || "reservation.order".equals(topic);
-        return shared ? topic + ".queue.DLT" : topic + ".DLT";
-    }
-
     @Bean
-    DefaultErrorHandler sessionErrorHandler(KafkaOperations<Object, Object> template) {
+    DefaultErrorHandler sessionErrorHandler(KafkaOperations<Object, Object> template, DltProperties dlt) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
-                template, (record, e) -> new TopicPartition(deadLetterTopic(record.topic()), -1));
+                template, (record, e) -> new TopicPartition(dlt.dltTopic(record.topic()), -1));
         ExponentialBackOffWithMaxRetries backOff = new ExponentialBackOffWithMaxRetries(3);
         backOff.setInitialInterval(1000);
         backOff.setMultiplier(2.0);

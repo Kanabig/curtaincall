@@ -40,6 +40,11 @@ curtaincall:
     order: reservation.order
     reservation-session: reservation.session
   queue:
+    dlt:
+      # 기본은 {토픽}.DLT. 다른 서비스도 읽는 토픽만 서비스를 붙여 나눈다
+      topics:
+        "[event.session]": event.session.queue.DLT
+        "[reservation.order]": reservation.order.queue.DLT
     zone: Asia/Seoul
     entry-ttl: 10m
     stale-after: 60s
