@@ -1,6 +1,10 @@
 spring:
   application:
     name: reservation
+  datasource:
+    hikari:
+      # 기본 10개에서는 초당 1000건 점유 부하에서 연결 획득 대기가 쌓여 처리량이 700/s에서 멈췄다(p95 3초). 서비스 하나가 쓰는 연결이 늘므로 MySQL max_connections(151)와 서비스별 풀 합계를 함께 본다
+      maximum-pool-size: 40
   kafka:
     consumer:
       auto-offset-reset: earliest
