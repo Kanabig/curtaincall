@@ -13,9 +13,10 @@ import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 @Configuration(proxyBeanMethods = false)
 public class KafkaErrorHandlingConfig {
 
-    /** queue가 읽는 두 토픽(event.session, reservation.order)은 다른 서비스도 읽으므로 DLT를 {토픽}.queue.DLT로 나눈다. */
+    /** 다른 서비스도 읽는 토픽(event.session, reservation.order)은 {토픽}.queue.DLT, queue만 읽는 reservation.session은 {토픽}.DLT. */
     static String deadLetterTopic(String topic) {
-        return topic + ".queue.DLT";
+        boolean shared = "event.session".equals(topic) || "reservation.order".equals(topic);
+        return shared ? topic + ".queue.DLT" : topic + ".DLT";
     }
 
     @Bean
