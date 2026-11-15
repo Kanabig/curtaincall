@@ -31,7 +31,7 @@ public class SessionTopicsConfig {
 
     @Bean
     NewTopic sessionDltTopic() {
-        return TopicBuilder.name(SESSION_TOPIC + ".DLT")
+        return TopicBuilder.name(SESSION_TOPIC + ".queue.DLT")
                 .partitions(3)
                 .replicas(1)
                 .build();

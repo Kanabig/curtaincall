@@ -25,6 +25,8 @@ curtaincall:
     enabled: true
     consumer:
       enabled: true
+      # event.session은 queue도 읽는다. DLT를 서비스별로 나눈다
+      dlt-suffix: .reservation.DLT
   event:
     base-url: http://localhost:8082
     connect-timeout: 1s

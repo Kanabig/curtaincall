@@ -171,16 +171,14 @@ scenario_aux() {
     sid=$(make_session 15); wait_open 15
     a=$(signup_login "fault-aux-$$@example.com"); ta=$(enter_token "$sid" "$a")
     say "notification, search-assist 중단"
-    compose stop notification search-assist
+    compose stop notification
     local order; order=$(purchase "$sid" "$a" "$ta" 1) && ok "결제 요청까지 완료: $order" || bad "예매 실패: $order"
     check "주문 확정" "CONFIRMED/APPROVED" "$(wait_order "$order" "$a" 'CONFIRMED|PAID|APPROVED' 60 || true)"
-    api POST /api/v1/search/assist "$a" '{"query":"서울 뮤지컬"}' > /dev/null
-    echo "search-assist 중단 중 검색 응답 코드: $CODE (예매와 무관해야 한다. 502·503 허용)"
+    echo "search-assist: 해당 없음(미구현). 구현 뒤 중단 시나리오를 추가한다"
     say "notification 복구: 쌓인 이벤트로 메일이 오는지(mailpit)"
     compose start notification
     sleep 15
     curl -s "http://localhost:${MAILPIT_UI_HOST_PORT:-$(grep -s '^MAILPIT_UI_HOST_PORT=' .env | cut -d= -f2)}/api/v1/messages" | jq '.messages_count' | tee "$OUT/mails.txt"
-    compose start search-assist
     exit_status
 }
 
@@ -213,10 +211,10 @@ scenario_dlt() {
     FAILED=0
     compose up -d --build --wait
     local kt=/opt/kafka/bin
-    say "event.session에 깨진 메시지를 넣는다(queue·reservation 둘 다 DLT로 보내야 한다)"
+    say "event.session에 깨진 메시지를 넣는다(queue·reservation이 각자 {토픽}.{서비스}.DLT로 보내야 한다)"
     echo '999:{not-json' | compose exec -T kafka $kt/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic event.session --property parse.key=true --property key.separator=:
     sleep 12
-    for t in event.session.DLT; do
+    for t in event.session.queue.DLT event.session.reservation.DLT; do
         compose exec -T kafka $kt/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic "$t" --from-beginning --timeout-ms 8000 --property print.headers=true 2>/dev/null | tee "$OUT/$t.txt"
         [ -s "$OUT/$t.txt" ] && ok "$t 에 쌓였다" || bad "$t 가 비어 있다"
     done

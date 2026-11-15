@@ -34,9 +34,18 @@ public class OrderTopicsConfig {
                 .build();
     }
 
+    /** event.session은 queue도 읽으므로 DLT 이름에 서비스를 붙인다(application.yml의 dlt-suffix). 읽는 토픽 전체에 같은 접미사가 붙는다. */
     @Bean
     NewTopic paymentEventDltTopic() {
-        return TopicBuilder.name(PAYMENT_TOPIC + ".DLT")
+        return TopicBuilder.name(PAYMENT_TOPIC + ".reservation.DLT")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    NewTopic sessionEventDltTopic() {
+        return TopicBuilder.name("event.session.reservation.DLT")
                 .partitions(3)
                 .replicas(1)
                 .build();
