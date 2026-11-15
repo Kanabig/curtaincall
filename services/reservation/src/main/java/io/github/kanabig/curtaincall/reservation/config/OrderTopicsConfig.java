@@ -26,7 +26,7 @@ public class OrderTopicsConfig {
      * 키(sessionId)별 마지막 판정만 있으면 되는 상태 이벤트라 compaction을 쓴다. queue의 Redis를 잃어도 컨슈머 그룹 오프셋을 처음으로 돌리면 매진 상태가 복구된다.
      */
     @Bean
-    NewTopic sessionTopic() {
+    NewTopic availabilityTopic() {
         return TopicBuilder.name(SESSION_TOPIC)
                 .partitions(3)
                 .replicas(1)
