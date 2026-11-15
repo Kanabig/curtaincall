@@ -1,0 +1,4 @@
+curtaincall:
+  outbox:
+    consumer:
+      backoff-initial: 50ms

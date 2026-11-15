@@ -33,6 +33,12 @@ final class FakePg {
     volatile long hangMs = 60_000;
     volatile boolean inquiryFail;
     volatile boolean cancelFail;
+    /** 거래 취소(tid)가 앞으로 이 횟수만큼 500으로 실패한다. */
+    final AtomicInteger tidCancelFailures = new AtomicInteger();
+    /** 거래 취소를 PG에 반영한 뒤 응답을 끊는다(결과 불명). */
+    volatile boolean tidCancelDropResponse;
+
+    private final AtomicInteger tidCancelRequests = new AtomicInteger();
     private final java.util.Set<String> preCancelled = ConcurrentHashMap.newKeySet();
     private final AtomicInteger cancelRequests = new AtomicInteger();
 
@@ -61,6 +67,9 @@ final class FakePg {
         dropResponse = false;
         inquiryFail = false;
         cancelFail = false;
+        tidCancelFailures.set(0);
+        tidCancelDropResponse = false;
+        tidCancelRequests.set(0);
         transactions.clear();
         approvalRequests.clear();
         preCancelled.clear();
@@ -82,6 +91,18 @@ final class FakePg {
         transactions.put(
                 merchantOrderId,
                 new Transaction("mpg_seed_" + merchantOrderId, merchantOrderId, "APPROVED", amount, Instant.now()));
+    }
+
+    /** 거래 취소(tid) 요청이 PG에 도착한 횟수. */
+    int tidCancelRequests() {
+        return tidCancelRequests.get();
+    }
+
+    /** 실제로 취소 상태로 바뀐 거래 수(환불 건수). */
+    long cancelledTransactions() {
+        return transactions.values().stream()
+                .filter(t -> "CANCELLED".equals(t.status()))
+                .count();
     }
 
     int cancelRequests() {
@@ -151,11 +172,45 @@ final class FakePg {
     }
 
     private void transactions(HttpExchange exchange) throws IOException {
-        if ("POST".equals(exchange.getRequestMethod())) {
+        String path = exchange.getRequestURI().getPath();
+        if ("POST".equals(exchange.getRequestMethod()) && !path.equals("/pg/v1/transactions/cancel")) {
+            cancelByTid(exchange, path.split("/")[4]);
+        } else if ("POST".equals(exchange.getRequestMethod())) {
             cancelByOrder(exchange);
         } else {
             find(exchange);
         }
+    }
+
+    /** mock-pg의 거래 취소: 이미 취소된 거래도 성공이다. */
+    private void cancelByTid(HttpExchange exchange, String tid) throws IOException {
+        tidCancelRequests.incrementAndGet();
+        if (tidCancelFailures.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
+            respond(exchange, 500, "{}");
+            exchange.close();
+            return;
+        }
+        Transaction found = null;
+        for (Map.Entry<String, Transaction> entry : transactions.entrySet()) {
+            if (entry.getValue().tid().equals(tid)) {
+                found = entry.getValue();
+                Transaction cancelled = new Transaction(
+                        found.tid(), found.merchantOrderId(), "CANCELLED", found.amount(), found.createdAt());
+                transactions.put(entry.getKey(), cancelled);
+                found = cancelled;
+            }
+        }
+        if (found == null) {
+            respond(exchange, 404, "{}");
+        } else if (tidCancelDropResponse) {
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.getResponseHeaders().add("Connection", "close");
+            exchange.sendResponseHeaders(200, 1024);
+            exchange.getResponseBody().flush();
+        } else {
+            respond(exchange, 200, json(found, false));
+        }
+        exchange.close();
     }
 
     /** mock-pg의 망취소: 거래가 없으면 사전 취소로 기록해 이후 승인을 거절한다. */

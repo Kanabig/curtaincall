@@ -1,0 +1,7 @@
+curtaincall:
+  jwt:
+    access-secret: test-only-secret-test-only-secret-0123456789
+  user:
+    admin:
+      email: admin@curtaincall.test
+      password: admin-password-1

@@ -85,6 +85,33 @@ public class PgClient {
     }
 
     /**
+     * 승인된 거래의 취소(환불). PG에서 멱등이라 이미 취소된 거래도 성공이다. 조회와 같은 Bulkhead를 쓰고, 2xx에 취소 상태가 확인될 때만 성공으로 본다.
+     */
+    public CancelOutcome cancel(String tid) {
+        try {
+            PgTransaction transaction = Bulkhead.decorateSupplier(queryBulkhead, () -> requestCancel(tid))
+                    .get();
+            if (transaction != null && "CANCELLED".equals(transaction.status())) {
+                return new CancelOutcome.Cancelled();
+            }
+            return new CancelOutcome.Failed("status=" + (transaction == null ? null : transaction.status()));
+        } catch (BulkheadFullException e) {
+            return new CancelOutcome.Failed("bulkhead full");
+        } catch (RuntimeException e) {
+            log.warn("PG 취소에 실패했다: tid={}, cause={}", tid, e.toString());
+            return new CancelOutcome.Failed(e.getClass().getSimpleName());
+        }
+    }
+
+    private PgTransaction requestCancel(String tid) {
+        return restClient
+                .post()
+                .uri("/pg/v1/transactions/{tid}/cancel", tid)
+                .retrieve()
+                .body(PgTransaction.class);
+    }
+
+    /**
      * 망취소. 거래가 있으면 취소하고, 없으면 PG가 사전 취소로 기록해 이후 같은 주문의 승인을 거절한다. 2xx만 성공이다. 404는 경로·설정 오류일 수 있어 취소가 기록됐다고 볼 수
      * 없으므로 실패로 둔다.
      */

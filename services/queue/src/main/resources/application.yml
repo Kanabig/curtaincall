@@ -1,6 +1,18 @@
 spring:
   application:
     name: queue
+  data:
+    redis:
+      # 장애 때 요청이 오래 매달리지 않게 한다(NFR-5 p95 200ms)
+      timeout: 500ms
+      connect-timeout: 500ms
+  kafka:
+    consumer:
+      group-id: queue
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
 server:
   port: 8083
 logging:
@@ -17,3 +29,15 @@ management:
     distribution:
       percentiles-histogram:
         "[http.server.requests]": true
+curtaincall:
+  topics:
+    session: event.session
+    order: reservation.order
+  queue:
+    zone: Asia/Seoul
+    entry-ttl: 10m
+    stale-after: 60s
+    admit-stale-after: 15s
+    admit-drop-limit: 1000
+  jwt:
+    # 비밀값이라 기본값을 두지 않는다. 환경변수 CURTAINCALL_JWT_ENTRY_SECRET으로 넣는다(gateway와 같은 값)

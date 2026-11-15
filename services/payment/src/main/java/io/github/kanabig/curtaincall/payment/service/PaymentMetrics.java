@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 public class PaymentMetrics {
 
     private final Counter unknownExhausted;
+    private final Counter cancelFailed;
 
     public PaymentMetrics(MeterRegistry meterRegistry, PaymentRepository repository) {
         Gauge.builder(MetricNames.PAYMENT_UNKNOWN, () -> repository.countByStatus(PaymentStatus.UNKNOWN))
@@ -22,6 +23,14 @@ public class PaymentMetrics {
                 .tag(MetricNames.TAG_STATUS, "UNKNOWN")
                 .description("거래 조회 제한 시간 안에 결과를 얻지 못해 UNKNOWN으로 남은 건수")
                 .register(meterRegistry);
+        this.cancelFailed = Counter.builder(MetricNames.PAYMENT_ATTENTION)
+                .tag(MetricNames.TAG_STATUS, "CANCEL_FAILED")
+                .description("PG 취소가 재시도 한도를 넘어 CANCEL_FAILED로 남은 건수")
+                .register(meterRegistry);
+    }
+
+    public void cancelFailed() {
+        cancelFailed.increment();
     }
 
     public void unknownExhausted() {

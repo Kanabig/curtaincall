@@ -11,6 +11,10 @@ public sealed interface InquiryOutcome {
             return "APPROVED".equals(status);
         }
 
+        public boolean isCancelled() {
+            return "CANCELLED".equals(status);
+        }
+
         public boolean isDeclined() {
             return "DECLINED".equals(status);
         }

@@ -44,8 +44,12 @@ services:
 
   redis:
     image: redis:8.0.6
+    # 재시작 때 대기열 순번과 회차 설정이 사라지지 않게 AOF를 켠다
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -97,9 +101,16 @@ services:
     image: curtaincall/gateway:local
     ports:
       - "${GATEWAY_HOST_PORT:-8080}:8080"
+    environment:
+      <<: *service-env
+      # user가 서명한 access token을 같은 키로 검증한다
+      CURTAINCALL_JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      # queue가 서명한 입장 토큰을 같은 키로 검증한다
+      CURTAINCALL_JWT_ENTRY_SECRET: ${JWT_ENTRY_SECRET}
     healthcheck:
       <<: *java-health
-      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      # actuator는 외부 포트(8080)와 분리된 관리 포트에서만 연다
+      test: ["CMD", "curl", "-fs", "http://localhost:8089/actuator/health"]
 
   user:
     <<: *service
@@ -114,6 +125,10 @@ services:
       SPRING_FLYWAY_PASSWORD: ${USER_FLYWAY_PASSWORD}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      # access token 서명 키. gateway가 같은 값으로 검증한다
+      CURTAINCALL_JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      CURTAINCALL_ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      CURTAINCALL_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -147,8 +162,13 @@ services:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: queue } }
     image: curtaincall/queue:local
+    environment:
+      <<: *service-env
+      # 입장 토큰 서명 키. gateway가 같은 값으로 검증한다
+      CURTAINCALL_JWT_ENTRY_SECRET: ${JWT_ENTRY_SECRET}
     depends_on:
       redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
     healthcheck:
       <<: *java-health
       test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health"]
@@ -166,6 +186,7 @@ services:
       SPRING_FLYWAY_PASSWORD: ${RESERVATION_FLYWAY_PASSWORD}
       CURTAINCALL_EVENT_BASE_URL: http://event:8082
       CURTAINCALL_HOLD_STRATEGY: ${CURTAINCALL_HOLD_STRATEGY:-conditional-update}
+      CURTAINCALL_SEAT_STATUS_CACHE_TTL: ${CURTAINCALL_SEAT_STATUS_CACHE_TTL:-2s}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     depends_on:
@@ -223,6 +244,7 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
+      CURTAINCALL_USER_BASE_URL: http://user:8081
     depends_on:
       mysql: { condition: service_healthy }
       kafka: { condition: service_healthy }
@@ -276,3 +298,4 @@ services:
 volumes:
   mysql-data:
   kafka-data:
+  redis-data:

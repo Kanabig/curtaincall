@@ -4,4 +4,11 @@ plugins {
 
 dependencies {
     implementation project(':libs:common-web')
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    // BCrypt, HS256 JWT 서명. Spring Security 본체(필터 체인)는 쓰지 않는다
+    implementation 'org.springframework.security:spring-security-oauth2-jose'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
+    runtimeOnly 'com.mysql:mysql-connector-j'
 }

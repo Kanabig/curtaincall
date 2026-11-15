@@ -6,6 +6,7 @@ import io.github.kanabig.curtaincall.outbox.message.EventEnvelope;
 import io.github.kanabig.curtaincall.outbox.message.EventTypes;
 import io.github.kanabig.curtaincall.payment.config.PaymentProperties;
 import io.github.kanabig.curtaincall.payment.dto.ApprovePaymentCommand;
+import io.github.kanabig.curtaincall.payment.dto.CancelPaymentCommand;
 import io.github.kanabig.curtaincall.payment.entity.Payment;
 import io.github.kanabig.curtaincall.payment.repository.PaymentRepository;
 import java.time.Clock;
@@ -32,22 +33,27 @@ public class PaymentCommandService {
     private final PaymentRepository repository;
     private final PaymentEvents events;
     private final PaymentApprovalService approvalService;
+    private final PaymentCancelService cancelService;
     private final ObjectMapper objectMapper;
     private final PaymentProperties.Inquiry inquiry;
+    private final PaymentProperties.Cancel cancel;
     private final Clock clock;
 
     public PaymentCommandService(
             PaymentRepository repository,
             PaymentEvents events,
             PaymentApprovalService approvalService,
+            PaymentCancelService cancelService,
             ObjectMapper objectMapper,
             PaymentProperties properties,
             Clock clock) {
         this.repository = repository;
         this.events = events;
         this.approvalService = approvalService;
+        this.cancelService = cancelService;
         this.objectMapper = objectMapper;
         this.inquiry = properties.inquiry();
+        this.cancel = properties.cancel();
         this.clock = clock;
     }
 
@@ -55,7 +61,9 @@ public class PaymentCommandService {
     public void handle(EventEnvelope envelope) {
         String name = EventTypes.nameOf(envelope.eventType());
         if ("ApprovePayment".equals(name)) {
-            approve(read(envelope));
+            approve(read(envelope, ApprovePaymentCommand.class));
+        } else if ("CancelPayment".equals(name)) {
+            cancel(read(envelope, CancelPaymentCommand.class));
         } else {
             log.warn("처리하지 않는 명령이다: eventType={}, eventId={}", envelope.eventType(), envelope.eventId());
         }
@@ -75,6 +83,53 @@ public class PaymentCommandService {
             @Override
             public void afterCommit() {
                 approvalService.dispatch(paymentId);
+            }
+        });
+    }
+
+    /**
+     * [PAY-5] 환불 명령. 이미 CANCELLED면 PG를 다시 부르지 않고 같은 응답을 다시 보낸다. 환불할 승인이 없는 결제(승인 전, 실패)는 응답하지 않는다. 오케스트레이터는 승인
+     * 응답을 받은 뒤에만 취소를 보내므로 정상 흐름에서는 오지 않는다.
+     */
+    private void cancel(CancelPaymentCommand command) {
+        Payment payment = repository.findByOrderId(command.orderId()).orElse(null);
+        if (payment == null) {
+            log.warn("결제가 없는 주문의 취소 명령이다: orderId={}", command.orderId());
+            return;
+        }
+        if (command.paymentId() != null && !command.paymentId().equals(payment.getPaymentId())) {
+            log.warn("결제 ID가 맞지 않는 취소 명령이다: orderId={}, paymentId={}", command.orderId(), command.paymentId());
+            return;
+        }
+        payment = lock(payment);
+        switch (payment.getStatus()) {
+            case CANCELLED -> events.cancelled(payment);
+            case CANCELLING -> {
+                // 다음 시도 예약은 DB에 남아 프로세스가 죽어도 스케줄러가 이어받는다. 예약이 없는 CANCELLING만 다시 시작한다
+                if (payment.getNextCancelAt() == null) {
+                    payment.restartCancel(clock.instant(), cancel.lease());
+                    dispatchAfterCommit(payment.getPaymentId());
+                } else {
+                    log.info("취소가 진행 중이라 재전송된 명령은 무시한다: orderId={}", payment.getOrderId());
+                }
+            }
+            case APPROVED, CANCEL_FAILED -> {
+                payment.startCancel(command.reason(), clock.instant(), cancel.lease());
+                dispatchAfterCommit(payment.getPaymentId());
+            }
+            case REQUESTED, UNKNOWN, FAILED ->
+                log.error(
+                        "환불할 승인이 없는 결제의 취소 명령이다. 응답하지 않는다: orderId={}, status={}",
+                        payment.getOrderId(),
+                        payment.getStatus());
+        }
+    }
+
+    private void dispatchAfterCommit(String paymentId) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                cancelService.dispatch(paymentId);
             }
         });
     }
@@ -107,11 +162,11 @@ public class PaymentCommandService {
         }
     }
 
-    private ApprovePaymentCommand read(EventEnvelope envelope) {
+    private <T> T read(EventEnvelope envelope, Class<T> type) {
         try {
-            return objectMapper.treeToValue(envelope.payload(), ApprovePaymentCommand.class);
+            return objectMapper.treeToValue(envelope.payload(), type);
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("ApprovePayment payload를 읽을 수 없다: " + envelope.eventId(), e);
+            throw new IllegalArgumentException(type.getSimpleName() + " payload를 읽을 수 없다: " + envelope.eventId(), e);
         }
     }
 }

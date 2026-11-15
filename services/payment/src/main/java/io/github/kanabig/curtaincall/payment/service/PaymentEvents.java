@@ -3,6 +3,7 @@ package io.github.kanabig.curtaincall.payment.service;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxWriter;
 import io.github.kanabig.curtaincall.payment.config.PaymentTopicsConfig;
 import io.github.kanabig.curtaincall.payment.dto.PaymentApprovedEvent;
+import io.github.kanabig.curtaincall.payment.dto.PaymentCancelledEvent;
 import io.github.kanabig.curtaincall.payment.dto.PaymentFailedEvent;
 import io.github.kanabig.curtaincall.payment.entity.Payment;
 import org.springframework.stereotype.Component;
@@ -31,5 +32,13 @@ class PaymentEvents {
                 payment.getOrderId(),
                 "PaymentFailed",
                 PaymentFailedEvent.from(payment));
+    }
+
+    void cancelled(Payment payment) {
+        outboxWriter.append(
+                PaymentTopicsConfig.PAYMENT_TOPIC,
+                payment.getOrderId(),
+                "PaymentCancelled",
+                PaymentCancelledEvent.from(payment));
     }
 }

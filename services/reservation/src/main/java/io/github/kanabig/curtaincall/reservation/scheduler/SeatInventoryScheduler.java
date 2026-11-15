@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-/** [EVT-9] PENDING 회차의 재고 생성을 주기적으로 처리한다. */
+/** [EVT-9] PENDING 회차의 재고 생성과 가격 수정 반영을 주기적으로 처리한다. */
 @Component
 @ConditionalOnProperty(
         prefix = "curtaincall.inventory.scheduler",
@@ -23,5 +23,6 @@ public class SeatInventoryScheduler {
     @Scheduled(fixedDelayString = "${curtaincall.inventory.scheduler.interval:2s}")
     void run() {
         service.processPending();
+        service.syncPrices();
     }
 }

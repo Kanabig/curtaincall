@@ -13,6 +13,12 @@ payment:
     poll-interval: 50ms
     lease: 5s
     requested-stale-after: 5s
+  cancel:
+    initial-delay: 100ms
+    max-interval: 300ms
+    max-attempts: 5
+    poll-interval: 50ms
+    lease: 1s
 curtaincall:
   outbox:
     relay:

@@ -2,15 +2,21 @@ package io.github.kanabig.curtaincall.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kanabig.curtaincall.testsupport.TestContainersConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// 다른 컨텍스트와 같은 컨슈머 그룹으로 파티션을 나눠 갖지 않게 리스너는 끈다
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "spring.kafka.listener.auto-startup=false")
+@Import(TestContainersConfig.class)
 class NotificationApplicationTests {
 
     @Autowired

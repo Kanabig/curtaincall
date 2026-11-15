@@ -26,6 +26,7 @@ public class PaymentResultService {
     private final PaymentEvents events;
     private final PaymentMetrics metrics;
     private final PaymentProperties.Inquiry inquiry;
+    private final PaymentProperties.Cancel cancel;
     private final Clock clock;
 
     public PaymentResultService(
@@ -38,6 +39,7 @@ public class PaymentResultService {
         this.events = events;
         this.metrics = metrics;
         this.inquiry = properties.inquiry();
+        this.cancel = properties.cancel();
         this.clock = clock;
     }
 
@@ -122,6 +124,33 @@ public class PaymentResultService {
     public void netCancelFailed(String paymentId) {
         metrics.unknownExhausted();
         log.error("망취소에 실패했다. UNKNOWN으로 남긴다: paymentId={}", paymentId);
+    }
+
+    /** PG 취소가 확인됐다. 이미 끝난 건이면 이벤트를 다시 내지 않는다. */
+    @Transactional
+    public void cancelled(String paymentId) {
+        Payment payment = lock(paymentId);
+        if (payment.cancelled(clock.instant())) {
+            events.cancelled(payment);
+        } else {
+            log.info("취소 중이 아니라 취소 결과를 무시한다: paymentId={}, status={}", paymentId, payment.getStatus());
+        }
+    }
+
+    /** PG 취소를 확인하지 못했다. 다음 시도를 예약하고, 한도를 넘으면 CANCEL_FAILED로 두고 메트릭을 올린다. 응답은 보내지 않는다. */
+    @Transactional
+    public void cancelMissed(String paymentId) {
+        Payment payment = lock(paymentId);
+        Instant now = clock.instant();
+        Instant next = now.plus(cancel.delayAfter(payment.getCancelAttempts() + 1));
+        if (payment.cancelMissed(now, next, cancel.maxAttempts())) {
+            metrics.cancelFailed();
+            log.error(
+                    "PG 취소가 재시도 한도를 넘었다. 수동 처리가 필요하다: paymentId={}, orderId={}, attempts={}",
+                    paymentId,
+                    payment.getOrderId(),
+                    payment.getCancelAttempts());
+        }
     }
 
     private Payment lock(String paymentId) {

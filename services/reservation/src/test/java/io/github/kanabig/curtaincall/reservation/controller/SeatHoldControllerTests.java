@@ -36,6 +36,11 @@ class SeatHoldControllerTests extends InventoryIntegrationTest {
     @Autowired
     MeterRegistry meterRegistry;
 
+    static final Long NO_HEADER = -1L;
+
+    /** null이면 요청 회차와 같은 값을 보내고, {@link #NO_HEADER}면 헤더를 보내지 않는다. */
+    Long entryHeader;
+
     @BeforeEach
     void seed() {
         jdbc.update(
@@ -52,6 +57,9 @@ class SeatHoldControllerTests extends InventoryIntegrationTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-User-Id", String.valueOf(userId));
+        if (entryHeader != NO_HEADER) {
+            headers.set("X-Entry-Session-Id", String.valueOf(entryHeader == null ? sessionId : entryHeader));
+        }
         return (ResponseEntity<Map<String, Object>>) (ResponseEntity<?>) rest.exchange(
                 "/api/v1/sessions/" + sessionId + "/holds",
                 HttpMethod.POST,
@@ -73,6 +81,23 @@ class SeatHoldControllerTests extends InventoryIntegrationTest {
         assertThat(conflict.getBody())
                 .containsEntry("code", "SEAT_ALREADY_HELD")
                 .containsEntry("seatIds", List.of(2));
+    }
+
+    @Test
+    @DisplayName("[QUE-5] 입장 토큰의 회차가 요청 회차와 다르거나 입장 정보가 없으면 403 ENTRY_TOKEN_INVALID이고 좌석은 잡히지 않는다")
+    void entrySessionMismatch() {
+        entryHeader = 2L;
+        ResponseEntity<Map<String, Object>> other = post(1, 100, Map.of("seatIds", List.of(1)));
+        assertThat(other.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(other.getBody()).containsEntry("code", "ENTRY_TOKEN_INVALID");
+
+        entryHeader = NO_HEADER;
+        ResponseEntity<Map<String, Object>> missing = post(1, 100, Map.of("seatIds", List.of(1)));
+        assertThat(missing.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(missing.getBody()).containsEntry("code", "ENTRY_TOKEN_INVALID");
+
+        entryHeader = null;
+        assertThat(post(1, 200, Map.of("seatIds", List.of(1))).getStatusCode()).isEqualTo(HttpStatus.CREATED);
     }
 
     @Test
