@@ -104,6 +104,7 @@ LOADAVG=$!
     done
     gauge=$(compose exec -T reservation curl -fs http://localhost:8084/actuator/prometheus 2>/dev/null | awk '/^outbox_unpublished[{ ]/{s+=$NF} END{print s+0}')
     dlt=$(compose exec -T reservation curl -fs http://localhost:8084/actuator/prometheus 2>/dev/null | awk '/^outbox_consumer_dlt/ && !/^#/{s+=$NF} END{print s+0}')
+    echo "$(date +%T) seats $(echo "SELECT CONCAT('held=', SUM(status='HELD'), ' sold=', SUM(status='SOLD')) FROM seat_inventory WHERE session_id=${SESSION_ID}" | mysql_root -N reservation_db | tr -d '\r')"
     echo "$(date +%T) queue active=$(compose exec -T redis redis-cli ZCARD "q:${SESSION_ID}:active" | tr -d '[:space:]') waiting=$(compose exec -T redis redis-cli ZCARD "q:${SESSION_ID}:waiting" | tr -d '[:space:]')"
     echo "$(date +%T) reservation outbox_unpublished_db=$(echo 'SELECT COUNT(*) FROM outbox WHERE published_at IS NULL' | mysql_root -N reservation_db | tr -d '[:space:]') gauge=$gauge dlt=$dlt"
   done > "$OUT/lag.txt" ) &
