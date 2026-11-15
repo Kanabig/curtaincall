@@ -186,6 +186,8 @@ services:
       SPRING_FLYWAY_PASSWORD: ${RESERVATION_FLYWAY_PASSWORD}
       CURTAINCALL_EVENT_BASE_URL: http://event:8082
       CURTAINCALL_HOLD_STRATEGY: ${CURTAINCALL_HOLD_STRATEGY:-conditional-update}
+      # DB 연결 풀. 인스턴스 1개 기준 풀 합계 80(reservation 40 + 나머지 4개 서비스 10씩) / MySQL max_connections 151. 인스턴스를 늘리면 합계가 예산을 넘는지 먼저 본다
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${RESERVATION_DB_POOL_SIZE:-40}
       CURTAINCALL_SEAT_STATUS_CACHE_TTL: ${CURTAINCALL_SEAT_STATUS_CACHE_TTL:-500ms}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate

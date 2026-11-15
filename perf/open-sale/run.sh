@@ -136,9 +136,13 @@ compose logs --no-color --since 30m queue gateway reservation payment 2>&1 | gre
 echo "--- 종료 후 정합성 (위반 수)"
 sed "s/session_id = 1/session_id = ${SESSION_ID}/g; s/session_id=1/session_id=${SESSION_ID}/g" perf/seat-hold/verify.sql \
     | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -t reservation_db 2>/dev/null' | tee "$OUT/verify.txt"
-echo "--- 주문 단계 정합성 (위반 수, 확정 예매와 좌석 재고 대응)"
+echo "--- 주문 단계 정합성 (위반 수, 확정 주문과 좌석 재고 대응)"
 { echo "SET @SID = ${SESSION_ID};"; cat perf/open-sale/verify.sql; } \
     | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -t reservation_db 2>/dev/null' | tee "$OUT/verify-orders.txt"
+# 위반 수가 0이 아니거나 검사가 돌지 않았으면 실패로 끝낸다
+VIOLATIONS="$({ echo "SET @SID = ${SESSION_ID};"; cat perf/open-sale/verify.sql; } \
+    | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N reservation_db 2>/dev/null' | awk -F'\t' '{s+=$NF; n++} END{if (n==4) print s; else print "ERR"}')"
 echo "SELECT status, COUNT(*) AS n FROM seat_inventory WHERE session_id=${SESSION_ID} GROUP BY status;
 SELECT status, COUNT(*) AS n FROM orders GROUP BY status;" | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -t reservation_db 2>/dev/null' | tee "$OUT/final-state.txt"
 echo "결과: $OUT"
+[ "$VIOLATIONS" = "0" ] || { echo "정합성 위반 또는 검사 실패: $VIOLATIONS" >&2; exit 1; }
