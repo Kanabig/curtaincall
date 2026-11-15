@@ -247,7 +247,7 @@ scenario_aux() {
     exit_status
 }
 
-# 기대: Redis 중단 중 새 진입은 503(서킷 덕에 p95 ${ENTRY_P95_MS}ms 이하), queue liveness·readiness는 200(Redis 제외)이고 /actuator/health(Redis 포함)는 503, 토큰 보유자의 점유·주문·결제는 계속,
+# 기대: Redis 중단 중 새 진입은 503(연속 실패 한도 N건은 타임아웃을 기다리고, 서킷이 열린 뒤에는 p95 ${ENTRY_P95_MS}ms 이하), queue liveness·readiness는 200(Redis 제외)이고 /actuator/health(Redis 포함)는 503, 토큰 보유자의 점유·주문·결제는 계속,
 # 속도 제한은 fail-open(429·5xx 없음, 메트릭 증가). 복구 뒤 진입 가능. Redis 유실은 event.session 되감기로 복구(토픽은 compaction).
 scenario_redis() {
     FAILED=0
@@ -275,8 +275,23 @@ scenario_redis() {
     open0=$(metric_sum queue 8083 queue_redis_circuit_open_total | cut -d. -f1)
     say "Redis 중단"
     compose stop redis
+    # 서킷이 열리기 전(연속 실패 N회)에는 Lettuce 타임아웃을 그대로 기다린다. 열리기 전 비용과 열린 뒤 경로를 나눠서 본다
+    local before_open=0 threshold="${REDIS_CIRCUIT_FAILURES:-3}" opened=0 now_open
+    : > "$OUT/enter-before-open.txt"
+    local t_open0; t_open0=$(date +%s%N)
+    for _ in $(seq 1 $((threshold + 5))); do
+        probe 1 POST "/api/v1/queue/sessions/$sid/entries" "$b" "$OUT/enter-one.txt"
+        cat "$OUT/enter-one.txt" >> "$OUT/enter-before-open.txt"
+        before_open=$((before_open + 1))
+        now_open=$(( $(metric_sum queue 8083 queue_redis_circuit_open_total | cut -d. -f1) - open0 ))
+        [ "$now_open" -ge 1 ] && { opened=1; break; }
+    done
+    local open_ms=$(( ($(date +%s%N) - t_open0) / 1000000 ))
+    echo "서킷이 열리기까지 ${open_ms}ms, 열리기 전 진입 ${before_open}건 지연(ms): $(awk '{printf "%d ", $2 * 1000}' "$OUT/enter-before-open.txt")" | tee "$OUT/open-latency.txt"
+    check "서킷이 열렸다" 1 "$opened"
+    [ "$before_open" -le "$threshold" ] && ok "열리기 전 느린 진입 ${before_open}건 <= 연속 실패 한도 ${threshold}" || bad "열리기 전 진입 ${before_open}건이 한도 ${threshold}를 넘었다"
     probe 30 POST "/api/v1/queue/sessions/$sid/entries" "$b" "$OUT/enter-during-outage.txt"
-    assert_probe "새 진입은 503, 서킷으로 빠르게" "$OUT/enter-during-outage.txt" '^503$' "$ENTRY_P95_MS" 30
+    assert_probe "열린 뒤 새 진입은 503, 서킷으로 빠르게" "$OUT/enter-during-outage.txt" '^503$' "$ENTRY_P95_MS" 30
     check "queue liveness" 200 "$(compose exec -T queue curl -s -o /dev/null -w '%{http_code}' http://localhost:8083/actuator/health/liveness)"
     # readiness 그룹은 트래픽 수락 상태만 본다(Redis 제외). 장애 중에도 UP이어야 컨테이너가 재시작되지 않는다
     check "queue readiness" 200 "$(compose exec -T queue curl -s -o /dev/null -w '%{http_code}' http://localhost:8083/actuator/health/readiness)"

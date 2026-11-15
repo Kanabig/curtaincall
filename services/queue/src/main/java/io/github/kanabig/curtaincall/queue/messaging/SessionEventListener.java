@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class SessionEventListener {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SessionEventListener.class);
+
     private final ObjectMapper objectMapper;
     private final SessionConfService service;
 
@@ -82,7 +84,14 @@ public class SessionEventListener {
                 || !payload.hasNonNull("maxActiveUsers")) {
             return new SessionConf(sessionId, Type.SUSPEND, version, 0, 0, 0);
         }
-        SessionConf full = upsert(sessionId, version, payload);
+        SessionConf full;
+        try {
+            full = upsert(sessionId, version, payload);
+        } catch (InvalidSessionEventException | DateTimeParseException e) {
+            // 판매 중지는 값보다 중요하다. 값이 잘못돼도 중지는 적용하고 conf 채우기만 건너뛴다
+            log.warn("중지 이벤트의 전체 값을 읽지 못해 값 없이 중지만 적용한다: sessionId={}", sessionId, e);
+            return new SessionConf(sessionId, Type.SUSPEND, version, 0, 0, 0);
+        }
         return new SessionConf(
                 sessionId,
                 Type.SUSPEND,

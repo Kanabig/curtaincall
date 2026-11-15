@@ -132,6 +132,17 @@ class SessionEventListenerTests extends QueueIntegrationTest {
     }
 
     @Test
+    @DisplayName("중지 이벤트의 전체 값이 잘못돼도 중지는 값 없이 적용한다")
+    void suspendWithBadValuesStillSuspends() {
+        SessionConf conf = listener.parse(envelope("SessionSuspended", 7, "2026-11-15T10:00:00.000+09:00", """
+                {"sessionId":7,"saleOpenAt":"not-a-time","admissionPerSecond":0,"maxActiveUsers":300}"""));
+
+        assertThat(conf.type()).isEqualTo(Type.SUSPEND);
+        assertThat(conf.saleOpenAtMs()).isZero();
+        assertThat(conf.admissionPerSecond()).isZero();
+    }
+
+    @Test
     @DisplayName("대기열이 쓰지 않는 이벤트 타입은 무시하고, 생성 이벤트의 발생 시각 ms를 버전으로 쓴다")
     void parse() {
         assertThat(listener.parse(envelope("SomethingElse", 1, "2026-11-15T10:00:00.000+09:00", "{}")))
