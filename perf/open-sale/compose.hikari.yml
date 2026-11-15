@@ -1,0 +1,5 @@
+# reservation 커넥션 풀 크기를 바꿔 보는 측정용 덮어쓰기. 사용: HIKARI_POOL=30 COMPOSE_FILE=compose.yml:perf/open-sale/compose.hikari.yml perf/seat-hold/run.sh ...
+services:
+  reservation:
+    environment:
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${HIKARI_POOL:-40}

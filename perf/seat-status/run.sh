@@ -1,6 +1,6 @@
 #!/bin/bash
 # 좌석 상태 조회 캐시 전후 측정. 사용법:
-#   perf/seat-status/run.sh <캐시 TTL: 0s|2s> [프로젝트 이름] [폴링 VU 수] [지속 시간] [점유 요청 초당 수(0이면 폴링만)]
+#   perf/seat-status/run.sh <캐시 TTL: 0s|500ms|2s> [프로젝트 이름] [폴링 VU 수] [지속 시간] [점유 요청 초당 수(0이면 폴링만)]
 # 1만 석 회차(perf/seat-hold/seed.sql)에 폴링을 걸고, 같은 시간의 DB SELECT 수와 응답 시간을 남긴다.
 # 점유 부하를 함께 주면 폴링이 점유 p95에 주는 영향을 볼 수 있다. 결과는 perf/seat-status/results/ 에 남는다(커밋하지 않는다).
 set -euo pipefail

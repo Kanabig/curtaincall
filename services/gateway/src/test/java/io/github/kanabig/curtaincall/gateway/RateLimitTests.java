@@ -36,6 +36,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
             "management.server.port=0",
             "curtaincall.rate-limit.ip.rate-per-second=0.1",
             "curtaincall.rate-limit.ip.burst=6",
+            "curtaincall.rate-limit.ip-poll.rate-per-second=0.1",
+            "curtaincall.rate-limit.ip-poll.burst=4",
             "curtaincall.rate-limit.user.rate-per-second=0.1",
             "curtaincall.rate-limit.user.burst=3"
         })
@@ -170,6 +172,51 @@ class RateLimitTests {
                 .exchange()
                 .expectStatus()
                 .isEqualTo(429);
+    }
+
+    @Test
+    @DisplayName("대기열 순번 조회(폴링)는 일반 IP 한도를 쓰지 않고 자기 IP 한도만 받는다")
+    void pollingHasItsOwnIpBucket() {
+        // 폴링 4번(다른 계정이라 계정 한도와 무관)으로 폴링 한도를 다 쓴다
+        for (int i = 0; i < 4; i++) {
+            String token = token("poll-" + i);
+            client.get()
+                    .uri("/api/v1/queue/sessions/1/entries/me")
+                    .headers(h -> h.setBearerAuth(token))
+                    .exchange()
+                    .expectStatus()
+                    .isOk();
+        }
+        double before = counter("gateway.ratelimit.rejected", "ip:poll");
+        String token = token("poll-4");
+        client.get()
+                .uri("/api/v1/queue/sessions/1/entries/me")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(429);
+        assertThat(counter("gateway.ratelimit.rejected", "ip:poll")).isEqualTo(before + 1);
+        // 폴링이 막힌 뒤에도 일반 요청은 자기 한도(6)를 그대로 쓴다
+        for (int i = 0; i < 6; i++) {
+            client.get().uri("/api/v1/performances").exchange().expectStatus().isOk();
+        }
+        assertThat(redis.keys("gateway:rl:ip:poll:*").count().block()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("일반 요청이 IP 한도를 다 써도 폴링은 막히지 않는다")
+    void pollingSurvivesExhaustedIpBucket() {
+        for (int i = 0; i < 6; i++) {
+            client.get().uri("/api/v1/performances").exchange().expectStatus().isOk();
+        }
+        client.get().uri("/api/v1/performances").exchange().expectStatus().isEqualTo(429);
+        String token = token("poll-ok");
+        client.get()
+                .uri("/api/v1/queue/sessions/1/entries/me")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus()
+                .isOk();
     }
 
     private double counter(String name, String scope) {
