@@ -57,14 +57,14 @@ class DltReplayTests extends OutboxIntegrationTest {
         double replayedBefore = replayedCount();
         String id = entry.partition() + ":" + entry.offset();
 
-        DltReplayer.Result first = endpoint.replay(DLT, List.of(id));
+        DltReplayer.Result first = endpoint.replay(DLT, id);
         assertThat(first.replayed()).isEqualTo(1);
         await().atMost(Duration.ofSeconds(15))
                 .untilAsserted(() -> assertThat(count(eventId)).isEqualTo(1));
 
         double duplicatesBefore =
                 meterRegistry.get("outbox.consumer.duplicates").counter().count();
-        endpoint.replay(DLT, List.of(id));
+        endpoint.replay(DLT, id);
         await().atMost(Duration.ofSeconds(15))
                 .untilAsserted(() -> assertThat(meterRegistry
                                         .get("outbox.consumer.duplicates")
