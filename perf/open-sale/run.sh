@@ -90,7 +90,17 @@ docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}'
 SAMPLER=$!
 ( while sleep 5; do cut -d' ' -f1-3 /proc/loadavg; done > "$OUT/loadavg.txt" ) &
 LOADAVG=$!
-trap 'kill $SAMPLER $LOADAVG 2>/dev/null || true' EXIT
+# 소비 lag(Kafka consumer lag 합)와 outbox 미발행 행 수의 피크를 보려고 5초마다 남긴다
+( while sleep 5; do
+    for svc in queue:8083 reservation:8084 payment:8085; do
+        lag=$(compose exec -T "${svc%%:*}" curl -fs "http://localhost:${svc##*:}/actuator/prometheus" 2>/dev/null \
+            | awk '/^kafka_consumer_fetch_manager_records_lag\{/{s+=$NF} END{print s+0}')
+        echo "$(date +%T) ${svc%%:*} consumer_lag=$lag"
+    done
+    echo "$(date +%T) reservation outbox_unpublished=$(echo 'SELECT COUNT(*) FROM outbox WHERE published_at IS NULL' | mysql_root -N reservation_db | tr -d '[:space:]')"
+  done > "$OUT/lag.txt" ) &
+LAGSAMPLER=$!
+trap 'kill $SAMPLER $LOADAVG $LAGSAMPLER 2>/dev/null || true' EXIT
 
 innodb() { mysql_root -N -e "\"SELECT NAME, \\\`COUNT\\\` FROM information_schema.INNODB_METRICS WHERE NAME IN ('lock_deadlocks','lock_timeouts','trx_rseg_history_len') ORDER BY NAME\""; }
 innodb > "$OUT/innodb-before.txt" || true
@@ -103,7 +113,7 @@ docker run --rm --user "$(id -u):$(id -g)" --network "${PROJECT}_default" \
     -e SPREAD_MS="${SPREAD_MS:-1000}" -e THINK_MS="${THINK_MS:-1500}" -e MAX_WAIT_S="${MAX_WAIT_S:-900}" \
     "$K6_IMAGE" run /scripts/open-sale.js | tee "$OUT/k6.txt" || true
 
-kill $SAMPLER $LOADAVG 2>/dev/null || true
+kill $SAMPLER $LOADAVG $LAGSAMPLER 2>/dev/null || true
 snapshot after
 innodb > "$OUT/innodb-after.txt" || true
 compose logs --no-color --since 30m queue gateway reservation payment 2>&1 | grep -E "WARN|ERROR" | sort | uniq -c | sort -rn | head -30 > "$OUT/log-warn-error.txt" || true
