@@ -1,5 +1,6 @@
 package io.github.kanabig.curtaincall.outbox.consumer;
 
+import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
@@ -99,7 +100,7 @@ public class DltReplayer {
             try {
                 producer.send(toOriginal(record, original)).get(sendTimeout.toMillis(), TimeUnit.MILLISECONDS);
                 replayed[0]++;
-                Counter.builder("outbox.dlt.replayed")
+                Counter.builder(MetricNames.OUTBOX_DLT_REPLAYED)
                         .description("DLT에서 원래 토픽으로 다시 넣은 메시지 수")
                         .tag("topic", original)
                         .register(meterRegistry)
@@ -175,14 +176,13 @@ public class DltReplayer {
     }
 
     private static Entry toEntry(ConsumerRecord<String, String> record) {
+        Long originalPartition = number(record, KafkaHeaders.DLT_ORIGINAL_PARTITION, 4);
         return new Entry(
                 record.partition(),
                 record.offset(),
                 record.key(),
                 headerValue(record, KafkaHeaders.DLT_ORIGINAL_TOPIC),
-                number(record, KafkaHeaders.DLT_ORIGINAL_PARTITION, 4) == null
-                        ? null
-                        : number(record, KafkaHeaders.DLT_ORIGINAL_PARTITION, 4).intValue(),
+                originalPartition == null ? null : originalPartition.intValue(),
                 number(record, KafkaHeaders.DLT_ORIGINAL_OFFSET, 8),
                 headerValue(record, "X-Request-Id"),
                 headerValue(record, KafkaHeaders.DLT_EXCEPTION_MESSAGE),

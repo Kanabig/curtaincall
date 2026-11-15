@@ -200,7 +200,7 @@ public class OutboxAutoConfiguration {
                     properties.relay().sendTimeout());
         }
 
-        /** management.endpoints.web.exposure.include에 dlt가 있을 때만 연다. 관리 포트는 외부에 열지 않는다. */
+        /** management.endpoints.web.exposure.include에 dlt가 있을 때만 연다. 서비스 포트를 같이 쓰지만 gateway 라우팅 밖이라 외부에서는 닿지 않는다. */
         @Bean
         @ConditionalOnAvailableEndpoint(endpoint = DltEndpoint.class)
         DltEndpoint dltEndpoint(

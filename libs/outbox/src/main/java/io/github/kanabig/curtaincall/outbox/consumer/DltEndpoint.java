@@ -14,7 +14,7 @@ import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.lang.Nullable;
 
 /**
- * DLT 조회와 재투입 관리 명령. 관리 포트의 {@code /actuator/dlt}로 연다.
+ * DLT 조회와 재투입 관리 명령. 서비스 포트의 {@code /actuator/dlt}로 연다. gateway가 {@code /actuator}를 라우팅하지 않고 compose가 이 서비스들의 호스트 포트를 열지 않아 내부망에서만 닿는다.
  *
  * <ul>
  *   <li>{@code GET /actuator/dlt}: 이 서비스가 읽는 토픽의 DLT 이름
