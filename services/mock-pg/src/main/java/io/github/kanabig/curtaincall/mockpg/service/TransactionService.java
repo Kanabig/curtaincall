@@ -6,7 +6,6 @@ import io.github.kanabig.curtaincall.mockpg.dto.TransactionResponse;
 import io.github.kanabig.curtaincall.mockpg.entity.Transaction;
 import io.github.kanabig.curtaincall.mockpg.repository.TransactionRepository;
 import java.time.Clock;
-import java.time.Instant;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,12 +68,14 @@ public class TransactionService {
         Transaction transaction = repository
                 .findByTid(tid)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "transaction not found"));
-        Instant now = clock.instant();
-        if (!transaction.cancel(now)) {
+        Transaction.CancelResult result = transaction.cancel(clock.instant());
+        if (result == Transaction.CancelResult.NOT_APPROVED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "transaction is not approved");
         }
-        // 상태를 실제로 바꾼 첫 취소만 applied=true다(같은 Instant 인스턴스가 저장됐는지로 판별)
-        log.info("pg cancel merchantOrderId={} applied={}", transaction.getMerchantOrderId(), transaction.getCancelledAt() == now);
+        log.info(
+                "PG 취소: merchantOrderId={}, applied={}",
+                transaction.getMerchantOrderId(),
+                result == Transaction.CancelResult.APPLIED);
         return TransactionResponse.from(transaction);
     }
 
