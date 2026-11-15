@@ -333,7 +333,9 @@ s_dlt-replay() { # 소비가 실패해 DLT로 간 응답을 재투입해 수렴�
     if [ -z "$topic" ]; then
         echo "FAIL(DLT에 메시지가 안 쌓임)"; EXTRA_FAIL="DLT에 메시지가 안 쌓임(재투입 못 함)"; finish_scenario; return
     fi
-    rsv curl -fsS -X POST "localhost:8084/actuator/dlt/$topic" -H 'Content-Type: application/json' -d '{}' | tee -a "$OUT/dlt.txt"
+    local replay; replay=$(rsv curl -fsS -X POST "localhost:8084/actuator/dlt/$topic" -H 'Content-Type: application/json' -d '{}')
+    echo "$replay" | tee -a "$OUT/dlt.txt"
+    echo "$replay" | grep -Eq '"replayed" *: *[1-9]' || EXTRA_FAIL="재투입 0건(DLT 응답: $replay)"
     finish_scenario "$(date +%s)"
 }
 
