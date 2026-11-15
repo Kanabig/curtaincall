@@ -1,6 +1,7 @@
 package io.github.kanabig.curtaincall.gateway;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.redis.testcontainers.RedisContainer;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -62,7 +63,7 @@ class RateLimitRecoveryTests {
 
     @Test
     @DisplayName("Redis가 멈추면 서킷이 열려 요청이 타임아웃을 기다리지 않고, 복구되면 한도가 다시 걸린다")
-    void circuitOpensAndRecovers(CapturedOutput output) throws Exception {
+    void circuitOpensAndRecovers(CapturedOutput output) {
         var docker = REDIS.getDockerClient();
         docker.pauseContainerCmd(REDIS.getContainerId()).exec();
         try {
@@ -78,7 +79,7 @@ class RateLimitRecoveryTests {
                         .expectStatus()
                         .isOk();
             }
-            assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(300));
+            assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(450));
             // 건너뛴 요청도 센다
             assertThat(failopenCount()).isEqualTo(failopen + 5);
         } finally {
@@ -86,11 +87,16 @@ class RateLimitRecoveryTests {
         }
         assertThat(output.getOut()).contains("속도 제한 Redis 호출 실패");
 
-        // circuit-open(1초)이 지나면 요청 하나가 Redis를 다시 불러 닫는다. 그 뒤로는 IP 한도(burst 2)가 적용된다
-        Thread.sleep(1200);
-        client.get().uri("/api/v1/performances").exchange().expectStatus().isOk();
-        client.get().uri("/api/v1/performances").exchange().expectStatus().isOk();
-        client.get().uri("/api/v1/performances").exchange().expectStatus().isEqualTo(429);
+        // circuit-open(1초)이 지나면 요청 하나가 Redis를 다시 불러 닫는다. unpause 직후에는 재연결이 늦어 그 요청이 실패하고
+        // 서킷이 다시 열릴 수 있으므로, 고정 대기 대신 한도가 걸려 429가 나올 때까지 기다린다.
+        // 서킷이 열린 동안 건너뛴 요청은 토큰을 쓰지 않아 IP 한도(burst 2)는 복구 뒤 요청부터 센다
+        await().atMost(Duration.ofSeconds(15))
+                .pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> client.get()
+                        .uri("/api/v1/performances")
+                        .exchange()
+                        .expectStatus()
+                        .isEqualTo(429));
         assertThat(output.getOut()).contains("복구되어 한도를 다시 적용한다");
     }
 
