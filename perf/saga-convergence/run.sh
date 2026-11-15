@@ -358,7 +358,7 @@ s_dlt-replay() { # 소비가 실패해 DLT로 간 응답을 재투입해 수렴�
         echo "DLT 토픽: ${topic:-없음}, 시작 전 $base건, 지금 $(dlt_count)건 (기대 증가 $ORDERS건 이상)"
         echo "reservation 로그의 테이블 없음 오류: $(compose logs --no-color reservation 2>&1 | grep -ci "doesn't exist")건"
         echo "reservation 소비 실패 로그(상위 3종):"
-        compose logs --no-color reservation 2>&1 | grep -iE "exception|error" | sed -E 's/^[^|]*\| *//; s/^[0-9T:.+-]+ +//; s/[0-9a-f]{8}-[0-9a-f-]{27}//g; s/ord_[^ ,]*//g' | cut -c1-200 | sort | uniq -c | sort -rn | head -3
+        compose logs --no-color reservation 2>&1 | grep -E " (ERROR|WARN) " | sed -E 's/^[^|]*\| *//; s/^[0-9T:.+-]+ +//; s/[0-9a-f]{8}-[0-9a-f-]{27}//g; s/ord_[^ ,]*//g' | cut -c1-200 | sort | uniq -c | sort -rn | head -3
         echo "첫 ApprovePayment부터 재투입까지: $((t_replay - t_first))s (재전송 간격 ${resend_s}s)"
     } | tee "$OUT/dlt.txt"
     [ "$(dlt_topics | wc -l)" -le 1 ] || EXTRA_FAIL="payment.payment DLT 토픽이 둘 이상"
