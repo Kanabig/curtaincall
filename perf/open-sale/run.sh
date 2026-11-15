@@ -21,6 +21,11 @@ K6_IMAGE="grafana/k6:2.4.0"
 
 cd "$(dirname "$0")/../.."
 set -a; . ./.env; set +a
+# 이미지를 커밋 SHA로 태그해 다른 프로젝트의 빌드에 덮어써지지 않게 한다. 작업 트리가 더럽거나 추적하지 않는 소스가 있으면 SHA와 이미지가 어긋나므로 멈춘다
+if [ -n "$(git status --porcelain --untracked-files=no)" ] && [ "${ALLOW_DIRTY:-0}" != "1" ]; then
+    echo "작업 트리에 커밋하지 않은 변경이 있다. 커밋하거나 ALLOW_DIRTY=1로 실행한다" >&2; exit 1
+fi
+export IMAGE_TAG="$(git rev-parse --short=7 HEAD)"
 OUT="perf/open-sale/results/${MODE}-$(date +%m%d-%H%M%S)${TAG:+-$TAG}"
 mkdir -p "$OUT"
 compose() { docker compose -p "$PROJECT" -f compose.yml -f perf/open-sale/compose.perf.yml "$@"; }
@@ -74,7 +79,7 @@ snapshot() { # <접미사>
 }
 
 {
-    echo "commit:     $(git rev-parse HEAD)"
+    echo "commit:     $(git rev-parse HEAD)  image_tag=$IMAGE_TAG"
     echo "mode=$MODE project=$PROJECT users=$USERS admissionPerSecond=$ADMISSION maxActiveUsers=$MAX_ACTIVE pollers=$POLLERS"
     echo "session=$SESSION_ID seat_base=$SEAT_BASE open_at=$OPEN_AT_ISO"
     echo "host:       $(nproc) cpu, $(free -m | awk '/Mem:/{print $2" MB total, "$7" MB available"}'), $(uname -sr)"
