@@ -15,7 +15,8 @@ ARG="${1:?dlt | aux | redis | pg | kopis | all}"
 PROJECT="${2:-fault}"
 cd "$(dirname "$0")/../.."
 exec 9>/tmp/curtaincall-bench.lock
-flock -n 9 || { echo "측정 락을 다른 세션이 쥐고 있다." >&2; exit 2; }
+# LOCK_WAIT_S초까지 락이 풀리기를 기다린다(기본 0: 바로 포기)
+flock -w "${LOCK_WAIT_S:-0}" 9 || { echo "측정 락을 다른 세션이 쥐고 있다." >&2; exit 2; }
 # shellcheck source=perf/fault/lib.sh
 source perf/fault/lib.sh
 
