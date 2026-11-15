@@ -309,34 +309,47 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
     [ "$verdict" = PASS ] || FAILED=1
 }
 
-s_dlt-replay() { # 소비가 실패해 DLT로 간 응답을 재투입해 수렴시킨다
+s_dlt-replay() { # 소비가 실패해 DLT로 간 응답을 재투입해 수렴시킨다. 재전송(2분)이 아니라 재투입으로 수렴했음을 시나리오 순서로 보장한다
     start_scenario dlt-replay "CONFIRMED=$ORDERS"
-    echo "RENAME TABLE reservation_db.reservation TO reservation_db.reservation_off" | sql
-    local topic="" tries=0 base
+    local resend_s=120 topic="" tries=0 base cmd_base
     dlt_topics() { kafka_sh /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list 2> /dev/null | grep -E 'payment\.payment.*DLT' || true; }
     dlt_count() { # payment.payment DLT 메시지 수(카프카에서 직접 센다)
         kafka_sh /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --include 'payment\.payment.*DLT' \
             --from-beginning --timeout-ms 4000 2> /dev/null | wc -l
     }
-    base=$(dlt_count) # 지난 회차에 쌓인 DLT 메시지는 이번 회차 증거가 아니다
+    approve_count() { consume_all payment.command | grep -c ApprovePayment || true; }
+    base=$(dlt_count)             # 지난 회차에 쌓인 DLT 메시지는 이번 회차 증거가 아니다
+    cmd_base=$(approve_count)
+    echo "RENAME TABLE reservation_db.reservation TO reservation_db.reservation_off" | sql
+    local t_first; t_first=$(date +%s) # 첫 ApprovePayment 시각(drive 시작)
     drive 1 "$ORDERS" 0 tok_approve 1
+    # 1. 주문 수만큼 DLT에 쌓일 때까지 기다린다. 쌓이는 즉시 테이블을 복구하고 재투입한다
     while [ "$tries" -lt 30 ]; do
-        [ "$(dlt_count)" -gt "$base" ] && { topic=$(dlt_topics | head -1); break; }
+        [ $(( $(dlt_count) - base )) -ge "$ORDERS" ] && { topic=$(dlt_topics | head -1); break; }
         tries=$((tries + 1))
     done
-    {
-        echo "DLT 토픽: ${topic:-없음} (대기 약 $((tries * 5))s, 시작 전 $base건 → 지금 $(dlt_count)건)"
-        echo "reservation 로그의 테이블 없음 오류: $(compose logs --no-color reservation 2>&1 | grep -ci "reservation_db.reservation' doesn't exist")건"
-        echo "reservation 로그의 DLT 발행: $(compose logs --no-color reservation 2>&1 | grep -ci "dead letter\|DLT" )줄"
-    } | tee "$OUT/dlt.txt"
     echo "RENAME TABLE reservation_db.reservation_off TO reservation_db.reservation" | sql
+    local t_replay; t_replay=$(date +%s)
+    {
+        echo "DLT 토픽: ${topic:-없음}, 시작 전 $base건, 지금 $(dlt_count)건 (기대 증가 $ORDERS건 이상)"
+        echo "reservation 로그의 테이블 없음 오류: $(compose logs --no-color reservation 2>&1 | grep -ci "reservation_db.reservation' doesn't exist")건"
+        echo "첫 ApprovePayment부터 재투입까지: $((t_replay - t_first))s (재전송 간격 ${resend_s}s)"
+    } | tee "$OUT/dlt.txt"
     if [ -z "$topic" ]; then
-        echo "FAIL(DLT에 메시지가 안 쌓임)"; EXTRA_FAIL="DLT에 메시지가 안 쌓임(재투입 못 함)"; finish_scenario; return
+        echo "FAIL(DLT에 주문 수만큼 안 쌓임)"; EXTRA_FAIL="DLT에 주문 수만큼 안 쌓임(재투입 못 함)"; finish_scenario; return
     fi
+    # 2. 재전송 간격보다 먼저 재투입했는지
+    [ $((t_replay - t_first)) -lt "$resend_s" ] || EXTRA_FAIL="재투입이 재전송 간격 뒤($((t_replay - t_first))s)"
     local replay; replay=$(rsv curl -fsS -X POST "localhost:8084/actuator/dlt/$topic" -H 'Content-Type: application/json' -d '{}')
     echo "$replay" | tee -a "$OUT/dlt.txt"
-    echo "$replay" | grep -Eq '"replayed" *: *[1-9]' || EXTRA_FAIL="재투입 0건(DLT 응답: $replay)"
-    finish_scenario "$(date +%s)"
+    echo "$replay" | grep -Eq '"replayed" *: *[1-9]' || EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }재투입 0건(DLT 응답: $replay)"
+    wait_converged "$t_replay" || true
+    echo "재투입부터 수렴까지: ${CONVERGE_S}s" | tee -a "$OUT/dlt.txt"
+    # 3. 재투입부터 확정까지 ApprovePayment가 다시 나가지 않았는지(주문당 1건)
+    local sent=$(( $(approve_count) - cmd_base ))
+    echo "ApprovePayment 발행: $sent건 (기대 $ORDERS건, 재전송 0)" | tee -a "$OUT/dlt.txt"
+    [ "$sent" = "$ORDERS" ] || EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }ApprovePayment 재전송($sent건, 기대 $ORDERS건)"
+    finish_scenario "$t_replay"
 }
 
 s_duplicates-reorder() { # 같은 응답 중복, 새 이벤트 ID로 다시 보낸 응답, 순서가 바뀐 응답, 같은 명령 재전송
