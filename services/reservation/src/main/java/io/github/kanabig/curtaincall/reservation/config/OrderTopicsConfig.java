@@ -1,6 +1,9 @@
 package io.github.kanabig.curtaincall.reservation.config;
 
+import io.github.kanabig.curtaincall.outbox.config.OutboxProperties;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.config.TopicConfig;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
@@ -14,15 +17,38 @@ public class OrderTopicsConfig {
     public static final String PAYMENT_COMMAND_TOPIC = "payment.command";
     public static final String PAYMENT_TOPIC = "payment.payment";
     public static final String ORDER_TOPIC = "reservation.order";
+    public static final String SESSION_TOPIC = "reservation.session";
 
     @Bean
     NewTopic orderTopic() {
         return TopicBuilder.name(ORDER_TOPIC).partitions(3).replicas(1).build();
     }
 
+    /**
+     * 키(sessionId)별 마지막 판정만 있으면 되는 상태 이벤트라 compaction을 쓴다. queue의 Redis를 잃어도 컨슈머 그룹 오프셋을 처음으로 돌리면 매진 상태가 복구된다.
+     */
+    @Bean
+    NewTopic availabilityTopic() {
+        return TopicBuilder.name(SESSION_TOPIC)
+                .partitions(3)
+                .replicas(1)
+                .config(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT)
+                .build();
+    }
+
     @Bean
     NewTopic paymentEventDltTopic() {
         return TopicBuilder.name(PAYMENT_TOPIC + ".DLT")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    /** event.session은 queue도 읽으므로 DLT 이름에 서비스를 붙인다. 이름은 소비 쪽과 같은 설정(dlt-topics)에서 읽는다. */
+    @Bean
+    NewTopic sessionEventDltTopic(
+            OutboxProperties outbox, @Value("${curtaincall.topics.session:event.session}") String topic) {
+        return TopicBuilder.name(outbox.consumer().dltTopic(topic))
                 .partitions(3)
                 .replicas(1)
                 .build();

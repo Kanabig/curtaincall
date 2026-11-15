@@ -1,0 +1,17 @@
+# KOPIS 장애 주입용 override. event가 스텁을 live 모드로 부르게 한다.
+#   docker compose -p <프로젝트> -f compose.yml -f perf/fault/kopis-override.yml up -d --wait event kopis-stub
+services:
+  kopis-stub:
+    image: python:3.13-alpine
+    command: ["python", "/stub/kopis-stub.py", "/fixture"]
+    volumes:
+      - ./perf/fault/kopis-stub.py:/stub/kopis-stub.py:ro
+      - ./services/event/src/main/resources/kopis/fixture:/fixture:ro
+  event:
+    environment:
+      CURTAINCALL_KOPIS_MODE: live
+      KOPIS_API_KEY: stub-key
+      CURTAINCALL_KOPIS_BASE_URL: http://kopis-stub:9000
+      CURTAINCALL_KOPIS_READ_TIMEOUT: 3s
+    depends_on:
+      - kopis-stub

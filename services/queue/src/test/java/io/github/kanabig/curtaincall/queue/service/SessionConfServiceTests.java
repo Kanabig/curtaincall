@@ -125,4 +125,22 @@ class SessionConfServiceTests extends QueueIntegrationTest {
         assertThat(redis.hasKey("q:" + sessionId + ":seq")).isFalse();
         assertThat(open()).isFalse();
     }
+
+    @Test
+    @DisplayName("[NFR-11] Redis를 잃은 뒤 마지막 이벤트인 중지·삭제만 재소비돼도 회차를 열지 않고, 이후 늦은 설정 이벤트도 되살리지 못한다")
+    void terminalEventOnEmptyRedisKeepsSessionClosed() {
+        service.apply(new SessionConf(sessionId, Type.SUSPEND, 2000, 0, 0, 0));
+
+        assertThat(conf()).containsEntry("status", "SUSPENDED");
+        assertThat(open()).isFalse();
+        service.apply(upsert(1500, 1_800_000_000_000L, 50, 300));
+        assertThat(open()).isFalse();
+
+        long other = sessionId + 1_000_000;
+        service.apply(new SessionConf(other, Type.DELETE, 2000, 0, 0, 0));
+
+        assertThat(redis.opsForHash().entries("q:" + other + ":conf")).containsEntry("status", "DELETED");
+        assertThat(redis.opsForSet().isMember("q:open", String.valueOf(other))).isFalse();
+        redis.delete("q:" + other + ":conf");
+    }
 }

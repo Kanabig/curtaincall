@@ -19,7 +19,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 public class IdempotentConsumer {
 
+    /** 처리 완료 한 줄을 남기는 로거. {@code logging.level.curtaincall.consumer=OFF}로 끈다. */
+    public static final String PROCESSED_LOGGER_NAME = "curtaincall.consumer";
+
     private static final Logger log = LoggerFactory.getLogger(IdempotentConsumer.class);
+    private static final Logger PROCESSED_LOG = LoggerFactory.getLogger(PROCESSED_LOGGER_NAME);
 
     private final EventEnvelopes envelopes;
     private final ProcessedEventRepository processedEvents;
@@ -54,6 +58,8 @@ public class IdempotentConsumer {
         if (Boolean.FALSE.equals(processed)) {
             duplicates.increment();
             log.info("이미 처리한 이벤트라 건너뛴다: eventId={} type={}", envelope.eventId(), envelope.eventType());
+        } else {
+            PROCESSED_LOG.info("이벤트 처리 완료: eventId={} type={}", envelope.eventId(), envelope.eventType());
         }
         ack.acknowledge();
     }

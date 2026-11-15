@@ -20,6 +20,11 @@ public record QueueStatusResponse(
         return new QueueStatusResponse("WAITING", ahead + 1, ahead, etaSeconds, pollAfterMs, null, null);
     }
 
+    /** 매진 중 대기. 순번은 유지하고 입장 예상 시간은 알 수 없어 주지 않는다. */
+    public static QueueStatusResponse soldOut(long ahead, long pollAfterMs) {
+        return new QueueStatusResponse("SOLD_OUT", ahead + 1, ahead, null, pollAfterMs, null, null);
+    }
+
     public static QueueStatusResponse admitted(String entryToken, String expiresAt) {
         return new QueueStatusResponse("ADMITTED", null, null, null, null, entryToken, expiresAt);
     }

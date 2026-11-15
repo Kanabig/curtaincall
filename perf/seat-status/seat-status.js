@@ -1,13 +1,13 @@
 // 좌석 상태 폴링 부하. VUS명이 각자 INTERVAL 초마다 조회한다(화면 폴링).
 //   BASE_URL  기본 http://reservation:8084
 //   VUS       동시 폴링 수 (기본 300)
-//   INTERVAL  폴링 주기 초 (기본 3)
+//   INTERVAL  폴링 주기 초 (기본 2)
 //   DURATION  지속 시간 (기본 60s)
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
 const BASE_URL = __ENV.BASE_URL || 'http://reservation:8084';
-const INTERVAL = Number(__ENV.INTERVAL || 3);
+const INTERVAL = Number(__ENV.INTERVAL || 2);
 
 export const options = {
   scenarios: {

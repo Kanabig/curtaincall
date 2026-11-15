@@ -37,6 +37,18 @@ public class SeatInventoryRepository {
                 startAt == null ? null : Timestamp.from(startAt));
     }
 
+    /**
+     * 삭제된 회차로 표시한다. 재고를 아직 만들지 않은(PENDING) 회차는 만들지 않도록 DELETED로 바꾸고, 행이 없으면 DELETED 행을 남겨 뒤늦게 온 Created·Updated가
+     * 재고를 만들지 못하게 한다. 이미 재고가 만들어진 회차는 그대로 둔다(예매 이력과 점유가 남아 있다).
+     */
+    public void markDeleted(long sessionId, Instant now) {
+        jdbc.update(
+                "INSERT INTO session_stock (session_id, status, next_attempt_at) VALUES (?, 'DELETED', ?)"
+                        + " ON DUPLICATE KEY UPDATE status = IF(status = 'PENDING', 'DELETED', status)",
+                sessionId,
+                Timestamp.from(now));
+    }
+
     /** 회차 시작 시각을 바꾼다. 아직 등록되지 않은 회차면 아무것도 하지 않는다. */
     public void updateStartAt(long sessionId, Instant startAt) {
         jdbc.update("UPDATE session_stock SET start_at = ? WHERE session_id = ?", Timestamp.from(startAt), sessionId);

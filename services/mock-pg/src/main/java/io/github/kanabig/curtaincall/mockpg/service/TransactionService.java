@@ -68,9 +68,14 @@ public class TransactionService {
         Transaction transaction = repository
                 .findByTid(tid)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "transaction not found"));
-        if (!transaction.cancel(clock.instant())) {
+        Transaction.CancelResult result = transaction.cancel(clock.instant());
+        if (result == Transaction.CancelResult.NOT_APPROVED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "transaction is not approved");
         }
+        log.info(
+                "PG 취소: merchantOrderId={}, applied={}",
+                transaction.getMerchantOrderId(),
+                result == Transaction.CancelResult.APPLIED);
         return TransactionResponse.from(transaction);
     }
 

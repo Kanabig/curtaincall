@@ -20,6 +20,14 @@ class PollPolicyTests {
     }
 
     @Test
+    @DisplayName("[QUE-8] 매진 중 간격은 설정값에 ±20% 지터를 붙인다")
+    void soldOutInterval() {
+        assertThat(middle.soldOutPollAfterMs(10_000)).isEqualTo(10_000);
+        assertThat(new PollPolicy(() -> 0.0).soldOutPollAfterMs(10_000)).isEqualTo(8000);
+        assertThat(new PollPolicy(() -> 1.0).soldOutPollAfterMs(10_000)).isEqualTo(12_000);
+    }
+
+    @Test
     @DisplayName("지터는 기준 간격의 ±20% 안이다")
     void jitterBounds() {
         assertThat(new PollPolicy(() -> 0.0).pollAfterMs(100_000, 50)).isEqualTo(4000);

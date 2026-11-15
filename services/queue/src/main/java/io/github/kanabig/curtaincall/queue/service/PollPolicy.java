@@ -30,6 +30,12 @@ public class PollPolicy {
         return Math.round(base * factor);
     }
 
+    /** 매진 중에는 앞 사람 수와 상관없이 긴 간격으로 묻는다. 입장이 멈춰 순번이 줄지 않으므로 자주 물을 이유가 없다. */
+    public long soldOutPollAfterMs(long baseMs) {
+        double factor = 1 - JITTER + 2 * JITTER * random.getAsDouble();
+        return Math.round(baseMs * factor);
+    }
+
     public long etaSeconds(long ahead, long admissionPerSecond) {
         return ahead / Math.max(1, admissionPerSecond);
     }

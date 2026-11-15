@@ -37,17 +37,24 @@ public class Transaction {
         return new Transaction(tid, merchantOrderId, amount, TransactionStatus.DECLINED, failureCode, now);
     }
 
-    /** 이미 취소된 거래면 아무것도 바꾸지 않는다(멱등). 승인 거래가 아니면 false. */
-    public synchronized boolean cancel(Instant now) {
+    /** 취소 결과. 상태를 바꾼 첫 취소만 APPLIED다. */
+    public enum CancelResult {
+        APPLIED,
+        ALREADY_CANCELLED,
+        NOT_APPROVED
+    }
+
+    /** 이미 취소된 거래면 아무것도 바꾸지 않는다(멱등). 판정과 상태 변경이 한 번에 일어나 APPLIED는 거래당 한 번뿐이다. */
+    public synchronized CancelResult cancel(Instant now) {
         if (status == TransactionStatus.CANCELLED) {
-            return true;
+            return CancelResult.ALREADY_CANCELLED;
         }
         if (status != TransactionStatus.APPROVED) {
-            return false;
+            return CancelResult.NOT_APPROVED;
         }
         status = TransactionStatus.CANCELLED;
         cancelledAt = now;
-        return true;
+        return CancelResult.APPLIED;
     }
 
     public String getTid() {

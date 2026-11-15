@@ -4,6 +4,7 @@ import io.github.kanabig.curtaincall.outbox.config.OutboxAutoConfiguration;
 import io.github.kanabig.curtaincall.outbox.consumer.IdempotentConsumer;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -22,7 +23,10 @@ class TestListeners {
     static final String IDEM_TOPIC = "test.idem";
     static final String FAIL_TOPIC = "test.fail";
     static final String BAD_TOPIC = "test.bad";
+    static final String BAD_DLT = "test.bad.svc.DLT";
     static final String TRACE_TOPIC = "test.trace";
+    static final String REPLAY_TOPIC = "test.replay";
+    static final String REPLAY_GROUP = "test-replay-group";
     static final String TRACE_GROUP = "test-trace-group";
     static final String IDEM_GROUP = "test-idem-group";
     static final String FAIL_GROUP = "test-fail-group";
@@ -31,6 +35,7 @@ class TestListeners {
     final AtomicInteger idemAttempts = new AtomicInteger();
     final AtomicInteger failAttempts = new AtomicInteger();
     final AtomicInteger badAttempts = new AtomicInteger();
+    final AtomicBoolean replayFailing = new AtomicBoolean(true);
     final BlockingQueue<String> traceIds = new LinkedBlockingQueue<>();
 
     @Bean
@@ -49,6 +54,19 @@ class TestListeners {
     }
 
     @Bean
+    NewTopic replayTopic() {
+        return TopicBuilder.name(REPLAY_TOPIC).partitions(1).replicas(1).build();
+    }
+
+    @Bean
+    NewTopic replayDlt() {
+        return TopicBuilder.name(REPLAY_TOPIC + ".DLT")
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
     NewTopic traceTopic() {
         return TopicBuilder.name(TRACE_TOPIC).partitions(1).replicas(1).build();
     }
@@ -60,7 +78,7 @@ class TestListeners {
 
     @Bean
     NewTopic badDlt() {
-        return TopicBuilder.name(BAD_TOPIC + ".DLT").partitions(1).replicas(1).build();
+        return TopicBuilder.name(BAD_DLT).partitions(1).replicas(1).build();
     }
 
     @Bean
@@ -86,6 +104,10 @@ class TestListeners {
 
         AtomicInteger failAttempts() {
             return counters.failAttempts;
+        }
+
+        AtomicBoolean replayFailing() {
+            return counters.replayFailing;
         }
 
         BlockingQueue<String> traceIds() {
@@ -121,6 +143,19 @@ class TestListeners {
                 jdbc.update(
                         "INSERT INTO test_effect (event_id, note) VALUES (?, 'before failure')", envelope.eventId());
                 throw new IllegalStateException("처리 실패");
+            });
+        }
+
+        @KafkaListener(
+                topics = REPLAY_TOPIC,
+                groupId = REPLAY_GROUP,
+                containerFactory = OutboxAutoConfiguration.LISTENER_CONTAINER_FACTORY)
+        void onReplay(ConsumerRecord<String, String> record, Acknowledgment ack) {
+            consumer.consume(record, ack, envelope -> {
+                if (counters.replayFailing.get()) {
+                    throw new IllegalStateException("원인이 아직 풀리지 않았다");
+                }
+                jdbc.update("INSERT INTO test_effect (event_id, note) VALUES (?, 'replayed')", envelope.eventId());
             });
         }
 

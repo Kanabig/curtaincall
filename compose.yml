@@ -98,7 +98,7 @@ services:
   gateway:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: gateway } }
-    image: curtaincall/gateway:local
+    image: curtaincall/gateway:${IMAGE_TAG:-local}
     ports:
       - "${GATEWAY_HOST_PORT:-8080}:8080"
     environment:
@@ -115,7 +115,7 @@ services:
   user:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: user } }
-    image: curtaincall/user:local
+    image: curtaincall/user:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/user_db
@@ -139,7 +139,7 @@ services:
   event:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: event } }
-    image: curtaincall/event:local
+    image: curtaincall/event:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/event_db
@@ -161,7 +161,7 @@ services:
   queue:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: queue } }
-    image: curtaincall/queue:local
+    image: curtaincall/queue:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       # 입장 토큰 서명 키. gateway가 같은 값으로 검증한다
@@ -171,12 +171,13 @@ services:
       kafka: { condition: service_healthy }
     healthcheck:
       <<: *java-health
-      test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health"]
+      # Redis가 내려가도 queue는 503으로 응답하며 살아 있어야 하므로 liveness로 확인한다
+      test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health/liveness"]
 
   reservation:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: reservation } }
-    image: curtaincall/reservation:local
+    image: curtaincall/reservation:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/reservation_db
@@ -186,7 +187,9 @@ services:
       SPRING_FLYWAY_PASSWORD: ${RESERVATION_FLYWAY_PASSWORD}
       CURTAINCALL_EVENT_BASE_URL: http://event:8082
       CURTAINCALL_HOLD_STRATEGY: ${CURTAINCALL_HOLD_STRATEGY:-conditional-update}
-      CURTAINCALL_SEAT_STATUS_CACHE_TTL: ${CURTAINCALL_SEAT_STATUS_CACHE_TTL:-2s}
+      # DB 연결 풀. 인스턴스 1개 기준 풀 합계 80(reservation 40 + 나머지 4개 서비스 10씩) / MySQL max_connections 151. 인스턴스를 늘리면 합계가 예산을 넘는지 먼저 본다
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${RESERVATION_DB_POOL_SIZE:-40}
+      CURTAINCALL_SEAT_STATUS_CACHE_TTL: ${CURTAINCALL_SEAT_STATUS_CACHE_TTL:-500ms}
       # 스키마 변경은 Flyway 계정만 한다. 앱은 검증만 한다
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     depends_on:
@@ -200,7 +203,7 @@ services:
   payment:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: payment } }
-    image: curtaincall/payment:local
+    image: curtaincall/payment:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/payment_db
@@ -222,7 +225,7 @@ services:
   mock-pg:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: mock-pg } }
-    image: curtaincall/mock-pg:local
+    image: curtaincall/mock-pg:${IMAGE_TAG:-local}
     ports:
       - "${MOCK_PG_HOST_PORT:-8090}:8090"
     healthcheck:
@@ -232,7 +235,7 @@ services:
   notification:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: notification } }
-    image: curtaincall/notification:local
+    image: curtaincall/notification:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/notification_db
@@ -256,7 +259,7 @@ services:
   search-assist:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: search-assist } }
-    image: curtaincall/search-assist:local
+    image: curtaincall/search-assist:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       # 비워 두면 Mock 모드로 동작한다

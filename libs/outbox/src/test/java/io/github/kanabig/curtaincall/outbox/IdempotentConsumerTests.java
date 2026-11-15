@@ -9,10 +9,14 @@ import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 
 /** NFR-4 멱등 소비. */
+@ExtendWith(OutputCaptureExtension.class)
 class IdempotentConsumerTests extends OutboxIntegrationTest {
 
     @Autowired
@@ -23,7 +27,7 @@ class IdempotentConsumerTests extends OutboxIntegrationTest {
 
     @Test
     @DisplayName("같은 이벤트가 두 번 와도 부수 효과는 한 번이고 오프셋은 두 건 모두 커밋된다")
-    void duplicateIsProcessedOnce() throws Exception {
+    void duplicateIsProcessedOnce(CapturedOutput output) throws Exception {
         String eventId = UUID.randomUUID().toString();
         long committedBefore =
                 TestKafka.committedOffsets(bootstrapServers(), TestListeners.IDEM_GROUP, TestListeners.IDEM_TOPIC);
@@ -51,6 +55,9 @@ class IdempotentConsumerTests extends OutboxIntegrationTest {
                 .isEqualTo(1);
         assertThat(meterRegistry.get("outbox.consumer.duplicates").counter().count())
                 .isGreaterThanOrEqualTo(1.0);
+        // 처리 완료 줄은 실제로 처리한 한 번만 남는다
+        assertThat(output.getOut().split("이벤트 처리 완료: eventId=" + eventId + " type=OrderCreated", -1))
+                .hasSize(2);
     }
 
     @Test
@@ -86,7 +93,7 @@ class IdempotentConsumerTests extends OutboxIntegrationTest {
     @Test
     @DisplayName("봉투를 읽을 수 없으면 재시도 없이 바로 DLT로 간다")
     void unreadableGoesStraightToDlt() throws Exception {
-        String dlt = TestListeners.BAD_TOPIC + ".DLT";
+        String dlt = TestListeners.BAD_DLT;
         int attemptsBefore = listeners.badAttempts().get();
 
         kafkaTemplate.send(TestListeners.BAD_TOPIC, "ord-bad", "이건 JSON이 아니다").get();

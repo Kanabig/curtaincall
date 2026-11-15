@@ -6,7 +6,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: prometheus
+        include: prometheus,dlt
 curtaincall:
   outbox:
     enabled: true
@@ -16,3 +16,6 @@ curtaincall:
     consumer:
       enabled: true
       backoff-initial: 50ms
+      # 토픽별 DLT 이름 지정. 지정하지 않은 토픽은 {토픽}.DLT
+      dlt-topics:
+        "[test.bad]": test.bad.svc.DLT

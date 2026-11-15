@@ -6,6 +6,8 @@ import io.github.kanabig.curtaincall.queue.dto.QueueStatusResponse;
 import io.github.kanabig.curtaincall.queue.error.QueueErrorCode;
 import io.github.kanabig.curtaincall.queue.repository.EntryResult;
 import io.github.kanabig.curtaincall.queue.repository.QueueRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -15,7 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
-/** [QUE-1~3, QUE-5] 대기열 진입과 순번 조회, 입장하면 입장 토큰을 붙인다. Redis가 응답하지 않으면 503으로 돌려 진입만 멈춘다(NFR-11). */
+/** [QUE-1~3, QUE-5, QUE-8] 대기열 진입과 순번 조회, 입장하면 입장 토큰을 붙인다. Redis가 응답하지 않으면 503으로 돌려 진입만 멈춘다(NFR-11). */
 @Service
 public class QueueService {
 
@@ -25,12 +27,25 @@ public class QueueService {
     private final PollPolicy pollPolicy =
             new PollPolicy(() -> ThreadLocalRandom.current().nextDouble());
     private final ZoneId zone;
+    private final long soldOutPollAfterMs;
     private final EntryTokenIssuer tokenIssuer;
+    private final RedisCircuit circuit;
+    private final Counter circuitOpened;
 
-    public QueueService(QueueRepository repository, QueueProperties properties, EntryTokenIssuer tokenIssuer) {
+    public QueueService(
+            QueueRepository repository,
+            QueueProperties properties,
+            EntryTokenIssuer tokenIssuer,
+            MeterRegistry meters,
+            RedisCircuit circuit) {
         this.repository = repository;
         this.tokenIssuer = tokenIssuer;
         this.zone = properties.zone();
+        this.soldOutPollAfterMs = properties.soldOutPollAfter().toMillis();
+        this.circuit = circuit;
+        this.circuitOpened = Counter.builder("queue.redis.circuit.open")
+                .description("Redis 호출 실패로 서킷이 열린 횟수(이미 열린 뒤 늦게 온 실패는 제외)")
+                .register(meters);
     }
 
     /** 이미 대기 중이면 기존 순번을 그대로 돌려준다. {@link Entered#created()}는 이번 호출로 새로 들어왔는지다. */
@@ -58,6 +73,7 @@ public class QueueService {
                         r.rank(),
                         pollPolicy.etaSeconds(r.rank(), r.admissionPerSecond()),
                         pollPolicy.pollAfterMs(r.rank(), r.admissionPerSecond()));
+            case SOLD_OUT -> QueueStatusResponse.soldOut(r.rank(), pollPolicy.soldOutPollAfterMs(soldOutPollAfterMs));
             case ADMITTED ->
                 QueueStatusResponse.admitted(
                         tokenIssuer.issue(userId, sessionId, Instant.ofEpochMilli(r.epochMs())), format(r.epochMs()));
@@ -73,11 +89,21 @@ public class QueueService {
         return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMs), zone).toString();
     }
 
-    private static <T> T call(java.util.function.Supplier<T> action) {
+    /** 서킷이 열려 있으면 Redis를 부르지 않고 바로 503. 닫는 일은 {@link RedisCircuitProber}가 한다. 장애 중 WARN 로그는 서킷이 열릴 때만 남긴다. */
+    private <T> T call(java.util.function.Supplier<T> action) {
+        if (circuit.isOpen()) {
+            throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
+        }
         try {
-            return action.get();
+            T result = action.get();
+            circuit.recordSuccess();
+            return result;
         } catch (DataAccessException e) {
-            log.warn("Redis 호출 실패로 대기열을 사용할 수 없다: {}", e.toString());
+            boolean opened = circuit.recordFailure();
+            log.warn("Redis 호출 실패(서킷 {}): {}", opened ? "열림" : "유지", e.toString());
+            if (opened) {
+                circuitOpened.increment();
+            }
             throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
         }
     }

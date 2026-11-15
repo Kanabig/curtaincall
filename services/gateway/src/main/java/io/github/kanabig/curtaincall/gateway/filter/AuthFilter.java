@@ -103,6 +103,7 @@ public class AuthFilter implements GlobalFilter, Ordered {
         if (ADMIN.matches(path) && !"ADMIN".equals(role)) {
             return reject(exchange, HttpStatus.FORBIDDEN, "FORBIDDEN", "관리자만 사용할 수 있다");
         }
+        exchange.getAttributes().put(AccessLogFilter.USER_ID_ATTRIBUTE, jwt.getSubject());
         ServerWebExchange authenticated = exchange.mutate()
                 .request(request -> request.headers(headers -> {
                     headers.set(USER_ID, jwt.getSubject());
