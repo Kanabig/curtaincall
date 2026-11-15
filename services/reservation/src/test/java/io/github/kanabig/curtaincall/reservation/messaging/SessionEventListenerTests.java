@@ -94,10 +94,14 @@ class SessionEventListenerTests extends InventoryIntegrationTest {
     @Test
     @DisplayName("Created → Updated와 Updated → Created 어느 순서로 와도 행은 하나다")
     void eitherOrderRegistersOnce() throws Exception {
-        kafkaTemplate.send("event.session", "411", sessionCreated(UUID.randomUUID().toString(), 411L)).get();
+        kafkaTemplate
+                .send("event.session", "411", sessionCreated(UUID.randomUUID().toString(), 411L))
+                .get();
         kafkaTemplate.send("event.session", "411", sessionUpdated(411L)).get();
         kafkaTemplate.send("event.session", "412", sessionUpdated(412L)).get();
-        kafkaTemplate.send("event.session", "412", sessionCreated(UUID.randomUUID().toString(), 412L)).get();
+        kafkaTemplate
+                .send("event.session", "412", sessionCreated(UUID.randomUUID().toString(), 412L))
+                .get();
         awaitMarker(499L);
 
         for (long id : new long[] {411L, 412L}) {
@@ -115,8 +119,12 @@ class SessionEventListenerTests extends InventoryIntegrationTest {
         // 421: 등록 전에 삭제, 422: 등록(PENDING) 뒤 삭제
         kafkaTemplate.send("event.session", "421", sessionDeleted(421L)).get();
         kafkaTemplate.send("event.session", "421", sessionUpdated(421L)).get();
-        kafkaTemplate.send("event.session", "421", sessionCreated(UUID.randomUUID().toString(), 421L)).get();
-        kafkaTemplate.send("event.session", "422", sessionCreated(UUID.randomUUID().toString(), 422L)).get();
+        kafkaTemplate
+                .send("event.session", "421", sessionCreated(UUID.randomUUID().toString(), 421L))
+                .get();
+        kafkaTemplate
+                .send("event.session", "422", sessionCreated(UUID.randomUUID().toString(), 422L))
+                .get();
         kafkaTemplate.send("event.session", "422", sessionDeleted(422L)).get();
         kafkaTemplate.send("event.session", "422", sessionUpdated(422L)).get();
         awaitMarker(499L);
@@ -130,17 +138,18 @@ class SessionEventListenerTests extends InventoryIntegrationTest {
     /** 뒤에 보낸 마커 회차가 처리되면 같은 파티션의 앞선 레코드도 모두 소비된 것이다. */
     private void awaitMarker(long markerId) throws Exception {
         kafkaTemplate
-                .send("event.session", String.valueOf(markerId), sessionCreated(UUID.randomUUID().toString(), markerId))
+                .send(
+                        "event.session",
+                        String.valueOf(markerId),
+                        sessionCreated(UUID.randomUUID().toString(), markerId))
                 .get();
         await().atMost(Duration.ofSeconds(20))
                 .untilAsserted(() -> assertThat(statusOf(markerId)).isEqualTo("PENDING"));
     }
 
     private String statusOf(long sessionId) {
-        return jdbc.query(
-                        "SELECT status FROM session_stock WHERE session_id = ?",
-                        (rs, i) -> rs.getString(1),
-                        sessionId)
+        return jdbc
+                .query("SELECT status FROM session_stock WHERE session_id = ?", (rs, i) -> rs.getString(1), sessionId)
                 .stream()
                 .findFirst()
                 .orElse(null);
