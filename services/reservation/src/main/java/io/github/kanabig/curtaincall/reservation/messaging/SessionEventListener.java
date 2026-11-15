@@ -11,12 +11,17 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
-/** [EVT-9, RSV-9] event.session 토픽의 회차 이벤트를 소비한다. 재고 생성은 SessionCreated, 시작 시각과 가격 갱신은 SessionUpdated도 처리한다. */
+/**
+ * [EVT-9, RSV-9] event.session 토픽의 회차 이벤트를 소비한다. event.session은 compaction 토픽이라 SessionCreated가 이후 SessionUpdated로 대체될 수 있다.
+ * 두 이벤트 모두 전체 값을 싣고 재고 등록(insertPending)은 멱등이므로, SessionUpdated도 재고가 없으면 같은 경로로 등록한 뒤 시작 시각과 가격을 맞춘다.
+ * SessionDeleted는 아직 재고가 없는 회차의 재고 생성을 막는다.
+ */
 @Component
 public class SessionEventListener {
 
     static final String SESSION_CREATED = "SessionCreated";
     static final String SESSION_UPDATED = "SessionUpdated";
+    static final String SESSION_DELETED = "SessionDeleted";
 
     private final IdempotentConsumer consumer;
     private final SeatInventoryService inventoryService;
@@ -37,9 +42,12 @@ public class SessionEventListener {
     private void handle(EventEnvelope envelope) {
         if (SESSION_CREATED.equals(envelope.eventType())) {
             inventoryService.requestInventory(sessionId(envelope), startAt(envelope));
+        } else if (SESSION_DELETED.equals(envelope.eventType())) {
+            inventoryService.markDeleted(sessionId(envelope));
         } else if (SESSION_UPDATED.equals(envelope.eventType())) {
             long sessionId = sessionId(envelope);
             Instant startAt = startAt(envelope);
+            inventoryService.requestInventory(sessionId, startAt);
             if (startAt != null) {
                 inventoryService.updateStartAt(sessionId, startAt);
             }

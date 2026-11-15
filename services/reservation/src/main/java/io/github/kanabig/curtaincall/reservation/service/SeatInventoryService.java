@@ -60,6 +60,11 @@ public class SeatInventoryService {
         repository.insertPending(sessionId, clock.instant(), startAt);
     }
 
+    /** 회차 삭제 이벤트. 아직 재고가 없는 회차는 이후에도 재고를 만들지 않는다. */
+    public void markDeleted(long sessionId) {
+        repository.markDeleted(sessionId, clock.instant());
+    }
+
     /** 회차 수정 이벤트로 시작 시각을 맞춘다. */
     public void updateStartAt(long sessionId, Instant startAt) {
         repository.updateStartAt(sessionId, startAt);
