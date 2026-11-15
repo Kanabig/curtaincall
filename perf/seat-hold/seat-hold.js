@@ -57,7 +57,8 @@ function pickSeats() {
 export default function () {
   const userId = 1 + Math.floor(Math.random() * USERS);
   const res = http.post(`${BASE_URL}/api/v1/sessions/1/holds`, JSON.stringify({ seatIds: pickSeats() }), {
-    headers: { 'Content-Type': 'application/json', 'X-User-Id': String(userId) },
+    // gateway를 거치지 않으므로 gateway가 입장 토큰에서 넣어 주는 회차 헤더를 직접 보낸다
+    headers: { 'Content-Type': 'application/json', 'X-User-Id': String(userId), 'X-Entry-Session-Id': '1' },
   });
   if (res.status === 201) {
     holdOk.add(1);
