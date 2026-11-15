@@ -89,6 +89,11 @@ snapshot() { # <접미사>
     echo "top cpu processes:"; ps -eo pcpu,comm --sort=-pcpu | head -8 | sed 's/^/  /'
 } | tee "$OUT/env.txt"
 
+if [ -n "${PG_DELAY_MS:-}" ]; then
+    # 가짜 PG 승인 지연 주입(payment Bulkhead 거절 비율을 보려는 실행)
+    inside -X PUT http://mock-pg:8090/pg/admin/faults -H 'Content-Type: application/json' \
+        -d "{\"delayMs\":${PG_DELAY_MS},\"failureRate\":0,\"timeoutRate\":0,\"dropResponseRate\":0}" | tee "$OUT/pg-faults.txt"; echo
+fi
 snapshot before
 docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}' > "$OUT/stats-idle.txt"
 ( while sleep 5; do date +%T; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}'; echo '--'; done > "$OUT/stats-load.txt" ) &
