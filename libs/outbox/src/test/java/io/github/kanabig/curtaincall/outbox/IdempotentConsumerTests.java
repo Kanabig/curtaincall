@@ -93,7 +93,7 @@ class IdempotentConsumerTests extends OutboxIntegrationTest {
     @Test
     @DisplayName("봉투를 읽을 수 없으면 재시도 없이 바로 DLT로 간다")
     void unreadableGoesStraightToDlt() throws Exception {
-        String dlt = TestListeners.BAD_TOPIC + ".DLT";
+        String dlt = TestListeners.BAD_DLT;
         int attemptsBefore = listeners.badAttempts().get();
 
         kafkaTemplate.send(TestListeners.BAD_TOPIC, "ord-bad", "이건 JSON이 아니다").get();

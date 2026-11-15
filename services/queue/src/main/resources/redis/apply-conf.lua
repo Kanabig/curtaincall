@@ -1,6 +1,7 @@
 -- 회차 이벤트를 conf에 반영한다. 이벤트에 실린 값으로 덮어쓰므로 같은 이벤트를 여러 번 적용해도 결과가 같다.
 -- 이미 반영한 것보다 오래된 설정 이벤트(ver 비교)는 버린다. 중지·삭제는 종결 상태라 ver와 상관없이 항상 반영하고,
 -- 저장하는 ver는 지금까지 본 가장 큰 값으로 둔다. 중지·삭제는 되돌릴 수 없는 종결 상태라, 이미 종결된 회차에 온 설정 이벤트는 무시한다.
+-- 중지 이벤트에 전체 값(saleOpenAtMs > 0)이 실려 오고 conf에 값이 아직 없으면(compaction으로 중지 이벤트만 남은 회차) 그 값으로 conf를 채운다.
 -- KEYS: conf, open, waiting, seen, seq, active
 -- ARGV: sessionId, type(UPSERT|SUSPEND|DELETE), ver(이벤트 발생 시각 ms), saleOpenAtMs, admissionPerSecond, maxActiveUsers
 -- 반환: 1 반영 | 0 오래된 이벤트라 무시
@@ -24,6 +25,9 @@ if kind == 'UPSERT' then
 elseif kind == 'SUSPEND' then
   if status ~= 'DELETED' then
     status = 'SUSPENDED'
+  end
+  if tonumber(ARGV[4]) > 0 and redis.call('HEXISTS', KEYS[1], 'saleOpenAt') == 0 then
+    redis.call('HSET', KEYS[1], 'saleOpenAt', ARGV[4], 'admissionPerSecond', ARGV[5], 'maxActiveUsers', ARGV[6])
   end
   redis.call('HSET', KEYS[1], 'status', status, 'ver', ver)
 else

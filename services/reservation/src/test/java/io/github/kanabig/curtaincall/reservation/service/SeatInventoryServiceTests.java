@@ -63,6 +63,39 @@ class SeatInventoryServiceTests extends InventoryIntegrationTest {
     }
 
     @Test
+    @DisplayName("재고를 만드는 사이 회차가 삭제되면 넣은 행을 되돌리고 READY로 바꾸지 않는다")
+    void deletedWhileCreatingLeavesNoInventory() {
+        doAnswer(invocation -> {
+                    // 배치를 읽은 뒤 커밋 전에 SessionDeleted가 처리된 상황
+                    service.markDeleted(4L);
+                    return seatMap(100);
+                })
+                .when(eventClient)
+                .fetchSeatMap(4L);
+        tx.executeWithoutResult(status -> service.requestInventory(4L));
+
+        assertThat(service.processPending()).isZero();
+
+        assertThat(inventoryCount(4L)).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM session_stock WHERE session_id = 4", String.class))
+                .isEqualTo("DELETED");
+    }
+
+    @Test
+    @DisplayName("READY 회차에 SessionDeleted가 와도 상태와 재고는 그대로다")
+    void deleteDoesNotTouchReadyInventory() {
+        doReturn(seatMap(50)).when(eventClient).fetchSeatMap(5L);
+        tx.executeWithoutResult(status -> service.requestInventory(5L));
+        assertThat(service.processPending()).isEqualTo(1);
+
+        service.markDeleted(5L);
+
+        assertThat(jdbc.queryForObject("SELECT status FROM session_stock WHERE session_id = 5", String.class))
+                .isEqualTo("READY");
+        assertThat(inventoryCount(5L)).isEqualTo(50);
+    }
+
+    @Test
     @DisplayName("같은 회차를 다시 요청해도 재고 수는 같고 event를 다시 부르지 않으며 먼저 만든 행을 덮어쓰지 않는다")
     void sameSessionTwiceKeepsCount() {
         doReturn(seatMap(2_500)).when(eventClient).fetchSeatMap(2L);

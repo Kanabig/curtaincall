@@ -1,6 +1,7 @@
 package io.github.kanabig.curtaincall.outbox.config;
 
 import java.time.Duration;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -27,5 +28,13 @@ public record OutboxProperties(
             @DefaultValue("2.0") double backoffMultiplier,
             @DefaultValue("3") int maxRetries,
             @DefaultValue("7d") Duration processedEventRetention,
-            @DefaultValue(".DLT") String dltSuffix) {}
+            @DefaultValue(".DLT") String dltSuffix,
+            @DefaultValue Map<String, String> dltTopics) {
+
+        /** 토픽의 DLT 이름. dltTopics에 있으면 그 이름, 없으면 {@code 토픽 + dltSuffix}. 같은 토픽을 여러 서비스가 읽는 경우만 덮어쓴다. */
+        public String dltTopic(String topic) {
+            String named = dltTopics.get(topic);
+            return named != null ? named : topic + dltSuffix;
+        }
+    }
 }

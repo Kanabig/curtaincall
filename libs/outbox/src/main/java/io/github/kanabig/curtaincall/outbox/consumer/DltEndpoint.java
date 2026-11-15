@@ -1,5 +1,6 @@
 package io.github.kanabig.curtaincall.outbox.consumer;
 
+import io.github.kanabig.curtaincall.outbox.config.OutboxProperties;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -28,12 +29,13 @@ public class DltEndpoint {
 
     private final DltReplayer replayer;
     private final KafkaListenerEndpointRegistry registry;
-    private final String dltSuffix;
+    private final OutboxProperties.Consumer properties;
 
-    public DltEndpoint(DltReplayer replayer, KafkaListenerEndpointRegistry registry, String dltSuffix) {
+    public DltEndpoint(
+            DltReplayer replayer, KafkaListenerEndpointRegistry registry, OutboxProperties.Consumer properties) {
         this.replayer = replayer;
         this.registry = registry;
-        this.dltSuffix = dltSuffix;
+        this.properties = properties;
     }
 
     @ReadOperation
@@ -43,7 +45,7 @@ public class DltEndpoint {
             String[] listened = container.getContainerProperties().getTopics();
             if (listened != null) {
                 for (String topic : listened) {
-                    topics.add(topic + dltSuffix);
+                    topics.add(properties.dltTopic(topic));
                 }
             }
         }

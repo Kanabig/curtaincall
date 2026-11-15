@@ -205,7 +205,7 @@ public class OutboxAutoConfiguration {
         @ConditionalOnAvailableEndpoint(endpoint = DltEndpoint.class)
         DltEndpoint dltEndpoint(
                 DltReplayer replayer, KafkaListenerEndpointRegistry registry, OutboxProperties properties) {
-            return new DltEndpoint(replayer, registry, properties.consumer().dltSuffix());
+            return new DltEndpoint(replayer, registry, properties.consumer());
         }
 
         @Bean(name = LISTENER_CONTAINER_FACTORY)

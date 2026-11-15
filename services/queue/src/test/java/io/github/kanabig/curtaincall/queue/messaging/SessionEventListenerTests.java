@@ -79,6 +79,28 @@ class SessionEventListenerTests extends QueueIntegrationTest {
     }
 
     @Test
+    @DisplayName("compaction으로 SessionSuspended만 남은 회차를 처음부터 읽어도 conf가 만들어지고 중지 상태가 유지된다")
+    void suspendedOnlyRebuildsConf() {
+        kafka.send(
+                "event.session",
+                String.valueOf(sessionId),
+                envelope("SessionSuspended", sessionId, "2026-11-15T10:00:01.000+09:00", """
+                        {"sessionId":%d,"performanceId":1,"venueId":"FC1","startAt":"2027-01-01T20:00:00+09:00",
+                         "saleOpenAt":"2026-12-01T20:00:00+09:00","prices":[{"grade":"R","price":100000}],
+                         "admissionPerSecond":50,"maxActiveUsers":300}""".formatted(sessionId)));
+
+        String key = "q:" + sessionId + ":conf";
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            assertThat(redis.opsForHash().get(key, "status")).isEqualTo("SUSPENDED");
+            assertThat(redis.opsForHash().get(key, "saleOpenAt")).isEqualTo("1796122800000");
+            assertThat(redis.opsForHash().get(key, "admissionPerSecond")).isEqualTo("50");
+            assertThat(redis.opsForHash().get(key, "maxActiveUsers")).isEqualTo("300");
+            assertThat(redis.opsForSet().isMember("q:open", String.valueOf(sessionId)))
+                    .isFalse();
+        });
+    }
+
+    @Test
     @DisplayName("SessionSuspended를 소비하면 판매 중 집합에서 빠지고 상태가 SUSPENDED가 된다")
     void consumesSuspended() {
         kafka.send("event.session", String.valueOf(sessionId), created("2026-11-15T10:00:00.000+09:00", 50));
@@ -107,6 +129,17 @@ class SessionEventListenerTests extends QueueIntegrationTest {
                 .isInstanceOf(InvalidSessionEventException.class);
         String zeroAdmission = created("2026-11-15T10:00:00.000+09:00", 0);
         assertThatThrownBy(() -> listener.parse(zeroAdmission)).isInstanceOf(InvalidSessionEventException.class);
+    }
+
+    @Test
+    @DisplayName("중지 이벤트의 전체 값이 잘못돼도 중지는 값 없이 적용한다")
+    void suspendWithBadValuesStillSuspends() {
+        SessionConf conf = listener.parse(envelope("SessionSuspended", 7, "2026-11-15T10:00:00.000+09:00", """
+                {"sessionId":7,"saleOpenAt":"not-a-time","admissionPerSecond":0,"maxActiveUsers":300}"""));
+
+        assertThat(conf.type()).isEqualTo(Type.SUSPEND);
+        assertThat(conf.saleOpenAtMs()).isZero();
+        assertThat(conf.admissionPerSecond()).isZero();
     }
 
     @Test

@@ -1,6 +1,11 @@
 spring:
   application:
     name: queue
+  task:
+    scheduling:
+      # 입장 tick이 Redis 타임아웃(500ms)을 기다리는 동안에도 서킷 복구 확인(PING)이 밀리지 않게 한다
+      pool:
+        size: 3
   data:
     redis:
       # 장애 때 요청이 오래 매달리지 않게 한다(NFR-5 p95 200ms)
@@ -19,6 +24,11 @@ logging:
   pattern:
     level: "%5p [${spring.application.name},%X{requestId:-}]"
 management:
+  endpoint:
+    health:
+      # liveness는 프로세스만, readiness는 트래픽 수락 상태만 본다. Redis·Kafka 상태는 /actuator/health에만 나온다
+      probes:
+        enabled: true
   endpoints:
     web:
       exposure:
@@ -35,6 +45,11 @@ curtaincall:
     order: reservation.order
     reservation-session: reservation.session
   queue:
+    dlt:
+      # 기본은 {토픽}.DLT. 다른 서비스도 읽는 토픽만 서비스를 붙여 나눈다
+      topics:
+        "[event.session]": event.session.queue.DLT
+        "[reservation.order]": reservation.order.queue.DLT
     zone: Asia/Seoul
     entry-ttl: 10m
     stale-after: 60s

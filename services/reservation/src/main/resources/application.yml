@@ -25,6 +25,9 @@ curtaincall:
     enabled: true
     consumer:
       enabled: true
+      # event.session은 queue도 읽는다. 이 토픽만 DLT 이름에 서비스를 붙인다
+      dlt-topics:
+        "[event.session]": event.session.reservation.DLT
   event:
     base-url: http://localhost:8082
     connect-timeout: 1s

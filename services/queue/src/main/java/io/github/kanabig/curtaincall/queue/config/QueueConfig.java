@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
-@EnableConfigurationProperties({QueueProperties.class, JwtProperties.class})
+@EnableConfigurationProperties({QueueProperties.class, JwtProperties.class, DltProperties.class})
 public class QueueConfig {
 
     @Bean

@@ -6,6 +6,8 @@ import io.github.kanabig.curtaincall.queue.dto.QueueStatusResponse;
 import io.github.kanabig.curtaincall.queue.error.QueueErrorCode;
 import io.github.kanabig.curtaincall.queue.repository.EntryResult;
 import io.github.kanabig.curtaincall.queue.repository.QueueRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -27,12 +29,23 @@ public class QueueService {
     private final ZoneId zone;
     private final long soldOutPollAfterMs;
     private final EntryTokenIssuer tokenIssuer;
+    private final RedisCircuit circuit;
+    private final Counter circuitOpened;
 
-    public QueueService(QueueRepository repository, QueueProperties properties, EntryTokenIssuer tokenIssuer) {
+    public QueueService(
+            QueueRepository repository,
+            QueueProperties properties,
+            EntryTokenIssuer tokenIssuer,
+            MeterRegistry meters,
+            RedisCircuit circuit) {
         this.repository = repository;
         this.tokenIssuer = tokenIssuer;
         this.zone = properties.zone();
         this.soldOutPollAfterMs = properties.soldOutPollAfter().toMillis();
+        this.circuit = circuit;
+        this.circuitOpened = Counter.builder("queue.redis.circuit.open")
+                .description("Redis 호출 실패로 서킷이 열린 횟수(이미 열린 뒤 늦게 온 실패는 제외)")
+                .register(meters);
     }
 
     /** 이미 대기 중이면 기존 순번을 그대로 돌려준다. {@link Entered#created()}는 이번 호출로 새로 들어왔는지다. */
@@ -76,11 +89,21 @@ public class QueueService {
         return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMs), zone).toString();
     }
 
-    private static <T> T call(java.util.function.Supplier<T> action) {
+    /** 서킷이 열려 있으면 Redis를 부르지 않고 바로 503. 닫는 일은 {@link RedisCircuitProber}가 한다. 장애 중 WARN 로그는 서킷이 열릴 때만 남긴다. */
+    private <T> T call(java.util.function.Supplier<T> action) {
+        if (circuit.isOpen()) {
+            throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
+        }
         try {
-            return action.get();
+            T result = action.get();
+            circuit.recordSuccess();
+            return result;
         } catch (DataAccessException e) {
-            log.warn("Redis 호출 실패로 대기열을 사용할 수 없다: {}", e.toString());
+            boolean opened = circuit.recordFailure();
+            log.warn("Redis 호출 실패(서킷 {}): {}", opened ? "열림" : "유지", e.toString());
+            if (opened) {
+                circuitOpened.increment();
+            }
             throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
         }
     }

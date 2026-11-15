@@ -1,6 +1,10 @@
 spring:
   application:
     name: event
+  kafka:
+    admin:
+      # 이미 만들어진 토픽(event.session)에도 선언한 설정(compaction)을 적용한다
+      modify-topic-configs: true
 server:
   port: 8082
 logging:
