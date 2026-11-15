@@ -1,7 +1,7 @@
 #!/bin/bash
 # 결제 Saga 수렴 검증과 장애 주입. 사용법:
 #   perf/saga-convergence/run.sh [프로젝트 이름] [시나리오...]   (시나리오를 생략하면 전부)
-#   ORDERS=20 LIMIT=900 perf/saga-convergence/run.sh w3 payment-restart
+#   ORDERS=20 LIMIT=900 REPEAT=3 perf/saga-convergence/run.sh w3 payment-restart
 # compose 프로젝트에 mysql, kafka, mock-pg, payment, reservation이 떠 있어야 한다(없으면 올린다).
 # 시나리오마다 DB를 비우고 주문을 만든 뒤 장애를 넣고, 모든 주문이 종결될 때까지 걸린 시간과
 # 종료 후 정합성(verify.sql)을 기록한다. 결과는 perf/saga-convergence/results/<시나리오>/ 에 남는다(커밋하지 않는다).
@@ -10,6 +10,7 @@ set -uo pipefail
 
 PROJECT="${1:-w3}"
 shift || true
+REPEAT="${REPEAT:-3}"        # 시나리오별 반복 횟수(간헐 실패도 실패로 센다)
 ORDERS="${ORDERS:-20}"        # 시나리오당 주문 수(사용자 한 명이 좌석 2석)
 LIMIT="${LIMIT:-900}"         # 수렴 대기 상한(초)
 CHAOS_INQUIRY_MAX_DURATION="${CHAOS_INQUIRY_MAX_DURATION:-40s}"
@@ -65,9 +66,9 @@ wait_converged() { # 시작 시각(epoch)을 받아 수렴까지 걸린 초를 C
 
 start_scenario() {
     NAME="$1"; EXPECT="$2"
-    OUT="$OUT_ROOT/$NAME"
+    OUT="$OUT_ROOT/$NAME/run-$RUN"
     rm -rf "$OUT"; mkdir -p "$OUT"
-    log "=== $NAME (기대: $EXPECT)"
+    log "=== $NAME #$RUN/$REPEAT (기대: $EXPECT)"
     COMPOSE_FILES=(-f compose.yml)
     compose up -d --wait mysql kafka mock-pg payment reservation > /dev/null
     compose unpause mock-pg 2> /dev/null || true
@@ -98,7 +99,7 @@ finish_scenario() { # 수렴 시작 시각을 받는다
     compose exec -T payment curl -fs localhost:8085/actuator/prometheus 2> /dev/null | grep -E '^(order|payment)_' > "$OUT/payment-metrics.txt" || true
     rsv curl -fs localhost:8084/actuator/prometheus 2> /dev/null | grep -E '^(order|payment)_' > "$OUT/reservation-metrics.txt" || true
     echo "CANCEL_FAILED: $(echo "SELECT COUNT(*) FROM payment_db.payment WHERE status = 'CANCEL_FAILED'" | sql)" >> "$OUT/verify.txt"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$final" "$CONVERGE_S" "$violations" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$RUN" "$final" "$CONVERGE_S" "$violations" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
     cat "$OUT/verify.txt"
     case "$verdict" in PASS) ;; *) FAILED=1 ;; esac
 }
@@ -255,7 +256,7 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
     # 주문은 CONFIRMED로 남고 예매가 CANCELLED가 된다. verify.sql의 SOLD 대조는 취소 뒤 0 = 0이다
     sql_table < "$DIR/verify.sql" > "$OUT/verify.txt"
     local v; v=$(sql < "$DIR/verify.sql" | awk -F'\t' 'NF==2 && $2 ~ /^[0-9]+$/ {s += $2} END {print s+0}')
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$(counts)" "$CONVERGE_S" "$v" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$RUN" "$(counts)" "$CONVERGE_S" "$v" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
     [ "$verdict" = PASS ] || FAILED=1
 }
 
@@ -309,11 +310,13 @@ s_duplicates-reorder() { # 같은 응답 중복, 새 이벤트 ID로 다시 보�
 }
 
 for s in $SCENARIOS; do
-    case "$s" in
-        kafka-outage-before) s_kafka-outage before ;;
-        kafka-outage-mid) s_kafka-outage mid ;;
-        *) "s_$s" ;;
-    esac
+    for RUN in $(seq 1 "$REPEAT"); do
+        case "$s" in
+            kafka-outage-before) s_kafka-outage before ;;
+            kafka-outage-mid) s_kafka-outage mid ;;
+            *) "s_$s" ;;
+        esac
+    done
 done
 reset_faults
 log "끝. 요약: $OUT_ROOT/summary.tsv"
