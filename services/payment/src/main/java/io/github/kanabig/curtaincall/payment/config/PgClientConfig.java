@@ -108,7 +108,7 @@ public class PgClientConfig {
      */
     @Bean(destroyMethod = "close")
     ExecutorService pgCallExecutor() {
-        return Executors.newThreadPerTaskExecutor(
-                Thread.ofVirtual().name("pg-call-", 0).factory());
+        return new MdcPropagatingExecutor(Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("pg-call-", 0).factory()));
     }
 }
