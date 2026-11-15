@@ -31,14 +31,14 @@ public class OrderEventListener {
             if (root == null || !root.isObject()) {
                 throw new InvalidSessionEventException("봉투가 JSON 객체가 아니다");
             }
-            if (!CONFIRMED.equals(text(root, "eventType"))) {
-                return;
+            if (CONFIRMED.equals(text(root, "eventType"))) {
+                JsonNode payload = root.get("payload");
+                if (payload == null || !payload.isObject()) {
+                    throw new InvalidSessionEventException("payload가 없다");
+                }
+                repository.removeActive(longField(payload, "sessionId"), longField(payload, "userId"));
             }
-            JsonNode payload = root.get("payload");
-            if (payload == null || !payload.isObject()) {
-                throw new InvalidSessionEventException("payload가 없다");
-            }
-            repository.removeActive(longField(payload, "sessionId"), longField(payload, "userId"));
+            ConsumedEventLog.processed(root);
         } catch (JsonProcessingException e) {
             throw new InvalidSessionEventException("주문 이벤트를 읽을 수 없다", e);
         }

@@ -1,6 +1,7 @@
 package io.github.kanabig.curtaincall.gateway;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.sun.net.httpserver.HttpServer;
@@ -8,6 +9,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -437,6 +439,32 @@ class GatewayAuthTests {
                 .expectStatus()
                 .isUnauthorized();
         assertThat(output.getOut()).contains("[gateway,trace-77]").contains("access token 거절");
+    }
+
+    @Test
+    @DisplayName("요청마다 메서드, 경로, 상태, 처리 시간, 사용자 ID를 한 줄 남기고 쿼리와 토큰은 남기지 않는다")
+    void accessLog(CapturedOutput output) {
+        String token = token("7", "USER", Instant.now(), Instant.now().plusSeconds(600), SECRET);
+        client.get()
+                .uri("/api/v1/users/me?secret=abc")
+                .header("X-Request-Id", "trace-access-1")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus()
+                .isOk();
+        client.get()
+                .uri("/api/v1/users/me")
+                .header("X-Request-Id", "trace-access-2")
+                .exchange()
+                .expectStatus()
+                .isUnauthorized();
+
+        // 로그는 응답이 나간 뒤(doFinally)에 찍히므로 부하에서는 검사가 앞설 수 있다
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertThat(output.getOut())
+                        .containsPattern("INFO \\[gateway,trace-access-1\\].* GET /api/v1/users/me 200 \\d+ms user=7")
+                        .containsPattern("INFO \\[gateway,trace-access-2\\].* GET /api/v1/users/me 401 \\d+ms user=-"));
+        assertThat(output.getOut()).doesNotContain("secret=abc").doesNotContain(token);
     }
 
     private static String token(String sub, String role, Instant issuedAt, Instant expiresAt, String secret) {
