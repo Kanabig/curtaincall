@@ -10,7 +10,7 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 
-/** DLT 이름은 기본 {@code 토픽 + dltSuffix}(기본 {@code .DLT}), dltTopics에 적은 토픽은 그 이름. 같은 토픽을 여러 서비스가 읽으면 서비스별 이름으로 나눈다. 일시 오류는 백오프(기본 1s, 2s, 4s) 3회 재시도 뒤 {@code {토픽}.DLT}로 보낸다. 봉투를 읽을 수 없는 메시지는 재시도 없이 바로 보낸다. */
+/** DLT 이름은 기본 {@code 토픽 + dltSuffix}(기본 {@code .DLT}), dltTopics에 적은 토픽은 그 이름. 같은 토픽을 여러 서비스가 읽으면 서비스별 이름으로 나눈다. 일시 오류는 백오프(기본 1s, 2s, 4s) 3회 재시도 뒤 위 이름의 DLT로 보낸다. 봉투를 읽을 수 없는 메시지는 재시도 없이 바로 보낸다. */
 public final class OutboxConsumerErrorHandling {
 
     public static final String DLT_SUFFIX = ".DLT";

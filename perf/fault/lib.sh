@@ -59,6 +59,17 @@ make_session() {
         | jq -r '.sessionId // .id'
 }
 
+# 회차의 실제 좌석 ID를 reservation 재고에서 읽는다(hall_seat.seat_id는 자동 증가라 1부터라고 가정하지 않는다). 재고 생성은 비동기라 최대 90초 기다린다
+seat_ids() { # seat_ids 회차 개수 → 좌석 ID를 공백으로 구분해 출력
+    local ids="" i
+    for i in $(seq 1 45); do
+        ids=$(compose exec -T mysql sh -c "mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -N reservation_db -e \"SELECT seat_id FROM seat_inventory WHERE session_id = $1 ORDER BY seat_id LIMIT $2\" 2>/dev/null" | tr -d '\r' | tr '\n' ' ')
+        [ "$(wc -w <<< "$ids")" -ge "$2" ] && break
+        ids=""; sleep 2
+    done
+    echo "$ids"
+}
+
 wait_open() { sleep "$(( ${1:-20} + 2 ))"; }
 
 enter_token() { # enter_token 회차 토큰 → 입장 토큰(입장할 때까지 폴링, 최대 60초)
@@ -201,9 +212,11 @@ scenario_aux() {
     sid=$(make_session 15); wait_open 15
     a=$(signup_login "fault-aux-$$@example.com"); ta=$(enter_token "$sid" "$a")
     check_re "준비: 회차·사용자·입장 토큰" '^.+$' "$sid$a$ta"
+    local seats; read -ra seats <<< "$(seat_ids "$sid" 4)"
+    check "준비: 좌석 ID 수" 4 "${#seats[@]}"
     say "notification 중단"
     compose stop notification
-    order=$(purchase "$sid" "$a" "$ta" 1) && ok "결제 요청까지 완료: $order" || bad "예매 실패: $order"
+    order=$(purchase "$sid" "$a" "$ta" "${seats[0]}") && ok "결제 요청까지 완료: $order" || bad "예매 실패: $order"
     check "주문 확정" "CONFIRMED/APPROVED" "$(wait_order "$order" "$a" '^CONFIRMED/APPROVED$' 60 || true)"
     note "search-assist: 해당 없음(미구현)"
     say "notification 복구: 쌓인 이벤트로 메일이 온다"
@@ -232,6 +245,8 @@ scenario_redis() {
     ta=$(enter_token "$sid" "$a")
     check_re "준비: 회차·사용자" '^.+$' "$sid$a$b"
     check_re "A 입장 토큰 확보" '^.+$' "$ta"
+    local seats; read -ra seats <<< "$(seat_ids "$sid" 4)"
+    check "준비: 좌석 ID 수" 4 "${#seats[@]}"
 
     say "baseline(Redis 정상): 좌석 상태 조회"
     probe 30 GET "/api/v1/sessions/$sid/seat-status" "$a" "$OUT/seat-status-baseline.txt"
@@ -245,7 +260,7 @@ scenario_redis() {
     check "queue liveness" 200 "$(compose exec -T queue curl -s -o /dev/null -w '%{http_code}' http://localhost:8083/actuator/health/liveness)"
     check "queue health(Redis 포함)" 503 "$(compose exec -T queue curl -s -o /dev/null -w '%{http_code}' http://localhost:8083/actuator/health)"
     say "토큰 보유자(A): 점유·주문·결제 계속"
-    local order; order=$(purchase "$sid" "$a" "$ta" 1) && ok "A 결제 요청까지 완료: $order" || bad "A 예매 실패: $order"
+    local order; order=$(purchase "$sid" "$a" "$ta" "${seats[0]}") && ok "A 결제 요청까지 완료: $order" || bad "A 예매 실패: $order"
     check "A 주문 확정" "CONFIRMED/APPROVED" "$(wait_order "$order" "$a" '^CONFIRMED/APPROVED$' 60 || true)"
     say "속도 제한 fail-open"
     probe 30 GET "/api/v1/sessions/$sid/seat-status" "$a" "$OUT/seat-status-during-outage.txt"
@@ -295,6 +310,8 @@ scenario_pg() {
         b=$(new_buyer "$sid" "$i"); buyers+=("${b% *}"); tokens+=("${b#* }")
     done
     a="${buyers[0]}"
+    local seats; read -ra seats <<< "$(seat_ids "$sid" 25)"
+    check "준비: 좌석 ID 수" 25 "${#seats[@]}"
     check_re "준비: 사용자 25명의 입장 토큰" '^.+$' "$(printf '%s' "${tokens[*]}" | tr -d ' ')"
 
     say "baseline(PG 정상)"
@@ -305,7 +322,7 @@ scenario_pg() {
     say "PG 지연 8초(읽기 타임아웃 5초 초과): 주문 5건"
     check "지연 설정 적용" 200 "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$pg/pg/admin/faults" -H 'Content-Type: application/json' -d '{"delayMs":8000,"failureRate":0,"timeoutRate":0,"dropResponseRate":0}')"
     for i in 1 2 3 4 5; do
-        o=$(purchase "$sid" "${buyers[$((i - 1))]}" "${tokens[$((i - 1))]}" "$i") && orders+=("$o|${buyers[$((i - 1))]}") || bad "주문 $i 생성 실패: $o"
+        o=$(purchase "$sid" "${buyers[$((i - 1))]}" "${tokens[$((i - 1))]}" "${seats[$((i - 1))]}") && orders+=("$o|${buyers[$((i - 1))]}") || bad "주문 $i 생성 실패: $o"
     done
     probe 30 GET "/api/v1/sessions/$sid/seat-status" "$a" "$OUT/seat-status-during-delay.txt"
     probe 30 GET /api/v1/performances "$a" "$OUT/performances-during-delay.txt"
@@ -317,7 +334,7 @@ scenario_pg() {
     say "실패율 100%: 주문 20건(서킷 윈도 20건을 채운다)"
     curl -s -o /dev/null -X PUT "$pg/pg/admin/faults" -H 'Content-Type: application/json' -d '{"delayMs":0,"failureRate":1.0,"timeoutRate":0,"dropResponseRate":0}'
     for i in $(seq 6 25); do
-        o=$(purchase "$sid" "${buyers[$((i - 1))]}" "${tokens[$((i - 1))]}" "$i") && orders+=("$o|${buyers[$((i - 1))]}") || bad "주문 $i 생성 실패: $o"
+        o=$(purchase "$sid" "${buyers[$((i - 1))]}" "${tokens[$((i - 1))]}" "${seats[$((i - 1))]}") && orders+=("$o|${buyers[$((i - 1))]}") || bad "주문 $i 생성 실패: $o"
     done
     check "생성한 주문 수" 25 "${#orders[@]}"
     sleep 5
@@ -378,6 +395,8 @@ scenario_kopis() {
     sid=$(make_session 15); wait_open 15
     a=$(signup_login "fault-kopis-$$@example.com")
     check_re "준비: 회차·사용자" '^.+$' "$sid$a"
+    local seats; read -ra seats <<< "$(seat_ids "$sid" 3)"
+    check "준비: 좌석 ID 수" 3 "${#seats[@]}"
     for mode in 5xx broken timeout; do
         say "KOPIS $mode"; stub "$mode" > /dev/null
         row=$(run_sync 90); echo "$mode: $row" | tee -a "$OUT/sync-runs.txt"
@@ -390,8 +409,8 @@ scenario_kopis() {
         check "공연 조회 200($mode)" 200 "$(curl -s -o /dev/null -w '%{http_code}' "$gw/api/v1/performances")"
         ta=$(enter_token "$sid" "$a")
         check_re "대기열·입장 정상($mode)" '^.+$' "$ta"
-        seat=$((seat + 1))
-        o=$(purchase "$sid" "$a" "$ta" "$seat") && ok "점유·주문·결제 요청 정상($mode)" || bad "예매 경로 실패($mode): $o"
+        o=$(purchase "$sid" "$a" "$ta" "${seats[$seat]}"); seat=$((seat + 1))
+        [ -n "$o" ] && [[ "$o" != *:* ]] && ok "점유·주문·결제 요청 정상($mode)" || bad "예매 경로 실패($mode): $o"
     done
     say "복구"
     stub ok > /dev/null

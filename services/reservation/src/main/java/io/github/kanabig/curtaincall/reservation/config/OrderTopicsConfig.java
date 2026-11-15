@@ -1,7 +1,9 @@
 package io.github.kanabig.curtaincall.reservation.config;
 
+import io.github.kanabig.curtaincall.outbox.config.OutboxProperties;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.config.TopicConfig;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
@@ -34,7 +36,6 @@ public class OrderTopicsConfig {
                 .build();
     }
 
-    /** event.session은 queue도 읽으므로 DLT 이름에 서비스를 붙인다(application.yml의 dlt-topics). */
     @Bean
     NewTopic paymentEventDltTopic() {
         return TopicBuilder.name(PAYMENT_TOPIC + ".DLT")
@@ -43,9 +44,11 @@ public class OrderTopicsConfig {
                 .build();
     }
 
+    /** event.session은 queue도 읽으므로 DLT 이름에 서비스를 붙인다. 이름은 소비 쪽과 같은 설정(dlt-topics)에서 읽는다. */
     @Bean
-    NewTopic sessionEventDltTopic() {
-        return TopicBuilder.name("event.session.reservation.DLT")
+    NewTopic sessionEventDltTopic(
+            OutboxProperties outbox, @Value("${curtaincall.topics.session:event.session}") String topic) {
+        return TopicBuilder.name(outbox.consumer().dltTopic(topic))
                 .partitions(3)
                 .replicas(1)
                 .build();
