@@ -109,7 +109,7 @@ docker compose up -d --build --wait
 | payment-restart / reservation-restart | 승인 처리 중 SIGKILL 뒤 재시작 | 20건 확정 | 51~53초 / 33~35초 |
 | kafka-outage-before / mid | 브로커 중단 20초 | 20건 확정 | 4~5초 |
 | pg-drop-response | 승인 처리 뒤 응답 유실 100% | 거래 조회로 20건 확정 | 5초 |
-| pg-inquiry-down | 응답 유실 뒤 거래 조회까지 PG 중단 50초 | 조회 실패를 겪은 주문(10~14건)을 포함해 20건 확정, 이중 승인 0 | 16~21초 |
+| pg-inquiry-down | 응답 유실 뒤 거래 조회까지 PG 중단 50초 | 20건 모두 조회 실패나 Bulkhead 거절을 겪은 뒤 확정, 이중 승인 0 | 16~21초 |
 | pg-timeout | 승인 요청 무응답 | 조회 소진 뒤 망취소, 20건 실패 | 165~524초 |
 | seat-loss | 승인 지연 중 점유 만료, 다른 사용자가 좌석 점유 | 10건 확정, 10건 환불, 타 사용자 점유 유지 | 5초 |
 | user-cancel-pg-down | 환불 중 PG 중단 | PG 복구 전 좌석 유지, 복구 뒤 환불과 좌석 해제, 환불 명령 1회 | 16~17초 |
