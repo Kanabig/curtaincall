@@ -42,6 +42,10 @@ curtaincall:
     ip:
       rate-per-second: ${RATE_LIMIT_IP_PER_SECOND:50}
       burst: ${RATE_LIMIT_IP_BURST:100}
+    # 대기열 순번 조회(폴링)만 따로 센다. 같은 공유기 뒤 사용자의 폴링이 예매 요청의 IP 한도를 쓰지 않게 나눈 한도
+    ip-poll:
+      rate-per-second: ${RATE_LIMIT_IP_POLL_PER_SECOND:100}
+      burst: ${RATE_LIMIT_IP_POLL_BURST:200}
     user:
       rate-per-second: ${RATE_LIMIT_USER_PER_SECOND:10}
       burst: ${RATE_LIMIT_USER_BURST:20}

@@ -7,7 +7,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * [GW-2] 요청 속도 제한 설정. IP 한도는 같은 공유기·프록시 뒤의 여러 사용자가 함께 쓰므로 계정 한도보다 넉넉하게 둔다.
  *
- * @param ip IP별 토큰 버킷
+ * @param ip IP별 토큰 버킷. 대기열 순번 조회(폴링)는 제외한다
+ * @param ipPoll 대기열 순번 조회(폴링)만 따로 세는 IP별 토큰 버킷. 같은 공유기 뒤 사용자들의 폴링이 예매 요청의 IP 한도를 쓰지 않게 나눈다
  * @param user 계정별 토큰 버킷
  * @param timeout Redis 호출 제한 시간. 넘으면 통과시킨다
  * @param circuitOpen Redis 호출이 실패한 뒤 이 시간 동안은 호출하지 않고 통과시킨다. 장애 중 요청마다 타임아웃을 기다리지 않게 한다
@@ -16,6 +17,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("curtaincall.rate-limit")
 public record RateLimitProperties(
         @DefaultValue Bucket ip,
+        @DefaultValue Bucket ipPoll,
         @DefaultValue Bucket user,
         @DefaultValue("100ms") Duration timeout,
         @DefaultValue("5s") Duration circuitOpen,
