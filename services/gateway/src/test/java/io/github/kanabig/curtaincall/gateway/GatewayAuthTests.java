@@ -1,6 +1,7 @@
 package io.github.kanabig.curtaincall.gateway;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.sun.net.httpserver.HttpServer;
@@ -8,6 +9,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -457,11 +459,12 @@ class GatewayAuthTests {
                 .expectStatus()
                 .isUnauthorized();
 
-        assertThat(output.getOut())
-                .containsPattern("INFO \\[gateway,trace-access-1\\].* GET /api/v1/users/me 200 \\d+ms user=7")
-                .containsPattern("INFO \\[gateway,trace-access-2\\].* GET /api/v1/users/me 401 \\d+ms user=-")
-                .doesNotContain("secret=abc")
-                .doesNotContain(token);
+        // 로그는 응답이 나간 뒤(doFinally)에 찍히므로 부하에서는 검사가 앞설 수 있다
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertThat(output.getOut())
+                        .containsPattern("INFO \\[gateway,trace-access-1\\].* GET /api/v1/users/me 200 \\d+ms user=7")
+                        .containsPattern("INFO \\[gateway,trace-access-2\\].* GET /api/v1/users/me 401 \\d+ms user=-"));
+        assertThat(output.getOut()).doesNotContain("secret=abc").doesNotContain(token);
     }
 
     private static String token(String sub, String role, Instant issuedAt, Instant expiresAt, String secret) {
