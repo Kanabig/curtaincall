@@ -1,6 +1,8 @@
 package io.github.kanabig.curtaincall.outbox.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.kanabig.curtaincall.outbox.consumer.DltEndpoint;
+import io.github.kanabig.curtaincall.outbox.consumer.DltReplayer;
 import io.github.kanabig.curtaincall.outbox.consumer.IdempotentConsumer;
 import io.github.kanabig.curtaincall.outbox.consumer.OutboxConsumerErrorHandling;
 import io.github.kanabig.curtaincall.outbox.consumer.ProcessedEventMaintenance;
@@ -24,6 +26,7 @@ import java.time.Duration;
 import java.util.Map;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.boot.actuate.autoconfigure.endpoint.condition.ConditionalOnAvailableEndpoint;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -38,6 +41,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.MicrometerConsumerListener;
 import org.springframework.kafka.listener.ContainerProperties;
@@ -174,6 +178,34 @@ public class OutboxAutoConfiguration {
         SmartLifecycle processedEventMaintenanceLifecycle(ProcessedEventMaintenance maintenance) {
             return new PeriodicTaskLifecycle(
                     "processed-event-cleanup", maintenance::deleteExpired, Duration.ofHours(1));
+        }
+
+        @Bean
+        DltReplayer dltReplayer(
+                KafkaProperties kafkaProperties,
+                KafkaConnectionDetails connectionDetails,
+                OutboxProducer outboxProducer,
+                OutboxProperties properties,
+                MeterRegistry meterRegistry) {
+            return new DltReplayer(
+                    () -> {
+                        Map<String, Object> consumerProperties = kafkaProperties.buildConsumerProperties(null);
+                        consumerProperties.put(
+                                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                                connectionDetails.getConsumer().getBootstrapServers());
+                        return consumerProperties;
+                    },
+                    outboxProducer.template(),
+                    meterRegistry,
+                    properties.relay().sendTimeout());
+        }
+
+        /** management.endpoints.web.exposure.include에 dlt가 있을 때만 연다. 서비스 포트를 같이 쓰지만 gateway 라우팅 밖이라 외부에서는 닿지 않는다. */
+        @Bean
+        @ConditionalOnAvailableEndpoint(endpoint = DltEndpoint.class)
+        DltEndpoint dltEndpoint(
+                DltReplayer replayer, KafkaListenerEndpointRegistry registry, OutboxProperties properties) {
+            return new DltEndpoint(replayer, registry, properties.consumer().dltSuffix());
         }
 
         @Bean(name = LISTENER_CONTAINER_FACTORY)

@@ -39,6 +39,9 @@ public final class MetricNames {
     /** DLT로 보낸 메시지 수. Counter(태그 없음). outbox 모듈이 등록한다. */
     public static final String OUTBOX_CONSUMER_DLT = "outbox.consumer.dlt";
 
+    /** DLT에서 원래 토픽으로 다시 넣은 메시지 수. Counter. 태그 topic(원래 토픽). outbox 모듈이 등록한다. */
+    public static final String OUTBOX_DLT_REPLAYED = "outbox.dlt.replayed";
+
     /** 상태별 주문 수. Gauge. 태그 state(주문 상태 = Saga 상태). */
     public static final String ORDER_COUNT = "order.count";
 

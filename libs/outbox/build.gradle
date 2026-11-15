@@ -8,6 +8,7 @@ dependencies {
     api 'org.springframework.kafka:spring-kafka'
     api 'io.micrometer:micrometer-core'
     implementation project(':libs:common-web')
+    compileOnly 'org.springframework.boot:spring-boot-starter-actuator'
 
     testImplementation project(':libs:test-support')
     testImplementation 'org.springframework.boot:spring-boot-starter-actuator'
