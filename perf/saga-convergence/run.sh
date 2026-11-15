@@ -231,7 +231,7 @@ s_pg-inquiry-down() { # 첫 거래 조회 전에 PG를 멈춰, 조회가 실패�
     drive 1 "$ORDERS" 0 tok_approve 1
     log "mock-pg 정지(거래 조회 실패)"; compose pause mock-pg > /dev/null
     sleep 50
-    # 거절 지표는 시도 수라 한 주문이 두 번 거절되면 합이 부풀 수 있다(판정이 느슨해짐). 결과의 합이 정확히 주문 수인지도 함께 본다
+    # 거절 지표는 시도 수라 한 주문이 두 번 거절되면 합이 부풀 수 있다(판정이 느슨해짐). 결과의 합이 정확히 주문 수인지는 사람이 함께 확인한다(판정은 ≥)
     # 정지 중 조회는 실패하거나 pg-query Bulkhead(동시 10)가 거절한다. 둘 다 장애를 겪은 것이다
     local nf rej
     nf=$(compose logs --no-color payment 2>&1 | grep "PG 거래 조회에 실패" | grep -o 'merchantOrderId=[^,]*' | sort -u | wc -l)
