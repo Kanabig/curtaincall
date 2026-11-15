@@ -58,6 +58,7 @@ if (!ACCESS_SECRET || !ENTRY_SECRET) {
 // 단계별 응답 시간. http_req_duration{name:...}와 같지만 summary에서 바로 읽으려고 따로 둔다
 const T = {
   enter: new Trend('t_queue_enter', true),
+  reenter: new Trend('t_queue_reenter', true),
   poll: new Trend('t_queue_poll', true),
   status: new Trend('t_seat_status', true),
   hold: new Trend('t_hold', true),
@@ -73,6 +74,8 @@ const C = {
   enterFail: new Counter('enter_fail'),
   pollCount: new Counter('poll_count'),
   admitted: new Counter('admitted'),
+  waitTimeout: new Counter('wait_timeout'),
+  pollFail: new Counter('poll_fail'),
   soldOutSeen: new Counter('sold_out_seen'),
   soldOutLeft: new Counter('sold_out_left'),
   expired: new Counter('expired_reenter'),
@@ -385,10 +388,14 @@ export function flow() {
   const deadline = Date.now() + MAX_WAIT_S * 1000;
   let soldOutCount = 0;
   while (body.status !== 'ADMITTED') {
-    if (Date.now() > deadline) return;
+    if (Date.now() > deadline) {
+      C.waitTimeout.add(1);
+      return;
+    }
     if (body.status === 'EXPIRED') {
       C.expired.add(1);
-      const res = call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_enter', [200, 201], T.enter);
+      // 재진입은 부하가 가라앉은 뒤라 첫 진입 p95에 섞지 않는다
+      const res = call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_reenter', [200, 201], T.reenter);
       body = json(res);
       continue;
     }
@@ -405,6 +412,7 @@ export function flow() {
     sleep((body.pollAfterMs || 3000) / 1000);
     const res = call('GET', `/api/v1/queue/sessions/${SID}/entries/me`, null, auth, 'queue_poll', [200], T.poll);
     C.pollCount.add(1);
+    if (res.status !== 200) C.pollFail.add(1);
     body = res.status === 200 ? json(res) : { status: 'WAITING', pollAfterMs: 3000 };
   }
   C.admitted.add(1);
@@ -500,7 +508,7 @@ function textSummary(data) {
   }
   lines.push(
     '--- 진입',
-    `enter_ok=${c('enter_ok')} enter_fail=${c('enter_fail')} polls=${c('poll_count')} admitted=${c('admitted')} expired_reenter=${c('expired_reenter')} sold_out_seen=${c('sold_out_seen')} sold_out_left=${c('sold_out_left')}`,
+    `enter_ok=${c('enter_ok')} enter_fail=${c('enter_fail')} polls=${c('poll_count')} admitted=${c('admitted')} expired_reenter=${c('expired_reenter')} sold_out_seen=${c('sold_out_seen')} sold_out_left=${c('sold_out_left')} wait_timeout=${c('wait_timeout')} poll_fail=${c('poll_fail')}`,
     `queue_wait_ms  ${t('queue_wait_ms')}`,
     `start_lag_ms   ${t('start_lag_ms')}`,
     '--- 예매',
