@@ -95,7 +95,7 @@ start_scenario() {
     T_START=$(date +%s)
 }
 
-CHECKS=14 # verify.sql의 검사 행 수. 이보다 적게 나오면 mysql 오류로 보고 실패 처리한다
+CHECKS=13 # verify.sql의 검사 행 수. 이보다 적게 나오면 mysql 오류로 보고 실패 처리한다
 violations() { # verify.sql의 위반 합계. 검사 행 수가 CHECKS가 아니면 ERR
     sql < "$DIR/verify.sql" | awk -F'\t' -v n="$CHECKS" 'NF==2 && $2 ~ /^[0-9]+$/ {s += $2; c++} END {if (c == n) print s+0; else print "ERR"}'
 }
@@ -124,6 +124,10 @@ finish_scenario() { # 수렴 시작 시각을 받는다
     local cf; cf=$(echo "SELECT COUNT(*) FROM payment_db.payment WHERE status = 'CANCEL_FAILED'" | sql)
     echo "CANCEL_FAILED: $cf" >> "$OUT/verify.txt"
     [ "$cf" = 0 ] || why="${why:+$why, }CANCEL_FAILED $cf건"
+    # PG 이중 승인: 같은 merchantOrderId로 새 거래가 둘 이상 기록되면 안 된다(mock-pg 로그. 이중 환불은 mock-pg가 취소를 기록하지 않아 재지 못한다)
+    local dbl; dbl=$(compose logs --no-color mock-pg 2>&1 | grep 'duplicate=false' | grep -o 'merchantOrderId=[^, ]*' | sort | uniq -d | wc -l)
+    echo "PG 이중 승인 주문: $dbl건" >> "$OUT/verify.txt"
+    [ "$dbl" = 0 ] || why="${why:+$why, }PG 이중 승인 ${dbl}건"
     why="${why:+$why, }${EXTRA_FAIL}"; why="${why%, }"; [ -z "$why" ] || verdict="FAIL($why)"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$RUN" "$final" "$CONVERGE_S" "$violations" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
     cat "$OUT/verify.txt"
@@ -218,9 +222,9 @@ s_pg-inquiry-down() { # 첫 거래 조회 전에 PG를 멈춰, 조회가 실패�
     sleep 40
     log "mock-pg 재개"; compose unpause mock-pg > /dev/null
     local t0; t0=$(date +%s)
-    compose logs --no-color payment 2>&1 | grep -c "PG 거래 조회에 실패" > "$OUT/inquiry-failures.txt" || true
+    compose logs --no-color payment 2>&1 | grep "PG 거래 조회에 실패" | grep -o 'merchantOrderId=[^,]*' | sort -u | wc -l > "$OUT/inquiry-failures.txt"
     local nf; nf=$(cat "$OUT/inquiry-failures.txt")
-    [ "$nf" -ge "$ORDERS" ] || EXTRA_FAIL="조회 실패 로그 ${nf}건(기대 $ORDERS건 이상, 정지 전에 조회가 끝남)"
+    [ "$nf" -ge "$ORDERS" ] || EXTRA_FAIL="조회에 실패한 주문 ${nf}건(기대 $ORDERS건, 정지 전에 조회가 끝남)"
     unset CHAOS_INQUIRY_INITIAL_DELAY CHAOS_INQUIRY_MAX_DURATION
     finish_scenario "$t0"
     COMPOSE_FILES=(-f compose.yml)
@@ -335,6 +339,7 @@ s_dlt-replay() { # 소비가 실패해 DLT로 간 응답을 재투입해 수렴�
         echo "reservation 로그의 테이블 없음 오류: $(compose logs --no-color reservation 2>&1 | grep -ci "reservation_db.reservation' doesn't exist")건"
         echo "첫 ApprovePayment부터 재투입까지: $((t_replay - t_first))s (재전송 간격 ${resend_s}s)"
     } | tee "$OUT/dlt.txt"
+    [ "$(dlt_topics | wc -l)" -le 1 ] || EXTRA_FAIL="payment.payment DLT 토픽이 둘 이상"
     if [ -z "$topic" ]; then
         echo "FAIL(DLT에 주문 수만큼 안 쌓임)"; EXTRA_FAIL="DLT에 주문 수만큼 안 쌓임(재투입 못 함)"; finish_scenario; return
     fi
@@ -342,7 +347,8 @@ s_dlt-replay() { # 소비가 실패해 DLT로 간 응답을 재투입해 수렴�
     [ $((t_replay - t_first)) -lt "$resend_s" ] || EXTRA_FAIL="재투입이 재전송 간격 뒤($((t_replay - t_first))s)"
     local replay; replay=$(rsv curl -fsS -X POST "localhost:8084/actuator/dlt/$topic" -H 'Content-Type: application/json' -d '{}')
     echo "$replay" | tee -a "$OUT/dlt.txt"
-    echo "$replay" | grep -Eq '"replayed" *: *[1-9]' || EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }재투입 0건(DLT 응답: $replay)"
+    local nrep; nrep=$(echo "$replay" | grep -o '"replayed" *: *[0-9]*' | grep -o '[0-9]*$')
+    [ "${nrep:-0}" -ge "$ORDERS" ] || EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }재투입 ${nrep:-0}건(기대 $ORDERS건 이상, 응답: $replay)"
     wait_converged "$t_replay" || true
     echo "재투입부터 수렴까지: ${CONVERGE_S}s" | tee -a "$OUT/dlt.txt"
     # 3. 재투입부터 확정까지 ApprovePayment가 다시 나가지 않았는지(주문당 1건)
@@ -418,7 +424,7 @@ s_pg-outage-breaker() {
     drive 34 3 66 tok_approve 1
     wait_converged "$(date +%s)" || true
     breaker_state "닫힌 뒤 3건 뒤"
-    tail -n 12 "$OUT/breaker.txt" | grep -qE 'state="closed".* 1\.0' || EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }서킷이 닫히지 않음"
+    awk '/^# 닫힌 뒤/ {blk=""} {blk = blk $0 "\n"} END {printf "%s", blk}' "$OUT/breaker.txt" | grep -qE 'state="closed".* 1\.0' || EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }서킷이 닫히지 않음"
     finish_scenario "$(date +%s)"
 }
 

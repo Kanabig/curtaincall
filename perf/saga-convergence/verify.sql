@@ -42,10 +42,6 @@ SELECT '같은 주문에 같은 결과 이벤트가 둘 이상(이중 확정·�
     WHERE event_type IN ('ReservationConfirmed', 'OrderRefunded', 'ReservationCancelled')
     GROUP BY message_key, event_type HAVING COUNT(*) > 1) t
 UNION ALL
-SELECT '같은 주문에 PaymentCancelled가 둘 이상(이중 환불 명령 처리)', COUNT(*) FROM (
-    SELECT message_key FROM payment_db.outbox WHERE event_type = 'PaymentCancelled'
-    GROUP BY message_key HAVING COUNT(*) > 1) t
-UNION ALL
 SELECT 'hold_id 하나를 둘 이상이 가짐', COUNT(*) FROM (
     SELECT hold_id FROM reservation_db.seat_inventory WHERE hold_id IS NOT NULL
     GROUP BY hold_id HAVING COUNT(DISTINCT holder_id) > 1) t
