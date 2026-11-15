@@ -97,7 +97,9 @@ LOADAVG=$!
             | awk '/^kafka_consumer_fetch_manager_records_lag\{/{s+=$NF} END{print s+0}')
         echo "$(date +%T) ${svc%%:*} consumer_lag=$lag"
     done
-    echo "$(date +%T) reservation outbox_unpublished=$(echo 'SELECT COUNT(*) FROM outbox WHERE published_at IS NULL' | mysql_root -N reservation_db | tr -d '[:space:]')"
+    gauge=$(compose exec -T reservation curl -fs http://localhost:8084/actuator/prometheus 2>/dev/null | awk '/^outbox_unpublished[{ ]/{s+=$NF} END{print s+0}')
+    dlt=$(compose exec -T reservation curl -fs http://localhost:8084/actuator/prometheus 2>/dev/null | awk '/^outbox_consumer_dlt/ && !/^#/{s+=$NF} END{print s+0}')
+    echo "$(date +%T) reservation outbox_unpublished_db=$(echo 'SELECT COUNT(*) FROM outbox WHERE published_at IS NULL' | mysql_root -N reservation_db | tr -d '[:space:]') gauge=$gauge dlt=$dlt"
   done > "$OUT/lag.txt" ) &
 LAGSAMPLER=$!
 trap 'kill $SAMPLER $LOADAVG $LAGSAMPLER 2>/dev/null || true' EXIT
