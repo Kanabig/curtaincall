@@ -17,6 +17,8 @@ CHAOS_INQUIRY_MAX_DURATION="${CHAOS_INQUIRY_MAX_DURATION:-40s}"
 export CHAOS_INQUIRY_MAX_DURATION
 ALL="baseline payment-restart reservation-restart kafka-outage-before kafka-outage-mid pg-drop-response pg-inquiry-down pg-timeout seat-loss user-cancel-pg-down dlt-replay duplicates-reorder pg-outage-breaker"
 SCENARIOS="${*:-$ALL}"
+# pg-drop-response·pg-inquiry-down은 ORDERS가 서킷 minimumCalls(20)를 넘으면 서킷이 열려 FAILED가 섞인다. seat-loss는 지연 4초 안에 drive가 끝나야 해 40 이하
+[ "$ORDERS" -le 20 ] || case " $SCENARIOS " in *" pg-drop-response "*|*" pg-inquiry-down "*) echo "ORDERS=$ORDERS: pg-drop-response·pg-inquiry-down은 20 이하로 돌린다" >&2; exit 2 ;; esac
 
 cd "$(dirname "$0")/../.."
 exec 9>/tmp/curtaincall-bench.lock
@@ -33,6 +35,8 @@ rsv() { compose exec -T reservation "$@"; }
 kafka_sh() { compose exec -T kafka "$@"; }
 log() { echo "[$(date +%T)] $*"; }
 FAILED=0
+EXTRA_FAIL=""
+trap 'echo "RENAME TABLE reservation_db.reservation_off TO reservation_db.reservation" | sql > /dev/null 2>&1' EXIT
 
 set_faults() { # delayMs failureRate timeoutRate dropResponseRate
     compose exec -T mock-pg curl -fsS -X PUT localhost:8090/pg/admin/faults -H 'Content-Type: application/json' \
@@ -75,7 +79,10 @@ start_scenario() {
     compose up -d --wait --force-recreate payment > /dev/null
     compose unpause mock-pg 2> /dev/null || true
     reset_faults
-    sql < "$DIR/seed.sql"
+    echo "RENAME TABLE reservation_db.reservation_off TO reservation_db.reservation" | sql 2> /dev/null || true # dlt-replay가 중간에 죽은 경우 복구
+    sql < "$DIR/seed.sql" || { echo "seed 실패"; exit 1; }
+    [ "$(echo "SELECT COUNT(*) FROM reservation_db.orders" | sql)" = 0 ] || { echo "seed 뒤에도 주문이 남아 있다"; exit 1; }
+    EXTRA_FAIL=""
     compose exec -T mock-pg curl -fsS -X DELETE localhost:8090/pg/admin/transactions > /dev/null
     { echo "commit:     $(git rev-parse HEAD)"
       echo "image_tag:  ${IMAGE_TAG:-local}"
@@ -86,6 +93,11 @@ start_scenario() {
       echo "top cpu processes:"; ps -eo pcpu,comm --sort=-pcpu | head -6 | sed 's/^/  /'
       docker stats --no-stream --format '  {{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}'; } > "$OUT/env.txt"
     T_START=$(date +%s)
+}
+
+CHECKS=14 # verify.sql의 검사 행 수. 이보다 적게 나오면 mysql 오류로 보고 실패 처리한다
+violations() { # verify.sql의 위반 합계. 검사 행 수가 CHECKS가 아니면 ERR
+    sql < "$DIR/verify.sql" | awk -F'\t' -v n="$CHECKS" 'NF==2 && $2 ~ /^[0-9]+$/ {s += $2; c++} END {if (c == n) print s+0; else print "ERR"}'
 }
 
 save_logs() { # 시나리오·반복별 payment 로그(payment는 시나리오마다 새로 뜬다)
@@ -104,13 +116,16 @@ finish_scenario() { # 수렴 시작 시각을 받는다
     final=$(counts)
     sql_table < "$DIR/verify.sql" > "$OUT/verify.txt"
     # 위반 표는 열이 2개, 분포 표는 3개라 NF==2만 더한다
-    violations=$(sql < "$DIR/verify.sql" | awk -F'\t' 'NF==2 && $2 ~ /^[0-9]+$/ {s += $2} END {print s+0}')
+    violations=$(violations)
     [ "$violations" = 0 ] || verdict="FAIL(위반 $violations)"
+    [ -z "$EXTRA_FAIL" ] || verdict="FAIL($EXTRA_FAIL)"
     [ "$final" = "$EXPECT" ] || verdict="FAIL(최종 상태 $final)"
     save_logs
     compose exec -T payment curl -fs localhost:8085/actuator/prometheus 2> /dev/null | grep -E '^(order|payment)_' > "$OUT/payment-metrics.txt" || true
     rsv curl -fs localhost:8084/actuator/prometheus 2> /dev/null | grep -E '^(order|payment)_' > "$OUT/reservation-metrics.txt" || true
-    echo "CANCEL_FAILED: $(echo "SELECT COUNT(*) FROM payment_db.payment WHERE status = 'CANCEL_FAILED'" | sql)" >> "$OUT/verify.txt"
+    local cf; cf=$(echo "SELECT COUNT(*) FROM payment_db.payment WHERE status = 'CANCEL_FAILED'" | sql)
+    echo "CANCEL_FAILED: $cf" >> "$OUT/verify.txt"
+    [ "$cf" = 0 ] || verdict="FAIL(CANCEL_FAILED $cf건)"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$RUN" "$final" "$CONVERGE_S" "$violations" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
     cat "$OUT/verify.txt"
     case "$verdict" in PASS) ;; *) FAILED=1 ;; esac
@@ -220,15 +235,18 @@ s_seat-loss() { # 승인 지연 중에 점유가 만료되고 다른 사용자�
     start_scenario seat-loss "CONFIRMED=$((ORDERS - half)) REFUNDED=$half"
     set_faults 4000 0 0 0
     drive 1 "$ORDERS" 0 tok_approve 1
+    [ "$(echo "SELECT COUNT(*) FROM reservation_db.orders WHERE status = 'PAYMENT_REQUESTED'" | sql)" = "$ORDERS" ] \
+        || EXTRA_FAIL="만료 UPDATE 전에 승인이 끝난 주문이 있음(지연 4초 안에 drive가 끝나지 않음)"
     log "앞 $half건의 점유를 만료시키고 다른 사용자가 점유"
     echo "UPDATE reservation_db.seat_inventory SET expires_at = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND
           WHERE holder_id BETWEEN 1 AND $half" | sql
-    HOLD_ONLY=1 drive 100001 "$half" 0 tok_approve 0 || { echo "FAIL(다른 사용자의 점유 요청 실패)"; FAILED=1; }
+    HOLD_ONLY=1 drive 100001 "$half" 0 tok_approve 0 || { echo "FAIL(다른 사용자의 점유 요청 실패)"; EXTRA_FAIL="다른 사용자의 점유 요청 실패"; }
     local t0; t0=$(date +%s)
-    finish_scenario "$t0"
+    wait_converged "$t0" || true
     local kept; kept=$(echo "SELECT COUNT(*) FROM reservation_db.seat_inventory WHERE status = 'HELD' AND holder_id > 100000" | sql)
+    if [ "$kept" != $((half * 2)) ]; then echo "FAIL(환불이 남의 좌석을 건드림)"; EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }환불이 남의 좌석을 건드림"; fi
+    finish_scenario "$t0"
     echo "타 사용자 점유 좌석 유지: $kept (기대 $((half * 2)))" | tee -a "$OUT/verify.txt"
-    if [ "$kept" != $((half * 2)) ]; then echo "FAIL(환불이 남의 좌석을 건드림)"; FAILED=1; fi
 }
 
 s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌석을 풀지 않는다
@@ -262,16 +280,20 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
             -H "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)" < /dev/null
     done
     sleep 5
+    local cmds; cmds=$(kafka_sh /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic payment.command --from-beginning --timeout-ms 8000 2> /dev/null | grep -c USER_CANCEL || true)
+    echo "USER_CANCEL 명령 수: $cmds (기대 $ORDERS, 같은 취소를 다시 보내도 환불 명령이 늘지 않아야 한다)" | tee -a "$OUT/during-outage.txt"
     local avail; avail=$(echo "SELECT COUNT(*) FROM reservation_db.seat_inventory WHERE status = 'AVAILABLE'" | sql)
     echo "취소 뒤 AVAILABLE 좌석: $avail (기대 2000)" | tee -a "$OUT/during-outage.txt"
     local verdict=PASS
     [ "$CONVERGE_S" -ge 0 ] || verdict="FAIL(취소 수렴 상한 초과)"
     [ "$avail" = 2000 ] || verdict="FAIL(좌석 복구 $avail)"
     [ ! -s "$OUT/cancel-failed.txt" ] || verdict="FAIL(취소 요청 거절)"
+    [ "$cmds" = "$ORDERS" ] || verdict="FAIL(환불 명령 $cmds건, 기대 $ORDERS)"
     # 주문은 CONFIRMED로 남고 예매가 CANCELLED가 된다. verify.sql의 SOLD 대조는 취소 뒤 0 = 0이다
     save_logs
     sql_table < "$DIR/verify.sql" > "$OUT/verify.txt"
-    local v; v=$(sql < "$DIR/verify.sql" | awk -F'\t' 'NF==2 && $2 ~ /^[0-9]+$/ {s += $2} END {print s+0}')
+    local v; v=$(violations)
+    [ "$v" = 0 ] || verdict="FAIL(위반 $v)"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$RUN" "$(counts)" "$CONVERGE_S" "$v" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
     [ "$verdict" = PASS ] || FAILED=1
 }
@@ -279,12 +301,20 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
 s_dlt-replay() { # 소비가 실패해 DLT로 간 응답을 재투입해 수렴시킨다
     start_scenario dlt-replay "CONFIRMED=$ORDERS"
     echo "RENAME TABLE reservation_db.reservation TO reservation_db.reservation_off" | sql
-    drive 1 "$ORDERS" 0 tok_approve 1
-    local topic="" tries=0
-    while [ -z "$topic" ] && [ "$tries" -lt 90 ]; do
+    local topic="" tries=0 base
+    dlt_count() { # payment.payment DLT 토픽들의 메시지 수 합계
+        local n=0 c t
         for t in $(rsv curl -fs localhost:8084/actuator/dlt | grep -o '"[^"]*payment\.payment[^"]*"' | tr -d '"'); do
-            [ "$(rsv curl -fs "localhost:8084/actuator/dlt/$t?limit=1" | grep -c eventId || true)" -gt 0 ] && topic="$t"
+            c=$(rsv curl -fs "localhost:8084/actuator/dlt/$t?limit=10000" | grep -o eventId | wc -l); n=$((n + c))
         done
+        echo "$n"
+    }
+    base=$(dlt_count) # 지난 회차에 쌓인 DLT 메시지는 이번 회차 증거가 아니다
+    drive 1 "$ORDERS" 0 tok_approve 1
+    while [ -z "$topic" ] && [ "$tries" -lt 90 ]; do
+        if [ "$(dlt_count)" -gt "$base" ]; then
+            for t in $(rsv curl -fs localhost:8084/actuator/dlt | grep -o '"[^"]*payment\.payment[^"]*"' | tr -d '"'); do topic="$t"; done
+        fi
         tries=$((tries + 1)); sleep 1
     done
     echo "DLT 토픽: ${topic:-없음} (대기 ${tries}s)" | tee "$OUT/dlt.txt"
@@ -306,6 +336,7 @@ s_duplicates-reorder() { # 같은 응답 중복, 새 이벤트 ID로 다시 보�
     sleep 5
     snapshot > "$OUT/before.txt"
     consume_all payment.payment | grep -F -f <(order_ids) > "$OUT/captured.txt" || true
+    if [ "$(wc -l < "$OUT/captured.txt")" -lt "$ORDERS" ]; then EXTRA_FAIL="캡처한 응답이 주문 수보다 적어 재생이 공허함"; fi
     log "캡처한 응답 $(wc -l < "$OUT/captured.txt")건: 같은 ID로 두 번, 새 ID로 역순, 모순 응답, 명령 재전송"
     produce payment.payment < "$OUT/captured.txt"
     tac "$OUT/captured.txt" | while IFS='|' read -r key value; do
@@ -339,7 +370,7 @@ s_pg-outage-breaker() {
         i=$((i + 1)); sleep 1
     done
     breaker_state "유실 20건 뒤(열림 대기 ${i}s)"
-    [ "$open" = 1 ] || { echo "FAIL(서킷이 열리지 않음)" | tee -a "$OUT/breaker.txt"; FAILED=1; }
+    [ "$open" = 1 ] || { echo "FAIL(서킷이 열리지 않음)" | tee -a "$OUT/breaker.txt"; EXTRA_FAIL="서킷이 열리지 않음"; }
     log "서킷 열림 중 주문 10건"
     drive 21 10 40 tok_approve 1
     sleep 3
@@ -348,7 +379,7 @@ s_pg-outage-breaker() {
     freed=$(echo "SELECT COUNT(*) FROM reservation_db.seat_inventory WHERE seat_id BETWEEN 41 AND 60 AND status = 'AVAILABLE'" | sql)
     notsent=$(compose logs --no-color payment 2>&1 | grep -c "reason=CIRCUIT_OPEN")
     { echo "열림 중 FAILED 주문: $failed (기대 10)"; echo "해제된 좌석(41~60): $freed (기대 20)"; echo "PG에 보내지 않은 승인(CIRCUIT_OPEN 로그): $notsent (기대 10)"; } | tee -a "$OUT/breaker.txt"
-    [ "$failed" = 10 ] && [ "$freed" = 20 ] && [ "$notsent" = 10 ] || { echo "FAIL(열림 중 처리 기대와 다름)" | tee -a "$OUT/breaker.txt"; FAILED=1; }
+    [ "$failed" = 10 ] && [ "$freed" = 20 ] && [ "$notsent" = 10 ] || { echo "FAIL(열림 중 처리 기대와 다름)" | tee -a "$OUT/breaker.txt"; EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }열림 중 처리 기대와 다름"; }
     breaker_state "열림 중 주문 뒤"
     log "열림 시간 경과 대기, PG 유실 해제"
     sleep 11
