@@ -1,0 +1,6 @@
+# 결과 불명 시나리오의 대기 시간을 줄이는 오버라이드. 기본값(조회 10분)이면 한 시나리오가 10분을 넘는다.
+# 사용: docker compose -p <프로젝트> -f compose.yml -f perf/saga-convergence/compose.chaos.yml up -d payment
+services:
+  payment:
+    environment:
+      PAYMENT_INQUIRY_MAXDURATION: ${CHAOS_INQUIRY_MAX_DURATION:-40s}
