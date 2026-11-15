@@ -28,19 +28,33 @@ public class SessionEventListener {
 
     @KafkaListener(topics = "${curtaincall.topics.session:event.session}", groupId = "queue")
     void onSessionEvent(String message) {
-        SessionConf conf = parse(message);
+        JsonNode root = readRoot(message);
+        SessionConf conf = parse(root);
         if (conf != null) {
             service.apply(conf);
         }
+        ConsumedEventLog.processed(root);
     }
 
     /** 대기열이 쓰지 않는 이벤트 타입이면 null. */
     SessionConf parse(String message) {
+        return parse(readRoot(message));
+    }
+
+    private JsonNode readRoot(String message) {
         try {
             JsonNode root = objectMapper.readTree(message);
             if (root == null || !root.isObject()) {
                 throw new InvalidSessionEventException("봉투가 JSON 객체가 아니다");
             }
+            return root;
+        } catch (JsonProcessingException e) {
+            throw new InvalidSessionEventException("회차 이벤트를 읽을 수 없다", e);
+        }
+    }
+
+    private SessionConf parse(JsonNode root) {
+        try {
             String type = text(root, "eventType");
             long version =
                     OffsetDateTime.parse(text(root, "occurredAt")).toInstant().toEpochMilli();
@@ -52,7 +66,7 @@ public class SessionEventListener {
                 case "SessionDeleted" -> new SessionConf(sessionId, Type.DELETE, version, 0, 0, 0);
                 default -> null;
             };
-        } catch (JsonProcessingException | DateTimeParseException e) {
+        } catch (DateTimeParseException e) {
             throw new InvalidSessionEventException("회차 이벤트를 읽을 수 없다", e);
         }
     }

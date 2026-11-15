@@ -9,9 +9,13 @@ import io.github.kanabig.curtaincall.queue.service.QueueService;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 /** [QUE-6] ReservationConfirmed로 활성 목록에서 빼는 동작. */
+@ExtendWith(OutputCaptureExtension.class)
 class OrderEventListenerTests extends QueueIntegrationTest {
 
     @Autowired
@@ -39,7 +43,7 @@ class OrderEventListenerTests extends QueueIntegrationTest {
 
     @Test
     @DisplayName("[QUE-6] 예매가 확정된 사용자는 활성에서 빠져 다음 대기자가 들어오고, 같은 이벤트가 다시 와도 같다")
-    void removesConfirmedUser() {
+    void removesConfirmedUser(CapturedOutput output) {
         putConf(-1000, 10, 2);
         for (int u = 1; u <= 3; u++) {
             queue.enter(sessionId, u);
@@ -51,6 +55,7 @@ class OrderEventListenerTests extends QueueIntegrationTest {
 
         listener.onOrderEvent(confirmed(1));
         listener.onOrderEvent(confirmed(1));
+        assertThat(output.getOut()).contains("이벤트 처리 완료: eventId=e-1 type=ReservationConfirmed");
         assertThat(isActive(1)).isFalse();
         assertThat(isActive(2)).isTrue();
 
