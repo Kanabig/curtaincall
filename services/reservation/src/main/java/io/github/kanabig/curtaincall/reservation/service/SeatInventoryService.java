@@ -155,11 +155,19 @@ public class SeatInventoryService {
                     .map(entry -> new NewSeat(entry.seatId(), entry.grade(), entry.price()))
                     .toList();
             // 재고 행과 READY 표시를 함께 커밋한다. 중간에 실패하면 둘 다 남지 않는다
+            // 만드는 도중 삭제돼 PENDING이 아니게 됐으면(markReady가 false) 넣은 행도 되돌린다
             Integer inserted = tx.execute(status -> {
                 int count = repository.insertAll(sessionId, seats, properties.insertBatchSize());
-                repository.markReady(sessionId, seats.size(), clock.instant());
+                if (!repository.markReady(sessionId, seats.size(), clock.instant())) {
+                    status.setRollbackOnly();
+                    return null;
+                }
                 return count;
             });
+            if (inserted == null) {
+                log.info("재고를 만드는 사이 회차가 PENDING이 아니게 되어 만들지 않았다: sessionId={}", sessionId);
+                return false;
+            }
             log.info("회차 재고를 만들었다: sessionId={} seats={} inserted={}", sessionId, seats.size(), inserted);
             return true;
         } catch (RuntimeException e) {

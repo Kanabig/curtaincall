@@ -22,6 +22,7 @@ public class SessionEventListener {
     static final String SESSION_CREATED = "SessionCreated";
     static final String SESSION_UPDATED = "SessionUpdated";
     static final String SESSION_DELETED = "SessionDeleted";
+    static final String SESSION_SUSPENDED = "SessionSuspended";
 
     private final IdempotentConsumer consumer;
     private final SeatInventoryService inventoryService;
@@ -40,7 +41,8 @@ public class SessionEventListener {
     }
 
     private void handle(EventEnvelope envelope) {
-        if (SESSION_CREATED.equals(envelope.eventType())) {
+        if (SESSION_CREATED.equals(envelope.eventType()) || SESSION_SUSPENDED.equals(envelope.eventType())) {
+            // 중지된 회차라도 재고는 있어도 된다(신규 점유는 판매 상태로 거절한다). compaction으로 중지 이벤트만 남은 회차도 재고를 만든다
             inventoryService.requestInventory(sessionId(envelope), startAt(envelope));
         } else if (SESSION_DELETED.equals(envelope.eventType())) {
             inventoryService.markDeleted(sessionId(envelope));

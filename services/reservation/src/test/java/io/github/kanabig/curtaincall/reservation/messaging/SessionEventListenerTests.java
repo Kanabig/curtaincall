@@ -63,12 +63,12 @@ class SessionEventListenerTests extends InventoryIntegrationTest {
     }
 
     @Test
-    @DisplayName("SessionCreated가 아닌 회차 이벤트는 상태 행을 만들지 않는다")
+    @DisplayName("처리하지 않는 회차 이벤트 타입은 상태 행을 만들지 않는다")
     void ignoresOtherSessionEvents() throws Exception {
-        String suspended = "{\"eventId\":\"" + UUID.randomUUID()
-                + "\",\"eventType\":\"SessionSuspended\",\"occurredAt\":\"2026-12-01T20:03:11.120+09:00\","
+        String other = "{\"eventId\":\"" + UUID.randomUUID()
+                + "\",\"eventType\":\"SessionArchived\",\"occurredAt\":\"2026-12-01T20:03:11.120+09:00\","
                 + "\"aggregateId\":\"301\",\"payload\":{\"sessionId\":301}}";
-        kafkaTemplate.send("event.session", "301", suspended).get();
+        kafkaTemplate.send("event.session", "301", other).get();
         kafkaTemplate
                 .send("event.session", "302", sessionCreated(UUID.randomUUID().toString(), 302L))
                 .get();
@@ -77,6 +77,18 @@ class SessionEventListenerTests extends InventoryIntegrationTest {
                 .untilAsserted(() -> assertThat(statuses()).isEqualTo(1));
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM session_stock WHERE session_id = 301", Integer.class))
                 .isZero();
+    }
+
+    @Test
+    @DisplayName("compaction으로 SessionSuspended만 남은 회차도 재고 등록 행이 생기고, 삭제된 회차는 그대로 DELETED다")
+    void suspendedOnlyRegistersSession() throws Exception {
+        kafkaTemplate.send("event.session", "431", sessionSuspended(431L)).get();
+        kafkaTemplate.send("event.session", "432", sessionDeleted(432L)).get();
+        kafkaTemplate.send("event.session", "432", sessionSuspended(432L)).get();
+        awaitMarker(499L);
+
+        assertThat(statusOf(431L)).isEqualTo("PENDING");
+        assertThat(statusOf(432L)).isEqualTo("DELETED");
     }
 
     @Test
@@ -157,6 +169,12 @@ class SessionEventListenerTests extends InventoryIntegrationTest {
 
     private static String sessionUpdated(long sessionId) {
         return "{\"eventId\":\"" + UUID.randomUUID() + "\",\"eventType\":\"SessionUpdated\","
+                + "\"occurredAt\":\"2026-12-01T20:03:11.120+09:00\",\"aggregateId\":\"" + sessionId
+                + "\",\"payload\":{\"sessionId\":" + sessionId + ",\"startAt\":\"2026-12-24T19:00:00+09:00\"}}";
+    }
+
+    private static String sessionSuspended(long sessionId) {
+        return "{\"eventId\":\"" + UUID.randomUUID() + "\",\"eventType\":\"SessionSuspended\","
                 + "\"occurredAt\":\"2026-12-01T20:03:11.120+09:00\",\"aggregateId\":\"" + sessionId
                 + "\",\"payload\":{\"sessionId\":" + sessionId + ",\"startAt\":\"2026-12-24T19:00:00+09:00\"}}";
     }

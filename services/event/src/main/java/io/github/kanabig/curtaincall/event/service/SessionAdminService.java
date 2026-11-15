@@ -158,7 +158,12 @@ public class SessionAdminService {
             return;
         }
         sessions.suspend(id, clock.instant());
-        outbox.append(EventTopicsConfig.SESSION_TOPIC, String.valueOf(id), SUSPENDED, Map.of("sessionId", id));
+        // event.session은 compaction 토픽이라 마지막 레코드만 남을 수 있다. 소비자가 이것만으로 상태를 만들 수 있게 전체 값을 싣는다
+        outbox.append(
+                EventTopicsConfig.SESSION_TOPIC,
+                String.valueOf(id),
+                SUSPENDED,
+                payload(sessions.find(id).orElseThrow()));
     }
 
     /**

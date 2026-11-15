@@ -62,13 +62,34 @@ public class SessionEventListener {
             long sessionId = sessionId(root, payload);
             return switch (type) {
                 case "SessionCreated", "SessionUpdated" -> upsert(sessionId, version, payload);
-                case "SessionSuspended" -> new SessionConf(sessionId, Type.SUSPEND, version, 0, 0, 0);
+                case "SessionSuspended" -> suspend(sessionId, version, payload);
                 case "SessionDeleted" -> new SessionConf(sessionId, Type.DELETE, version, 0, 0, 0);
                 default -> null;
             };
         } catch (DateTimeParseException e) {
             throw new InvalidSessionEventException("회차 이벤트를 읽을 수 없다", e);
         }
+    }
+
+    /**
+     * 중지 이벤트도 전체 값을 싣는다. compaction으로 이 레코드만 남은 회차에서도 conf를 만들 수 있게 값을 함께 넘기고, 값이 없는 옛 이벤트는 0으로 둔다(이미 conf가 있으면
+     * 값은 쓰지 않는다).
+     */
+    private static SessionConf suspend(long sessionId, long version, JsonNode payload) {
+        if (payload == null
+                || !payload.hasNonNull("saleOpenAt")
+                || !payload.hasNonNull("admissionPerSecond")
+                || !payload.hasNonNull("maxActiveUsers")) {
+            return new SessionConf(sessionId, Type.SUSPEND, version, 0, 0, 0);
+        }
+        SessionConf full = upsert(sessionId, version, payload);
+        return new SessionConf(
+                sessionId,
+                Type.SUSPEND,
+                version,
+                full.saleOpenAtMs(),
+                full.admissionPerSecond(),
+                full.maxActiveUsers());
     }
 
     private static SessionConf upsert(long sessionId, long version, JsonNode payload) {

@@ -246,7 +246,8 @@ class AdmissionTests extends QueueIntegrationTest {
                         properties.staleAfter(),
                         Duration.ofSeconds(15),
                         3,
-                        Duration.ofSeconds(10)));
+                        Duration.ofSeconds(10),
+                        properties.redisCircuitFailures()));
 
         // 2명씩 꺼내 지우므로 2, 4명째에 상한 3을 넘어 멈춘다. 나머지 6명은 다음 틱이 맡는다
         assertThat(limited.admitAll(t0)).isZero();

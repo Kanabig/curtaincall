@@ -208,7 +208,7 @@ scenario_dlt() {
     grep -q 'event.session.reservation.DLT' "$OUT/reservation-dlt-topics.txt" && ok "actuator/dlt 목록에 있다" || bad "actuator/dlt 목록에 event.session.reservation.DLT가 없다"
     compose exec -T reservation curl -s "http://localhost:8084/actuator/dlt/event.session.reservation.DLT?limit=200" > "$OUT/reservation-dlt-entries.txt" || true
     check_nonempty "reservation DLT 항목 조회" "$OUT/reservation-dlt-entries.txt"
-    say "정리: 같은 키로 tombstone"
+    say "정리: 같은 키로 tombstone(값이 null이라 두 소비자가 봉투 파싱에 실패해 이 키도 DLT로 간다. 해롭지 않다)"
     echo "$key:NULL" | compose exec -T kafka $kt/kafka-console-producer.sh --bootstrap-server localhost:9092 \
         --topic event.session --property parse.key=true --property key.separator=: --property null.marker=NULL
     exit_status
@@ -226,6 +226,10 @@ scenario_aux() {
     check_re "준비: 회차·사용자·입장 토큰" '^.+$' "$sid$a$ta"
     local seats; read -ra seats <<< "$(seat_ids "$sid" 4)"
     check "준비: 좌석 ID 수" 4 "${#seats[@]}"
+    local mailui="http://localhost:${MAILPIT_UI_HOST_PORT:-$(grep -s '^MAILPIT_UI_HOST_PORT=' .env | cut -d= -f2)}"
+    # 이전 실행의 메일로 통과하지 않도록 시작 전에 비운다
+    curl -s -o /dev/null -X DELETE "$mailui/api/v1/messages"
+    check "메일함 비움" 0 "$(curl -s "$mailui/api/v1/messages" | jq -r '.messages_count // empty')"
     say "notification 중단"
     compose stop notification
     order=$(purchase "$sid" "$a" "$ta" "${seats[0]}") && ok "결제 요청까지 완료: $order" || bad "예매 실패: $order"
@@ -235,7 +239,7 @@ scenario_aux() {
     compose start notification
     mails=0
     for _ in $(seq 1 30); do
-        mails=$(curl -s "http://localhost:${MAILPIT_UI_HOST_PORT:-$(grep -s '^MAILPIT_UI_HOST_PORT=' .env | cut -d= -f2)}/api/v1/messages" | jq -r '.messages_count // 0')
+        mails=$(curl -s "$mailui/api/v1/messages" | jq -r '.messages_count // 0')
         [ "${mails:-0}" -ge 1 ] && break; sleep 2
     done
     echo "$mails" > "$OUT/mails.txt"
@@ -243,7 +247,7 @@ scenario_aux() {
     exit_status
 }
 
-# 기대: Redis 중단 중 새 진입은 503(서킷 덕에 p95 ${ENTRY_P95_MS}ms 이하), queue liveness는 UP·readiness는 503, 토큰 보유자의 점유·주문·결제는 계속,
+# 기대: Redis 중단 중 새 진입은 503(서킷 덕에 p95 ${ENTRY_P95_MS}ms 이하), queue liveness·readiness는 200(Redis 제외)이고 /actuator/health(Redis 포함)는 503, 토큰 보유자의 점유·주문·결제는 계속,
 # 속도 제한은 fail-open(429·5xx 없음, 메트릭 증가). 복구 뒤 진입 가능. Redis 유실은 event.session 되감기로 복구(토픽은 compaction).
 scenario_redis() {
     FAILED=0
@@ -266,11 +270,16 @@ scenario_redis() {
     assert_probe "baseline 좌석 상태 조회" "$OUT/seat-status-baseline.txt" '^200$' "$API_P95_MS" 30
     local base=$LAST_P95
 
+    local failopen0 open0
+    failopen0=$(metric_sum gateway 8089 gateway_ratelimit_failopen_total | cut -d. -f1)
+    open0=$(metric_sum queue 8083 queue_redis_circuit_open_total | cut -d. -f1)
     say "Redis 중단"
     compose stop redis
     probe 30 POST "/api/v1/queue/sessions/$sid/entries" "$b" "$OUT/enter-during-outage.txt"
     assert_probe "새 진입은 503, 서킷으로 빠르게" "$OUT/enter-during-outage.txt" '^503$' "$ENTRY_P95_MS" 30
     check "queue liveness" 200 "$(compose exec -T queue curl -s -o /dev/null -w '%{http_code}' http://localhost:8083/actuator/health/liveness)"
+    # readiness 그룹은 트래픽 수락 상태만 본다(Redis 제외). 장애 중에도 UP이어야 컨테이너가 재시작되지 않는다
+    check "queue readiness" 200 "$(compose exec -T queue curl -s -o /dev/null -w '%{http_code}' http://localhost:8083/actuator/health/readiness)"
     check "queue health(Redis 포함)" 503 "$(compose exec -T queue curl -s -o /dev/null -w '%{http_code}' http://localhost:8083/actuator/health)"
     say "토큰 보유자(A): 점유·주문·결제 계속"
     local order; order=$(purchase "$sid" "$a" "$ta" "${seats[0]}") && ok "A 결제 요청까지 완료: $order" || bad "A 예매 실패: $order"
@@ -278,8 +287,9 @@ scenario_redis() {
     say "속도 제한 fail-open"
     probe 30 GET "/api/v1/sessions/$sid/seat-status" "$a" "$OUT/seat-status-during-outage.txt"
     assert_probe "좌석 상태 조회는 200(429·5xx 없음)" "$OUT/seat-status-during-outage.txt" '^200$' "$API_P95_MS" 30 "$base"
-    check_re "gateway.ratelimit.failopen 증가" '^[1-9][0-9]*$' "$(metric_sum gateway 8089 gateway_ratelimit_failopen_total | cut -d. -f1)"
-    check_re "queue.redis.circuit.open 증가" '^[1-9][0-9]*$' "$(metric_sum queue 8083 queue_redis_circuit_open_total | cut -d. -f1)"
+    # 지표는 재기동 전까지 누적되므로 주입 전 값과의 차이로 판정한다
+    check_re "gateway.ratelimit.failopen 증가분" '^[1-9][0-9]*$' "$(($(metric_sum gateway 8089 gateway_ratelimit_failopen_total | cut -d. -f1) - failopen0))"
+    check_re "queue.redis.circuit.open 증가분" '^[1-9][0-9]*$' "$(($(metric_sum queue 8083 queue_redis_circuit_open_total | cut -d. -f1) - open0))"
 
     say "Redis 복구"
     compose start redis
@@ -335,6 +345,8 @@ scenario_pg() {
     assert_probe "baseline 좌석 상태 조회" "$OUT/seat-status-baseline.txt" '^200$' "$API_P95_MS" 30
     base=$LAST_P95
 
+    local npc0
+    npc0=$(metric_sum payment 8085 resilience4j_circuitbreaker_not_permitted_calls_total | cut -d. -f1)
     say "PG 지연 8초(읽기 타임아웃 5초 초과): 주문 5건"
     check "지연 설정 적용" 200 "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$pg/pg/admin/faults" -H 'Content-Type: application/json' -d '{"delayMs":8000,"failureRate":0,"timeoutRate":0,"dropResponseRate":0}')"
     for i in 1 2 3 4 5; do
@@ -346,6 +358,14 @@ scenario_pg() {
     assert_probe "지연 중 공연 목록 조회" "$OUT/performances-during-delay.txt" '^200$' "$API_P95_MS" 30
     metric payment 8085 'tomcat_threads_busy|resilience4j_bulkhead_available|resilience4j_circuitbreaker_state' > "$OUT/payment-metrics-during-delay.txt"
     check_nonempty "payment 스레드·Bulkhead·서킷 지표" "$OUT/payment-metrics-during-delay.txt"
+    # payment 자체가 지연 중에도 응답하는지(PG를 거치지 않는 liveness)와 Bulkhead 여유(고갈되지 않음)
+    : > "$OUT/payment-liveness-during-delay.txt"
+    for _ in $(seq 1 15); do
+        compose exec -T payment curl -s -o /dev/null -w '%{http_code} %{time_total}\n' --max-time 10 http://localhost:8085/actuator/health/liveness >> "$OUT/payment-liveness-during-delay.txt" || echo "000 10" >> "$OUT/payment-liveness-during-delay.txt"
+        sleep 0.3
+    done
+    assert_probe "지연 중 payment liveness" "$OUT/payment-liveness-during-delay.txt" '^200$' "$API_P95_MS" 15
+    check_re "승인 Bulkhead 여유(고갈되지 않음)" '^[1-9][0-9]*$' "$(grep 'resilience4j_bulkhead_available_concurrent_calls.*pg-approval' "$OUT/payment-metrics-during-delay.txt" | awk '{print int($NF)}')"
 
     say "실패율 100%: 주문 20건(서킷 윈도 20건을 채운다)"
     curl -s -o /dev/null -X PUT "$pg/pg/admin/faults" -H 'Content-Type: application/json' -d '{"delayMs":0,"failureRate":1.0,"timeoutRate":0,"dropResponseRate":0}'
@@ -355,7 +375,7 @@ scenario_pg() {
     check "생성한 주문 수" 25 "${#orders[@]}"
     sleep 5
     metric payment 8085 'resilience4j_circuitbreaker' > "$OUT/payment-circuit.txt"
-    check_re "서킷이 호출을 막았다(not_permitted)" '^[1-9][0-9]*$' "$(metric_sum payment 8085 resilience4j_circuitbreaker_not_permitted_calls_total | cut -d. -f1)"
+    check_re "서킷이 호출을 막았다(not_permitted 증가분)" '^[1-9][0-9]*$' "$(($(metric_sum payment 8085 resilience4j_circuitbreaker_not_permitted_calls_total | cut -d. -f1) - npc0))"
     probe 15 GET /api/v1/performances "$a" "$OUT/performances-during-failure.txt"
     assert_probe "PG 실패 중 공연 목록 조회" "$OUT/performances-during-failure.txt" '^200$' "$API_P95_MS" 15 "$base"
 

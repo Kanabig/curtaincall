@@ -64,7 +64,10 @@ public class VenueRepository {
                 limit);
     }
 
-    /** 시설 상세 파싱 실패를 센다. 한도를 넘긴 시설은 refreshBefore가 지나기 전에는 다시 받지 않는다. */
+    /**
+     * 시설 상세 파싱 실패를 센다. 한도를 넘긴 시설은 refreshBefore가 지나기 전에는 다시 받지 않는다. 5xx·타임아웃은 KOPIS 쪽 일시 장애일 수 있어 세지 않고 매 실행 다시 시도한다(호출은
+     * 하루 호출 장부로 제한된다).
+     */
     public void recordFailure(String mt10id, Instant now, Instant refreshBefore) {
         jdbc.update(
                 "INSERT INTO venue_fetch_failure (mt10id, attempts, last_failed_at) VALUES (?, 1, ?)"

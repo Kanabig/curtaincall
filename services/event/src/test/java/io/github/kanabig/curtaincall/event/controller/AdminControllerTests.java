@@ -378,7 +378,12 @@ class AdminControllerTests extends EventIntegrationTest {
         assertThat(admin(HttpMethod.POST, path, null).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 
         assertThat(outboxTypes()).containsExactly("SessionCreated", "SessionSuspended");
-        assertThat(lastOutboxPayload().get("sessionId").asLong()).isEqualTo(id);
+        // compaction으로 이 레코드만 남아도 소비자가 상태를 만들 수 있게 전체 값을 싣는다
+        JsonNode payload = lastOutboxPayload();
+        assertThat(payload.get("sessionId").asLong()).isEqualTo(id);
+        assertThat(payload.hasNonNull("saleOpenAt")).isTrue();
+        assertThat(payload.hasNonNull("admissionPerSecond")).isTrue();
+        assertThat(payload.hasNonNull("maxActiveUsers")).isTrue();
         assertThat(admin(HttpMethod.POST, "/api/v1/admin/sessions/999/suspend", null)
                         .getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);

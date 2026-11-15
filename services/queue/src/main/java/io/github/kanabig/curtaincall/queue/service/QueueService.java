@@ -95,10 +95,13 @@ public class QueueService {
             throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
         }
         try {
-            return action.get();
+            T result = action.get();
+            circuit.recordSuccess();
+            return result;
         } catch (DataAccessException e) {
-            if (circuit.open()) {
-                log.warn("Redis 호출 실패로 대기열을 사용할 수 없다: {}", e.toString());
+            boolean opened = circuit.recordFailure();
+            log.warn("Redis 호출 실패(서킷 {}): {}", opened ? "열림" : "유지", e.toString());
+            if (opened) {
                 circuitOpened.increment();
             }
             throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
