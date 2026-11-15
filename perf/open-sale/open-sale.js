@@ -39,6 +39,8 @@ const ENTRY_ONLY = __ENV.ENTRY_ONLY === '1'; // 진입만 하고 끝낸다(진�
 // 1이면 gateway를 거치지 않고 queue에 바로 보낸다(gateway 구간 비용 분리). 인증은 X-User-Id로 대신한다
 const DIRECT_QUEUE = __ENV.DIRECT_QUEUE === '1';
 const QUEUE_URL = __ENV.QUEUE_URL || 'http://queue:8083';
+// 매진(SOLD_OUT) 응답을 이만큼 받으면 대기를 포기하고 떠난다
+const SOLD_OUT_LEAVE_AFTER = Number(__ENV.SOLD_OUT_LEAVE_AFTER || 3);
 const PAY = (__ENV.PAY || (MODE === 'flow' ? '1' : '0')) === '1';
 const BOOK_RATE = Number(__ENV.BOOK_RATE || 50);
 const DURATION = __ENV.DURATION || '60s';
@@ -71,6 +73,8 @@ const C = {
   enterFail: new Counter('enter_fail'),
   pollCount: new Counter('poll_count'),
   admitted: new Counter('admitted'),
+  soldOutSeen: new Counter('sold_out_seen'),
+  soldOutLeft: new Counter('sold_out_left'),
   expired: new Counter('expired_reenter'),
   holdOk: new Counter('hold_ok'),
   holdSeats: new Counter('hold_seats'),
@@ -379,6 +383,7 @@ export function flow() {
 
   // 2. 대기열 폴링
   const deadline = Date.now() + MAX_WAIT_S * 1000;
+  let soldOutCount = 0;
   while (body.status !== 'ADMITTED') {
     if (Date.now() > deadline) return;
     if (body.status === 'EXPIRED') {
@@ -386,6 +391,16 @@ export function flow() {
       const res = call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_enter', [200, 201], T.enter);
       body = json(res);
       continue;
+    }
+    if (body.status === 'SOLD_OUT') {
+      // 매진 안내를 몇 번 보면 사용자는 떠난다(대기 포기)
+      C.soldOutSeen.add(1);
+      soldOutCount++;
+      if (soldOutCount >= SOLD_OUT_LEAVE_AFTER) {
+        http.del(`${BASE_URL}/api/v1/queue/sessions/${SID}/entries/me`, null, { headers: auth, tags: { name: 'queue_leave' }, responseCallback: http.expectedStatuses(204) });
+        C.soldOutLeft.add(1);
+        return;
+      }
     }
     sleep((body.pollAfterMs || 3000) / 1000);
     const res = call('GET', `/api/v1/queue/sessions/${SID}/entries/me`, null, auth, 'queue_poll', [200], T.poll);
@@ -485,7 +500,7 @@ function textSummary(data) {
   }
   lines.push(
     '--- 진입',
-    `enter_ok=${c('enter_ok')} enter_fail=${c('enter_fail')} polls=${c('poll_count')} admitted=${c('admitted')} expired_reenter=${c('expired_reenter')}`,
+    `enter_ok=${c('enter_ok')} enter_fail=${c('enter_fail')} polls=${c('poll_count')} admitted=${c('admitted')} expired_reenter=${c('expired_reenter')} sold_out_seen=${c('sold_out_seen')} sold_out_left=${c('sold_out_left')}`,
     `queue_wait_ms  ${t('queue_wait_ms')}`,
     `start_lag_ms   ${t('start_lag_ms')}`,
     '--- 예매',
