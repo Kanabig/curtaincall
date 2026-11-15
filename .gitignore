@@ -41,3 +41,4 @@ CLAUDE.md
 .env
 perf/seat-hold/results*/
 perf/seat-status/results*/
+perf/open-sale/results*/
