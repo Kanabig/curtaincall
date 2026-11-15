@@ -24,4 +24,11 @@ public class SessionConfService {
             log.info("이미 반영한 것보다 오래된 회차 이벤트라 무시한다: sessionId={} type={}", conf.sessionId(), conf.type());
         }
     }
+
+    /** 매진 여부 반영. 더 큰 version만 적용하므로 중복·역순 전달에 안전하다. */
+    public void applyAvailability(long sessionId, boolean soldOut, long version) {
+        if (!repository.applyAvailability(sessionId, soldOut, version)) {
+            log.info("이미 반영한 것보다 오래된 매진 이벤트라 무시한다: sessionId={} version={}", sessionId, version);
+        }
+    }
 }

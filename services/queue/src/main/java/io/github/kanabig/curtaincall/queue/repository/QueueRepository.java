@@ -18,6 +18,7 @@ public class QueueRepository {
     private final DefaultRedisScript<Long> applyConfScript;
     private final DefaultRedisScript<List> admitScript;
     private final DefaultRedisScript<Long> removeStaleScript;
+    private final DefaultRedisScript<Long> applyAvailabilityScript;
 
     public QueueRepository(
             StringRedisTemplate redis,
@@ -25,13 +26,15 @@ public class QueueRepository {
             DefaultRedisScript<List> statusScript,
             DefaultRedisScript<Long> applyConfScript,
             DefaultRedisScript<List> admitScript,
-            DefaultRedisScript<Long> removeStaleScript) {
+            DefaultRedisScript<Long> removeStaleScript,
+            DefaultRedisScript<Long> applyAvailabilityScript) {
         this.redis = redis;
         this.enterScript = enterScript;
         this.statusScript = statusScript;
         this.applyConfScript = applyConfScript;
         this.admitScript = admitScript;
         this.removeStaleScript = removeStaleScript;
+        this.applyAvailabilityScript = applyAvailabilityScript;
     }
 
     /** 판매 중인 회차 ID. */
@@ -139,6 +142,16 @@ public class QueueRepository {
         return applied != null && applied == 1L;
     }
 
+    /** @return 반영했으면 true, 이미 반영한 것보다 오래됐거나 같은 version이라 버렸으면 false */
+    public boolean applyAvailability(long sessionId, boolean soldOut, long version) {
+        Long applied = redis.execute(
+                applyAvailabilityScript,
+                List.of(QueueKeys.conf(sessionId)),
+                soldOut ? "1" : "0",
+                String.valueOf(version));
+        return applied != null && applied == 1L;
+    }
+
     private static EntryResult parse(List<?> r) {
         if (r == null || r.isEmpty()) {
             throw new IllegalStateException("대기열 스크립트 응답이 비어 있다");
@@ -147,6 +160,14 @@ public class QueueRepository {
         if (code == 1) {
             return new EntryResult(
                     Kind.WAITING,
+                    ((Number) r.get(1)).longValue(),
+                    ((Number) r.get(2)).longValue(),
+                    0,
+                    r.size() > 3 && ((Number) r.get(3)).longValue() == 1);
+        }
+        if (code == 5) {
+            return new EntryResult(
+                    Kind.SOLD_OUT,
                     ((Number) r.get(1)).longValue(),
                     ((Number) r.get(2)).longValue(),
                     0,

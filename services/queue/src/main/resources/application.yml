@@ -33,6 +33,7 @@ curtaincall:
   topics:
     session: event.session
     order: reservation.order
+    reservation-session: reservation.session
   queue:
     zone: Asia/Seoul
     entry-ttl: 10m

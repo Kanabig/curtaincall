@@ -1,8 +1,8 @@
 -- 내 상태 조회. 대기 중이면 heartbeat를 갱신한다.
 -- KEYS: conf, waiting, seen, active   ARGV: userId
--- 반환: {1, rank, admissionPerSecond} 대기 | {3, tokenExpiresAtMs} 입장 완료 | {4} 대기열에 없음
+-- 반환: {1, rank, admissionPerSecond} 대기 | {5, rank, admissionPerSecond} 매진 중 대기 | {3, tokenExpiresAtMs} 입장 완료 | {4} 대기열에 없음
 --       {-1} 회차 없음 | {-3} 판매 중이 아님
-local conf = redis.call('HMGET', KEYS[1], 'status', 'admissionPerSecond')
+local conf = redis.call('HMGET', KEYS[1], 'status', 'admissionPerSecond', 'soldOut')
 if conf[1] == false or conf[1] == 'DELETED' then
   return {-1}
 end
@@ -21,4 +21,7 @@ if not rank then
   return {4}
 end
 redis.call('ZADD', KEYS[3], nowMs, user)
+if conf[3] == '1' then
+  return {5, rank, tonumber(conf[2])}
+end
 return {1, rank, tonumber(conf[2])}

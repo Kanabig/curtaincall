@@ -7,6 +7,7 @@
 -- 테스트만 시각을 넘겨 기다리지 않는다.
 -- 지우는 수가 ARGV[5]에 닿으면 이번 틱은 거기서 멈춘다(Redis를 오래 잡지 않기 위해). 나머지는 다음 틱과 이탈 정리가 맡는다.
 -- KEYS: conf, waiting, seen, active   ARGV: nowMs(빈 문자열이면 TIME), entryTtlMs, tickKeyPrefix, admitStaleMs, dropLimit
+-- 매진(conf.soldOut=1)이면 입장 0명, 만료 정리만 한다.
 -- 반환: {0} 이번 초는 다른 인스턴스가 처리 | {1, 입장 수, 입장 뒤 활성 수, 폴링이 끊겨 지운 수} | {-1} 판매 중이 아니거나 회차 없음
 local now = tonumber(ARGV[1])
 if not now then
@@ -16,12 +17,16 @@ end
 if not redis.call('SET', ARGV[3] .. math.floor(now / 1000), '1', 'NX', 'EX', 5) then
   return {0}
 end
-local conf = redis.call('HMGET', KEYS[1], 'status', 'saleOpenAt', 'admissionPerSecond', 'maxActiveUsers')
+local conf = redis.call('HMGET', KEYS[1], 'status', 'saleOpenAt', 'admissionPerSecond', 'maxActiveUsers', 'soldOut')
 if conf[1] ~= 'ON_SALE' or now < tonumber(conf[2]) then
   return {-1}
 end
 redis.call('ZREMRANGEBYSCORE', KEYS[4], '-inf', now)
 local active = redis.call('ZCARD', KEYS[4])
+-- 매진이면 입장시키지 않는다. 만료 정리는 위에서 했고 대기열은 그대로 둬서 매진이 풀리면 원래 순서로 재개한다(QUE-8)
+if conf[5] == '1' then
+  return {1, 0, active, 0}
+end
 local need = math.min(tonumber(conf[3]), tonumber(conf[4]) - active)
 local exp = now + tonumber(ARGV[2])
 local freshAfter = now - tonumber(ARGV[4])

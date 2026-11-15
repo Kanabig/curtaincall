@@ -49,6 +49,14 @@ public class QueueConfig {
         return script;
     }
 
+    @Bean
+    DefaultRedisScript<Long> applyAvailabilityScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("redis/apply-availability.lua"));
+        script.setResultType(Long.class);
+        return script;
+    }
+
     private static DefaultRedisScript<java.util.List> script(String path) {
         DefaultRedisScript<java.util.List> script = new DefaultRedisScript<>();
         script.setLocation(new ClassPathResource(path));
