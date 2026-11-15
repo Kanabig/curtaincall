@@ -1,5 +1,6 @@
 package io.github.kanabig.curtaincall.queue;
 
+import io.github.kanabig.curtaincall.queue.service.RedisCircuit;
 import io.github.kanabig.curtaincall.testsupport.TestContainersConfig;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -27,10 +28,15 @@ public abstract class QueueIntegrationTest {
     @Autowired
     protected StringRedisTemplate redis;
 
+    /** 스케줄러를 끄므로 prober가 없다. Redis 장애를 흉내 낸 테스트가 열어 둔 서킷을 다음 테스트로 넘기지 않는다. */
+    @Autowired
+    protected RedisCircuit circuit;
+
     protected final long sessionId = NEXT_SESSION.addAndGet(1);
 
     @AfterEach
     void cleanKeys() {
+        circuit.close();
         Set<String> keys = redis.keys("q:" + sessionId + ":*");
         if (keys != null && !keys.isEmpty()) {
             redis.delete(keys);

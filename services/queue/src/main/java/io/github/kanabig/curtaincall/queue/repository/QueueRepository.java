@@ -37,6 +37,11 @@ public class QueueRepository {
         this.applyAvailabilityScript = applyAvailabilityScript;
     }
 
+    /** Redis가 응답하는지 확인한다. 서킷이 열린 동안 복구 확인에 쓴다. */
+    public void ping() {
+        redis.execute((org.springframework.data.redis.core.RedisCallback<String>) connection -> connection.ping());
+    }
+
     /** 판매 중인 회차 ID. */
     public Set<Long> openSessions() {
         Set<String> ids = redis.opsForSet().members(QueueKeys.OPEN);

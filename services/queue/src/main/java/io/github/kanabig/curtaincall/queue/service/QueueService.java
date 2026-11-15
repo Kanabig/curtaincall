@@ -36,14 +36,15 @@ public class QueueService {
             QueueRepository repository,
             QueueProperties properties,
             EntryTokenIssuer tokenIssuer,
-            MeterRegistry meters) {
+            MeterRegistry meters,
+            RedisCircuit circuit) {
         this.repository = repository;
         this.tokenIssuer = tokenIssuer;
         this.zone = properties.zone();
         this.soldOutPollAfterMs = properties.soldOutPollAfter().toMillis();
-        this.circuit = new RedisCircuit(properties.redisCircuitOpen(), System::nanoTime);
+        this.circuit = circuit;
         this.circuitOpened = Counter.builder("queue.redis.circuit.open")
-                .description("Redis 호출 실패로 서킷이 열린 횟수(시험 호출 실패로 다시 열린 것 포함, 열린 뒤 늦게 온 실패는 제외)")
+                .description("Redis 호출 실패로 서킷이 열린 횟수(이미 열린 뒤 늦게 온 실패는 제외)")
                 .register(meters);
     }
 
@@ -88,24 +89,19 @@ public class QueueService {
         return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMs), zone).toString();
     }
 
-    /** 서킷이 열려 있으면 Redis를 부르지 않고 바로 503. 장애 중 WARN 로그는 서킷이 열릴 때만 남긴다. */
+    /** 서킷이 열려 있으면 Redis를 부르지 않고 바로 503. 닫는 일은 {@link RedisCircuitProber}가 한다. 장애 중 WARN 로그는 서킷이 열릴 때만 남긴다. */
     private <T> T call(java.util.function.Supplier<T> action) {
-        if (!circuit.tryAcquire()) {
+        if (circuit.isOpen()) {
             throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
         }
         try {
-            T result = action.get();
-            circuit.onSuccess();
-            return result;
+            return action.get();
         } catch (DataAccessException e) {
-            log.warn("Redis 호출 실패로 대기열을 사용할 수 없다: {}", e.toString());
-            if (circuit.onFailure()) {
+            if (circuit.open()) {
+                log.warn("Redis 호출 실패로 대기열을 사용할 수 없다: {}", e.toString());
                 circuitOpened.increment();
             }
             throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
-        } catch (RuntimeException e) {
-            circuit.release();
-            throw e;
         }
     }
 
