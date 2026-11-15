@@ -115,7 +115,7 @@ class DltReplayTests extends OutboxIntegrationTest {
                 .asString()
                 .contains("0:999999")
                 .contains("DLT에 없음");
-        assertThat(endpoint.topics()).contains(DLT, "test.fail.DLT");
+        assertThat(endpoint.topics()).contains(DLT, "test.fail.DLT", TestListeners.BAD_DLT);
     }
 
     private DltReplayer.Entry find(String key) {

@@ -38,10 +38,13 @@ class RedisCircuit {
         probing.set(false);
     }
 
-    void onFailure() {
+    /** @return 이번 실패로 서킷이 새로 열렸거나(닫혀 있었음) 시험 호출이 실패해 다시 열렸으면 true. 이미 열린 뒤 늦게 도착한 실패는 false */
+    boolean onFailure() {
+        boolean opened = !open.get() || probing.get();
         skipUntil.set(nanoTime.getAsLong() + openNanos);
         open.set(true);
         probing.set(false);
+        return opened;
     }
 
     /** Redis와 무관한 예외로 시험 호출이 끝났을 때 다음 요청이 다시 시험할 수 있게 풀어 준다. */

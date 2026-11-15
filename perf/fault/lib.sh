@@ -218,6 +218,10 @@ scenario_dlt() {
         compose exec -T kafka $kt/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic "$t" --from-beginning --timeout-ms 8000 --property print.headers=true 2>/dev/null | tee "$OUT/$t.txt"
         [ -s "$OUT/$t.txt" ] && ok "$t 에 쌓였다" || bad "$t 가 비어 있다"
     done
+    say "reservation /actuator/dlt가 새 DLT 이름을 알려 주는지"
+    compose exec -T reservation curl -s http://localhost:8084/actuator/dlt | tee "$OUT/reservation-dlt-topics.txt"
+    grep -q 'event.session.reservation.DLT' "$OUT/reservation-dlt-topics.txt" && ok "actuator/dlt 목록에 있다" || bad "actuator/dlt 목록에 없다"
+    compose exec -T reservation curl -s "http://localhost:8084/actuator/dlt/event.session.reservation.DLT?limit=5" | tee "$OUT/reservation-dlt-entries.txt"; echo
     echo "소비자별 DLT 이름과 헤더(어느 서비스가 보냈는지)를 위 출력에서 확인한다."
     exit_status
 }

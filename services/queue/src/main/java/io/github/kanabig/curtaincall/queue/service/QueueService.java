@@ -6,6 +6,8 @@ import io.github.kanabig.curtaincall.queue.dto.QueueStatusResponse;
 import io.github.kanabig.curtaincall.queue.error.QueueErrorCode;
 import io.github.kanabig.curtaincall.queue.repository.EntryResult;
 import io.github.kanabig.curtaincall.queue.repository.QueueRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -28,13 +30,21 @@ public class QueueService {
     private final long soldOutPollAfterMs;
     private final EntryTokenIssuer tokenIssuer;
     private final RedisCircuit circuit;
+    private final Counter circuitOpened;
 
-    public QueueService(QueueRepository repository, QueueProperties properties, EntryTokenIssuer tokenIssuer) {
+    public QueueService(
+            QueueRepository repository,
+            QueueProperties properties,
+            EntryTokenIssuer tokenIssuer,
+            MeterRegistry meters) {
         this.repository = repository;
         this.tokenIssuer = tokenIssuer;
         this.zone = properties.zone();
         this.soldOutPollAfterMs = properties.soldOutPollAfter().toMillis();
         this.circuit = new RedisCircuit(properties.redisCircuitOpen(), System::nanoTime);
+        this.circuitOpened = Counter.builder("queue.redis.circuit.open")
+                .description("Redis 호출 실패로 서킷이 열린 횟수(시험 호출 실패로 다시 열린 것 포함, 열린 뒤 늦게 온 실패는 제외)")
+                .register(meters);
     }
 
     /** 이미 대기 중이면 기존 순번을 그대로 돌려준다. {@link Entered#created()}는 이번 호출로 새로 들어왔는지다. */
@@ -89,7 +99,9 @@ public class QueueService {
             return result;
         } catch (DataAccessException e) {
             log.warn("Redis 호출 실패로 대기열을 사용할 수 없다: {}", e.toString());
-            circuit.onFailure();
+            if (circuit.onFailure()) {
+                circuitOpened.increment();
+            }
             throw new BusinessException(QueueErrorCode.QUEUE_UNAVAILABLE);
         } catch (RuntimeException e) {
             circuit.release();

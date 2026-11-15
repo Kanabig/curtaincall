@@ -23,6 +23,7 @@ class TestListeners {
     static final String IDEM_TOPIC = "test.idem";
     static final String FAIL_TOPIC = "test.fail";
     static final String BAD_TOPIC = "test.bad";
+    static final String BAD_DLT = "test.bad.svc.DLT";
     static final String TRACE_TOPIC = "test.trace";
     static final String REPLAY_TOPIC = "test.replay";
     static final String REPLAY_GROUP = "test-replay-group";
@@ -77,7 +78,7 @@ class TestListeners {
 
     @Bean
     NewTopic badDlt() {
-        return TopicBuilder.name(BAD_TOPIC + ".DLT").partitions(1).replicas(1).build();
+        return TopicBuilder.name(BAD_DLT).partitions(1).replicas(1).build();
     }
 
     @Bean

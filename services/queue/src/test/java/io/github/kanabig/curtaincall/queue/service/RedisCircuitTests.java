@@ -16,7 +16,9 @@ class RedisCircuitTests {
     @DisplayName("[NFR-11] 실패하면 열려 있는 동안 Redis를 부르지 않는다")
     void skipsWhileOpen() {
         assertThat(circuit.tryAcquire()).isTrue();
-        circuit.onFailure();
+        assertThat(circuit.onFailure()).isTrue();
+        // 열리기 전에 시작한 다른 호출의 실패는 새로 여는 것이 아니다
+        assertThat(circuit.onFailure()).isFalse();
 
         assertThat(circuit.isOpen()).isTrue();
         assertThat(circuit.tryAcquire()).isFalse();
@@ -46,7 +48,7 @@ class RedisCircuitTests {
         now.addAndGet(Duration.ofSeconds(2).toNanos());
         assertThat(circuit.tryAcquire()).isTrue();
 
-        circuit.onFailure();
+        assertThat(circuit.onFailure()).isTrue();
 
         assertThat(circuit.tryAcquire()).isFalse();
         now.addAndGet(Duration.ofSeconds(2).toNanos());
