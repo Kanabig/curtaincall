@@ -14,9 +14,12 @@ set -uo pipefail
 ARG="${1:?dlt | aux | redis | pg | kopis | all}"
 PROJECT="${2:-fault}"
 cd "$(dirname "$0")/../.."
+# SKIP_LOCK=1은 brain이 병행을 허가한 실행에서만 쓴다. 결과 env.txt에 병행 사실을 남긴다(PARALLEL_NOTE로 내용을 적는다)
+if [ "${SKIP_LOCK:-0}" != 1 ]; then
 exec 9>/tmp/curtaincall-bench.lock
 # LOCK_WAIT_S초까지 락이 풀리기를 기다린다(기본 0: 바로 포기)
 flock -w "${LOCK_WAIT_S:-0}" 9 || { echo "측정 락을 다른 세션이 쥐고 있다." >&2; exit 2; }
+fi
 # shellcheck source=perf/fault/lib.sh
 source perf/fault/lib.sh
 
@@ -28,6 +31,7 @@ run_one() {
         echo "scenario: $SCENARIO  project: $PROJECT"
         echo "host:     $(nproc) cpu, $(free -m | awk '/Mem:/{print $2" MB total, "$7" MB available"}')"
         echo "load avg: $(cut -d' ' -f1-3 /proc/loadavg)"
+        [ "${SKIP_LOCK:-0}" = 1 ] && echo "병행: ${PARALLEL_NOTE:-락을 건너뛰고 실행(SKIP_LOCK)}"
         echo "containers:"; docker ps --format '  {{.Names}} {{.Image}}'
     } | tee "$OUT/env.txt"
     case "$SCENARIO" in
