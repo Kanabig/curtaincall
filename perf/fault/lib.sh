@@ -98,7 +98,7 @@ purchase() { # purchase 회차 access token 입장토큰 좌석ID → 주문 ID 
     [ "$(last_code)" = 201 ] || { echo "hold:$(last_code)"; return 1; }
     order=$(api POST /api/v1/orders "$2" "{\"holdId\":\"$hold\"}" "X-Entry-Token: $3" "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)" | jq -r .orderId)
     [ "$(last_code)" = 201 ] || { echo "order:$(last_code)"; return 1; }
-    api POST "/api/v1/orders/$order/payment" "$2" '{"method":"CARD","cardToken":"tok_fault"}' "X-Entry-Token: $3" "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)" > /dev/null
+    api POST "/api/v1/orders/$order/payment" "$2" '{"method":"CARD","cardToken":"tok_approve"}' "X-Entry-Token: $3" "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)" > /dev/null
     [ "$(last_code)" = 202 ] || { echo "payment:$(last_code)"; return 1; }
     echo "$order"
 }
@@ -284,9 +284,11 @@ scenario_redis() {
     say "Redis 복구"
     compose start redis
     for _ in $(seq 1 30); do [ "$(compose ps redis --format '{{.Health}}')" = healthy ] && break; sleep 1; done
-    sleep 6
-    api POST "/api/v1/queue/sessions/$sid/entries" "$b" "" > /dev/null
-    check_re "복구 뒤 B 진입 성공(서킷 닫힘)" '^20[01]$' "$(last_code)"
+    # Lettuce 재연결 백오프(최대 30초)와 서킷 때문에 Redis가 돌아온 직후에는 503이 이어질 수 있다. 복구까지 걸린 시간을 재고 RECOVER_S 안이면 통과한다
+    local t0=$SECONDS RECOVER_S="${RECOVER_S:-60}"
+    until api POST "/api/v1/queue/sessions/$sid/entries" "$b" "" > /dev/null; [[ "$(last_code)" =~ ^20[01]$ ]] || [ $((SECONDS - t0)) -ge "$RECOVER_S" ]; do sleep 1; done
+    echo "복구까지 $((SECONDS - t0))초" | tee "$OUT/recovery-time.txt"
+    check_re "복구 뒤 B 진입 성공(${RECOVER_S}초 안)" '^20[01]$' "$(last_code)"
 
     say "Redis 데이터 유실 후 event.session 재소비로 복구"
     compose exec -T kafka /opt/kafka/bin/kafka-configs.sh --bootstrap-server localhost:9092 --describe --entity-type topics --entity-name event.session > "$OUT/topic-config.txt"
