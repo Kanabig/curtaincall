@@ -20,6 +20,15 @@ public class SessionTopicsConfig {
         return TopicBuilder.name(ORDER_DLT_TOPIC).partitions(3).replicas(1).build();
     }
 
+    /** reservation이 소유하는 토픽. queue만 읽으므로 {토픽}.DLT. */
+    @Bean
+    NewTopic availabilityDltTopic() {
+        return TopicBuilder.name("reservation.session.DLT")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
     @Bean
     NewTopic sessionDltTopic() {
         return TopicBuilder.name(SESSION_TOPIC + ".DLT")

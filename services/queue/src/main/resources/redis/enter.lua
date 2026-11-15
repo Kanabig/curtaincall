@@ -1,8 +1,9 @@
 -- 대기열 진입. 판정, 번호 발급, 등록, heartbeat 기록을 한 번에 처리한다.
 -- KEYS: conf, waiting, seen, seq, active   ARGV: userId
 -- 반환: {1, rank, admissionPerSecond, created} 대기 | {3, tokenExpiresAtMs} 입장 완료
+--       {5, rank, admissionPerSecond, created} 매진 중 대기(순번 유지)
 --       {-1} 회차 없음 | {-2, saleOpenAtMs} 오픈 전 | {-3} 판매 중이 아님
-local conf = redis.call('HMGET', KEYS[1], 'status', 'saleOpenAt', 'admissionPerSecond')
+local conf = redis.call('HMGET', KEYS[1], 'status', 'saleOpenAt', 'admissionPerSecond', 'soldOut')
 if conf[1] == false or conf[1] == 'DELETED' then
   return {-1}
 end
@@ -29,4 +30,7 @@ if not rank then
   created = 1
 end
 redis.call('ZADD', KEYS[3], nowMs, user)
+if conf[4] == '1' then
+  return {5, rank, tonumber(conf[3]), created}
+end
 return {1, rank, tonumber(conf[3]), created}
