@@ -15,7 +15,7 @@ ORDERS="${ORDERS:-20}"        # 시나리오당 주문 수(사용자 한 명이 
 LIMIT="${LIMIT:-900}"         # 수렴 대기 상한(초)
 CHAOS_INQUIRY_MAX_DURATION="${CHAOS_INQUIRY_MAX_DURATION:-40s}"
 export CHAOS_INQUIRY_MAX_DURATION
-ALL="baseline payment-restart reservation-restart kafka-outage-before kafka-outage-mid pg-drop-response pg-inquiry-down pg-timeout seat-loss user-cancel-pg-down dlt-replay duplicates-reorder"
+ALL="baseline payment-restart reservation-restart kafka-outage-before kafka-outage-mid pg-drop-response pg-inquiry-down pg-timeout seat-loss user-cancel-pg-down dlt-replay duplicates-reorder pg-outage-breaker"
 SCENARIOS="${*:-$ALL}"
 
 cd "$(dirname "$0")/../.."
@@ -70,7 +70,9 @@ start_scenario() {
     rm -rf "$OUT"; mkdir -p "$OUT"
     log "=== $NAME #$RUN/$REPEAT (기대: $EXPECT)"
     COMPOSE_FILES=(-f compose.yml)
-    compose up -d --wait mysql kafka mock-pg payment reservation > /dev/null
+    compose up -d --wait mysql kafka mock-pg reservation > /dev/null
+    # 서킷 브레이커가 payment 메모리에 있어 이전 시나리오·반복의 실패율이 이어진다. 매번 새로 띄워 초기화한다
+    compose up -d --wait --force-recreate payment > /dev/null
     compose unpause mock-pg 2> /dev/null || true
     reset_faults
     sql < "$DIR/seed.sql"
@@ -86,6 +88,15 @@ start_scenario() {
     T_START=$(date +%s)
 }
 
+save_logs() { # 시나리오·반복별 payment 로그(payment는 시나리오마다 새로 뜬다)
+    compose logs --no-color payment > "$OUT/payment.log" 2>&1 || true
+}
+
+breaker_state() { # 서킷 브레이커 지표(상태, 호출 수)를 파일에 덧붙인다. 인자: 라벨
+    { echo "# $1 $(date +%T)"
+      compose exec -T payment curl -fs localhost:8085/actuator/prometheus 2> /dev/null | grep -E '^resilience4j_circuitbreaker_(state|calls_seconds_count|not_permitted_calls_total)' || echo "(지표 없음)"; } >> "$OUT/breaker.txt"
+}
+
 finish_scenario() { # 수렴 시작 시각을 받는다
     local t0="${1:-$T_START}" verdict=PASS violations final
     wait_converged "$t0" || verdict="FAIL(수렴 상한 ${LIMIT}s 초과)"
@@ -96,6 +107,7 @@ finish_scenario() { # 수렴 시작 시각을 받는다
     violations=$(sql < "$DIR/verify.sql" | awk -F'\t' 'NF==2 && $2 ~ /^[0-9]+$/ {s += $2} END {print s+0}')
     [ "$violations" = 0 ] || verdict="FAIL(위반 $violations)"
     [ "$final" = "$EXPECT" ] || verdict="FAIL(최종 상태 $final)"
+    save_logs
     compose exec -T payment curl -fs localhost:8085/actuator/prometheus 2> /dev/null | grep -E '^(order|payment)_' > "$OUT/payment-metrics.txt" || true
     rsv curl -fs localhost:8084/actuator/prometheus 2> /dev/null | grep -E '^(order|payment)_' > "$OUT/reservation-metrics.txt" || true
     echo "CANCEL_FAILED: $(echo "SELECT COUNT(*) FROM payment_db.payment WHERE status = 'CANCEL_FAILED'" | sql)" >> "$OUT/verify.txt"
@@ -254,6 +266,7 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
     [ "$CONVERGE_S" -ge 0 ] || verdict="FAIL(취소 수렴 상한 초과)"
     [ "$avail" = 2000 ] || verdict="FAIL(좌석 복구 $avail)"
     # 주문은 CONFIRMED로 남고 예매가 CANCELLED가 된다. verify.sql의 SOLD 대조는 취소 뒤 0 = 0이다
+    save_logs
     sql_table < "$DIR/verify.sql" > "$OUT/verify.txt"
     local v; v=$(sql < "$DIR/verify.sql" | awk -F'\t' 'NF==2 && $2 ~ /^[0-9]+$/ {s += $2} END {print s+0}')
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$RUN" "$(counts)" "$CONVERGE_S" "$v" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
@@ -307,6 +320,42 @@ s_duplicates-reorder() { # 같은 응답 중복, 새 이벤트 ID로 다시 보�
     if diff -q "$OUT/before.txt" "$OUT/after.txt" > /dev/null; then echo "재생 전후 상태 동일" | tee "$OUT/replay-diff.txt"
     else diff "$OUT/before.txt" "$OUT/after.txt" | tee "$OUT/replay-diff.txt"; echo "FAIL(재생으로 상태가 바뀜)"; FAILED=1; fi
     finish_scenario "$(date +%s)"
+}
+
+# 응답 유실도 서킷 실패율에 들어가므로, 유실이 몰리면 이후 승인은 PG를 호출하지 않고 안전하게 실패한다(설계 의도).
+# 서킷: 최근 20건 중 50% 이상 실패면 10초 열림(window 20, minimumCalls 20). 열림 중 주문은 PG에 보내지 않고 FAILED, 좌석 해제.
+# 열림 시간이 지나면 half-open(3건)을 거쳐 닫히고 새 주문은 CONFIRMED.
+s_pg-outage-breaker() {
+    start_scenario pg-outage-breaker "CONFIRMED=26 FAILED=10"
+    set_faults 0 0 0 1.0
+    drive 1 20 0 tok_approve 1
+    local i=0 open=0
+    while [ "$i" -lt 30 ]; do # 승인 20건이 끝나 서킷이 열릴 때까지
+        compose exec -T payment curl -fs localhost:8085/actuator/prometheus 2> /dev/null \
+            | grep -E '^resilience4j_circuitbreaker_state.*name="pg-approval".*state="open".* 1\.0' > /dev/null && { open=1; break; }
+        i=$((i + 1)); sleep 1
+    done
+    breaker_state "유실 20건 뒤(열림 대기 ${i}s)"
+    [ "$open" = 1 ] || { echo "FAIL(서킷이 열리지 않음)" | tee -a "$OUT/breaker.txt"; FAILED=1; }
+    log "서킷 열림 중 주문 10건"
+    drive 21 10 40 tok_approve 1
+    sleep 3
+    local failed freed notsent
+    failed=$(echo "SELECT COUNT(*) FROM reservation_db.orders WHERE status = 'FAILED'" | sql)
+    freed=$(echo "SELECT COUNT(*) FROM reservation_db.seat_inventory WHERE seat_id BETWEEN 41 AND 60 AND status = 'AVAILABLE'" | sql)
+    notsent=$(compose logs --no-color payment 2>&1 | grep -c "reason=CIRCUIT_OPEN")
+    { echo "열림 중 FAILED 주문: $failed (기대 10)"; echo "해제된 좌석(41~60): $freed (기대 20)"; echo "PG에 보내지 않은 승인(CIRCUIT_OPEN 로그): $notsent (기대 10)"; } | tee -a "$OUT/breaker.txt"
+    [ "$failed" = 10 ] && [ "$freed" = 20 ] && [ "$notsent" = 10 ] || { echo "FAIL(열림 중 처리 기대와 다름)" | tee -a "$OUT/breaker.txt"; FAILED=1; }
+    breaker_state "열림 중 주문 뒤"
+    log "열림 시간 경과 대기, PG 유실 해제"
+    sleep 11
+    reset_faults
+    drive 31 3 60 tok_approve 1 # half-open 허용 3건
+    wait_converged "$(date +%s)" || true
+    breaker_state "half-open 3건 뒤"
+    drive 34 3 66 tok_approve 1
+    finish_scenario "$(date +%s)"
+    breaker_state "닫힌 뒤 3건 뒤"
 }
 
 for s in $SCENARIOS; do
