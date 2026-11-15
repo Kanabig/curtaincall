@@ -3,6 +3,7 @@ package io.github.kanabig.curtaincall.mockpg;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.kanabig.curtaincall.mockpg.entity.Transaction;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,7 +17,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.IntStream;
-import io.github.kanabig.curtaincall.mockpg.entity.Transaction;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
