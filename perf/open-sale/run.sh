@@ -81,7 +81,7 @@ snapshot() { # <접미사>
 {
     echo "commit:     $(git rev-parse HEAD)  image_tag=$IMAGE_TAG"
     echo "mode=$MODE project=$PROJECT users=$USERS admissionPerSecond=$ADMISSION maxActiveUsers=$MAX_ACTIVE pollers=$POLLERS"
-    echo "seat_status_ttl=${CURTAINCALL_SEAT_STATUS_CACHE_TTL:-2s} hold_attempts=${MAX_HOLD_ATTEMPTS:-3} spread_ms=${SPREAD_MS:-1000} pg_delay_ms=${PG_DELAY_MS:-0} ip_limit=${RATE_LIMIT_IP_PER_SECOND:-off} entry_only=${ENTRY_ONLY:-0} direct_queue=${DIRECT_QUEUE:-0}"
+    echo "seat_status_ttl=${CURTAINCALL_SEAT_STATUS_CACHE_TTL:-500ms} hold_attempts=${MAX_HOLD_ATTEMPTS:-10} spread_ms=${SPREAD_MS:-1000} pg_delay_ms=${PG_DELAY_MS:-0} ip_limit=${RATE_LIMIT_IP_PER_SECOND:-off} entry_only=${ENTRY_ONLY:-0} direct_queue=${DIRECT_QUEUE:-0}"
     echo "session=$SESSION_ID seat_base=$SEAT_BASE open_at=$OPEN_AT_ISO"
     echo "host:       $(nproc) cpu, $(free -m | awk '/Mem:/{print $2" MB total, "$7" MB available"}'), $(uname -sr)"
     echo "load avg:   $(cut -d' ' -f1-3 /proc/loadavg)"
@@ -125,7 +125,7 @@ docker run --rm --user "$(id -u):$(id -g)" --network "${PROJECT}_default" \
     -e MODE="$MODE" -e BASE_URL=http://gateway:8080 -e SESSION_ID="$SESSION_ID" -e OPEN_AT_MS="$OPEN_AT_MS" \
     -e ACCESS_SECRET="$JWT_ACCESS_SECRET" -e ENTRY_SECRET="$JWT_ENTRY_SECRET" -e SEAT_BASE="$SEAT_BASE" \
     -e USERS="$USERS" -e POLLERS="$POLLERS" -e BOOK_RATE="${BOOK_RATE:-50}" -e DURATION="${DURATION:-60s}" \
-    -e SPREAD_MS="${SPREAD_MS:-1000}" -e MAX_HOLD_ATTEMPTS="${MAX_HOLD_ATTEMPTS:-3}" -e ENTRY_ONLY="${ENTRY_ONLY:-0}" -e DIRECT_QUEUE="${DIRECT_QUEUE:-0}" -e THINK_MS="${THINK_MS:-1500}" -e MAX_WAIT_S="${MAX_WAIT_S:-900}" \
+    -e SPREAD_MS="${SPREAD_MS:-1000}" -e MAX_HOLD_ATTEMPTS="${MAX_HOLD_ATTEMPTS:-10}" -e ENTRY_ONLY="${ENTRY_ONLY:-0}" -e DIRECT_QUEUE="${DIRECT_QUEUE:-0}" -e THINK_MS="${THINK_MS:-1500}" -e MAX_WAIT_S="${MAX_WAIT_S:-900}" \
     "$K6_IMAGE" run /scripts/open-sale.js | tee "$OUT/k6.txt" || true
 
 kill $SAMPLER $LOADAVG $LAGSAMPLER 2>/dev/null || true

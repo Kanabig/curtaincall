@@ -14,7 +14,7 @@
 //   OPEN_AT_MS      판매 오픈 시각(epoch ms). VU가 이때까지 기다린 뒤 진입한다
 //   ACCESS_SECRET, ENTRY_SECRET   서명 키(.env의 JWT_ACCESS_SECRET, JWT_ENTRY_SECRET)
 //   SEAT_BASE       첫 좌석 ID. 좌석은 100열 x 100석, 좌석 ID = SEAT_BASE + 열 * 100 + 번호 - 1 (perf/open-sale/seed-event.sql)
-//   [flow]  USERS(10000)  SPREAD_MS(1000, 진입 시각 분산)  THINK_MS(1500)  MAX_HOLD_ATTEMPTS(3)  MAX_WAIT_S(900)  PAY(1)
+//   [flow]  USERS(10000)  SPREAD_MS(1000, 진입 시각 분산)  THINK_MS(1500)  MAX_HOLD_ATTEMPTS(10)  MAX_WAIT_S(900)  PAY(1)
 //   [nfr7]  BOOK_RATE(50)  DURATION(60s)  POLLERS(0)  PAY(0)
 import http from 'k6/http';
 import crypto from 'k6/crypto';
@@ -33,7 +33,7 @@ const MODE = __ENV.MODE || 'flow';
 const USERS = Number(__ENV.USERS || 10000);
 const SPREAD_MS = Number(__ENV.SPREAD_MS || 1000);
 const THINK_MS = Number(__ENV.THINK_MS || 1500);
-const MAX_HOLD_ATTEMPTS = Number(__ENV.MAX_HOLD_ATTEMPTS || 3);
+const MAX_HOLD_ATTEMPTS = Number(__ENV.MAX_HOLD_ATTEMPTS || 10);
 const MAX_WAIT_S = Number(__ENV.MAX_WAIT_S || 900);
 const ENTRY_ONLY = __ENV.ENTRY_ONLY === '1'; // 진입만 하고 끝낸다(진입 급증만 따로 본다)
 // 1이면 gateway를 거치지 않고 queue에 바로 보낸다(gateway 구간 비용 분리). 인증은 X-User-Id로 대신한다
