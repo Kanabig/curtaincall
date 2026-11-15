@@ -35,6 +35,10 @@ const SPREAD_MS = Number(__ENV.SPREAD_MS || 1000);
 const THINK_MS = Number(__ENV.THINK_MS || 1500);
 const MAX_HOLD_ATTEMPTS = Number(__ENV.MAX_HOLD_ATTEMPTS || 3);
 const MAX_WAIT_S = Number(__ENV.MAX_WAIT_S || 900);
+const ENTRY_ONLY = __ENV.ENTRY_ONLY === '1'; // 진입만 하고 끝낸다(진입 급증만 따로 본다)
+// 1이면 gateway를 거치지 않고 queue에 바로 보낸다(gateway 구간 비용 분리). 인증은 X-User-Id로 대신한다
+const DIRECT_QUEUE = __ENV.DIRECT_QUEUE === '1';
+const QUEUE_URL = __ENV.QUEUE_URL || 'http://queue:8083';
 const PAY = (__ENV.PAY || (MODE === 'flow' ? '1' : '0')) === '1';
 const BOOK_RATE = Number(__ENV.BOOK_RATE || 50);
 const DURATION = __ENV.DURATION || '60s';
@@ -192,6 +196,7 @@ function uuid() {
 
 // ---------- 요청 도우미
 
+let directUser = 0;
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 function call(method, path, body, headers, name, expected, trend) {
@@ -200,7 +205,12 @@ function call(method, path, body, headers, name, expected, trend) {
     tags: { name },
     responseCallback: http.expectedStatuses(...expected),
   };
-  const res = method === 'GET' ? http.get(`${BASE_URL}${path}`, params) : http.post(`${BASE_URL}${path}`, body === null ? null : JSON.stringify(body), params);
+  let base = BASE_URL;
+  if (DIRECT_QUEUE && path.startsWith('/api/v1/queue/')) {
+    base = QUEUE_URL;
+    params.headers = Object.assign({}, params.headers, { 'X-User-Id': String(directUser) });
+  }
+  const res = method === 'GET' ? http.get(`${base}${path}`, params) : http.post(`${base}${path}`, body === null ? null : JSON.stringify(body), params);
   if (trend) trend.add(res.timings.duration);
   if (res.status === 429) C.throttled.add(1);
   if (res.status === 503) C.unavailable.add(1);
@@ -343,6 +353,7 @@ function awaitConfirm(auth, orderId, seats) {
 
 export function flow() {
   const userId = exec.vu.idInTest; // 1부터
+  directUser = userId;
   const auth = { Authorization: `Bearer ${accessToken(userId)}` };
 
   const lag = Date.now() - OPEN_AT_MS;
@@ -364,7 +375,7 @@ export function flow() {
     C.enterFail.add(1);
     sleep(1 + Math.random());
   }
-  if (!body) return;
+  if (!body || ENTRY_ONLY) return;
 
   // 2. 대기열 폴링
   const deadline = Date.now() + MAX_WAIT_S * 1000;

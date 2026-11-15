@@ -104,6 +104,7 @@ LOADAVG=$!
     done
     gauge=$(compose exec -T reservation curl -fs http://localhost:8084/actuator/prometheus 2>/dev/null | awk '/^outbox_unpublished[{ ]/{s+=$NF} END{print s+0}')
     dlt=$(compose exec -T reservation curl -fs http://localhost:8084/actuator/prometheus 2>/dev/null | awk '/^outbox_consumer_dlt/ && !/^#/{s+=$NF} END{print s+0}')
+    echo "$(date +%T) queue active=$(compose exec -T redis redis-cli ZCARD "q:${SESSION_ID}:active" | tr -d '[:space:]') waiting=$(compose exec -T redis redis-cli ZCARD "q:${SESSION_ID}:waiting" | tr -d '[:space:]')"
     echo "$(date +%T) reservation outbox_unpublished_db=$(echo 'SELECT COUNT(*) FROM outbox WHERE published_at IS NULL' | mysql_root -N reservation_db | tr -d '[:space:]') gauge=$gauge dlt=$dlt"
   done > "$OUT/lag.txt" ) &
 LAGSAMPLER=$!
@@ -117,7 +118,7 @@ docker run --rm --user "$(id -u):$(id -g)" --network "${PROJECT}_default" \
     -e MODE="$MODE" -e BASE_URL=http://gateway:8080 -e SESSION_ID="$SESSION_ID" -e OPEN_AT_MS="$OPEN_AT_MS" \
     -e ACCESS_SECRET="$JWT_ACCESS_SECRET" -e ENTRY_SECRET="$JWT_ENTRY_SECRET" -e SEAT_BASE="$SEAT_BASE" \
     -e USERS="$USERS" -e POLLERS="$POLLERS" -e BOOK_RATE="${BOOK_RATE:-50}" -e DURATION="${DURATION:-60s}" \
-    -e SPREAD_MS="${SPREAD_MS:-1000}" -e THINK_MS="${THINK_MS:-1500}" -e MAX_WAIT_S="${MAX_WAIT_S:-900}" \
+    -e SPREAD_MS="${SPREAD_MS:-1000}" -e ENTRY_ONLY="${ENTRY_ONLY:-0}" -e DIRECT_QUEUE="${DIRECT_QUEUE:-0}" -e THINK_MS="${THINK_MS:-1500}" -e MAX_WAIT_S="${MAX_WAIT_S:-900}" \
     "$K6_IMAGE" run /scripts/open-sale.js | tee "$OUT/k6.txt" || true
 
 kill $SAMPLER $LOADAVG $LAGSAMPLER 2>/dev/null || true
