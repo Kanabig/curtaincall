@@ -144,5 +144,7 @@ VIOLATIONS="$({ echo "SET @SID = ${SESSION_ID};"; cat perf/open-sale/verify.sql;
     | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N reservation_db 2>/dev/null' | awk -F'\t' '{s+=$NF; n++} END{if (n==4) print s; else print "ERR"}')"
 echo "SELECT status, COUNT(*) AS n FROM seat_inventory WHERE session_id=${SESSION_ID} GROUP BY status;
 SELECT status, COUNT(*) AS n FROM orders GROUP BY status;" | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -t reservation_db 2>/dev/null' | tee "$OUT/final-state.txt"
+# 판정 뒤 검사 SQL을 다시 돌려 볼 수 있게 reservation 스키마와 데이터를 남긴다(결과 폴더, 커밋 안 함)
+compose exec -T mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction reservation_db 2>/dev/null' | gzip > "$OUT/reservation_db.sql.gz" || true
 echo "결과: $OUT"
 [ "$VIOLATIONS" = "0" ] || { echo "정합성 위반 또는 검사 실패: $VIOLATIONS" >&2; exit 1; }
