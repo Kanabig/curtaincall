@@ -124,10 +124,15 @@ finish_scenario() { # 수렴 시작 시각을 받는다
     local cf; cf=$(echo "SELECT COUNT(*) FROM payment_db.payment WHERE status = 'CANCEL_FAILED'" | sql)
     echo "CANCEL_FAILED: $cf" >> "$OUT/verify.txt"
     [ "$cf" = 0 ] || why="${why:+$why, }CANCEL_FAILED $cf건"
-    # PG 이중 승인: 같은 merchantOrderId로 새 거래가 둘 이상 기록되면 안 된다(mock-pg 로그. 이중 환불은 mock-pg가 취소를 기록하지 않아 재지 못한다)
-    local dbl; dbl=$(compose logs --no-color mock-pg 2>&1 | grep 'duplicate=false' | grep -o 'merchantOrderId=[^, ]*' | sort | uniq -d | wc -l)
-    echo "PG 이중 승인 주문: $dbl건" >> "$OUT/verify.txt"
-    [ "$dbl" = 0 ] || why="${why:+$why, }PG 이중 승인 ${dbl}건"
+    # PG 이중 승인: payment가 같은 주문으로 승인을 다시 부르면 mock-pg가 duplicate=true로 기록한다(mock-pg 로그는 누적이라 이번 회차 주문만 본다)
+    # PG 이중 환불: 같은 merchantOrderId로 상태를 바꾼 취소(applied=true)가 둘 이상이면 안 된다. applied=false는 재전송을 PG가 흡수한 건수다
+    local pgc; pgc=$(compose logs --no-color mock-pg 2>&1 | grep 'pg cancel ' | grep -F -f <(order_ids | grep '^ord_') || true)
+    local rf; rf=$(echo "$pgc" | grep 'applied=true' | grep -o 'merchantOrderId=[^ ]*' | sort | uniq -d | wc -l)
+    echo "PG 취소 적용: $(echo "$pgc" | grep -c 'applied=true'), 재전송 흡수(applied=false): $(echo "$pgc" | grep -c 'applied=false'), 이중 환불 주문: $rf건" >> "$OUT/verify.txt"
+    [ "$rf" = 0 ] || why="${why:+$why, }PG 이중 환불 ${rf}건"
+    local dbl; dbl=$(compose logs --no-color mock-pg 2>&1 | grep '승인 처리' | grep 'duplicate=true' | grep -cF -f <(order_ids | grep '^ord_') || true)
+    echo "PG 중복 승인 호출(duplicate=true): $dbl건" >> "$OUT/verify.txt"
+    [ "$dbl" = 0 ] || why="${why:+$why, }PG 승인 중복 호출 ${dbl}건"
     why="${why:+$why, }${EXTRA_FAIL}"; why="${why%, }"; [ -z "$why" ] || verdict="FAIL($why)"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse --short HEAD)" "$NAME" "$RUN" "$final" "$CONVERGE_S" "$violations" "$verdict" | tee -a "$OUT_ROOT/summary.tsv"
     cat "$OUT/verify.txt"
@@ -256,6 +261,8 @@ s_seat-loss() { # 승인 지연 중에 점유가 만료되고 다른 사용자�
     wait_converged "$t0" || true
     local kept; kept=$(echo "SELECT COUNT(*) FROM reservation_db.seat_inventory WHERE status = 'HELD' AND holder_id > 100000" | sql)
     if [ "$kept" != $((half * 2)) ]; then echo "FAIL(환불이 남의 좌석을 건드림)"; EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }환불이 남의 좌석을 건드림"; fi
+    local applied; applied=$(compose logs --no-color mock-pg 2>&1 | grep 'pg cancel ' | grep 'applied=true' | grep -F -f <(order_ids | grep '^ord_') | grep -o 'merchantOrderId=[^ ]*' | sort -u | wc -l)
+    [ "$applied" = "$half" ] || EXTRA_FAIL="${EXTRA_FAIL:+$EXTRA_FAIL, }PG 취소 적용 ${applied}건, 기대 ${half}건"
     finish_scenario "$t0"
     echo "타 사용자 점유 좌석 유지: $kept (기대 $((half * 2)))" | tee -a "$OUT/verify.txt"
 }
@@ -300,6 +307,8 @@ s_user-cancel-pg-down() { # 취소 중 PG 장애: 환불이 끝나기 전에 좌
     [ "$CONVERGE_S" -ge 0 ] || add "취소 수렴 상한 초과"
     [ "$avail" = 2000 ] || add "좌석 복구 $avail"
     [ "$cmds" = "$ORDERS" ] || add "환불 명령 $cmds건, 기대 $ORDERS"
+    local applied; applied=$(compose logs --no-color mock-pg 2>&1 | grep 'pg cancel ' | grep 'applied=true' | grep -F -f <(order_ids | grep '^ord_') | grep -o 'merchantOrderId=[^ ]*' | sort -u | wc -l)
+    [ "$applied" = "$ORDERS" ] || add "PG 취소 적용 ${applied}건, 기대 $ORDERS건"
     [ "$(counts)" = "CONFIRMED=$ORDERS" ] || add "주문 상태 $(counts)"
     local cf; cf=$(echo "SELECT COUNT(*) FROM payment_db.payment WHERE status = 'CANCEL_FAILED'" | sql)
     [ "$cf" = 0 ] || add "CANCEL_FAILED $cf건"
