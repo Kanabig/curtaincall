@@ -119,6 +119,8 @@ docker compose up -d --build --wait
 
 응답 유실도 서킷 실패율에 들어가므로, 유실이 몰리면 이후 승인은 PG를 호출하지 않고 안전하게 실패한다. 서킷 상태는 payment 프로세스 메모리에 있어 시나리오마다 payment를 새로 띄운다.
 
+판정 기준과 측정 한계는 다음과 같다. pg-inquiry-down은 조회 실패를 겪은 주문이 1건 이상이고 그 주문까지 모두 종결되며 PG 이중 승인이 0건인지로 판정했고, 겪은 주문 수(20건 중 10~14건)는 결과에 남겼다. PG 취소는 이중 환불이 없음(적용 1회)만 확인했고, 재전송을 흡수한 취소(`applied=false`)는 한 번도 측정되지 않았다. dlt-replay의 `replayed`는 DLT 토픽이 회차 사이에 누적되어 이전 회차 메시지까지 포함한 값이며, 소비 쪽 멱등 처리 덕에 결과에는 영향이 없다.
+
 ## 작업 방식
 
 이슈는 epic(서비스·기능군) > story(기능 ID 또는 사용자 화면 단위 요구사항, 수용 기준 포함) / task(환경·성능·검증) / bug로 나누고, epic 아래에 하위 이슈로 연결한다. 이슈에는 유형과 서비스 라벨만 붙이고, 변경의 성격(type)은 PR 제목과 PR 라벨로 정한다. story 하나가 브랜치 `<type>/<이슈번호>-<설명>`과 PR 하나에 대응한다. 이슈 브랜치는 `dev`에서 나와 `dev`로 squash merge한다. 마일스톤이 끝나면 `dev`를 `main`에 merge commit으로 올리고 태그를 붙인다. `main`은 항상 릴리스 가능한 상태다. PR 제목은 Conventional Commits를 따른다. 커밋 템플릿은 `git config commit.template .gitmessage.txt`로 쓴다.
