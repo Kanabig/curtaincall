@@ -77,7 +77,7 @@ class SoldOutTests extends QueueIntegrationTest {
         assertThat(waiting.position()).isEqualTo(3);
         assertThat(waiting.ahead()).isEqualTo(2);
         assertThat(waiting.etaSeconds()).isNull();
-        assertThat(waiting.pollAfterMs()).isBetween(8000L, 12000L);
+        assertThat(waiting.pollAfterMs()).isBetween(4000L, 6000L);
     }
 
     @Test
@@ -182,5 +182,40 @@ class SoldOutTests extends QueueIntegrationTest {
 
         assertThatThrownBy(() -> queue.enter(sessionId, 1)).isInstanceOf(BusinessException.class);
         assertThat(admission.admitAll(startOfSecond().plusSeconds(1))).isZero();
+    }
+
+    @Test
+    @DisplayName("[QUE-8] 매진 중 폴링 간격(최대 6초)대로 갱신된 대기자는 매진이 풀린 직후 지워지지 않고 입장한다")
+    void pollingDuringSoldOutKeepsWaiterAdmittable() {
+        putConf(-1000, 2);
+        enterUsers(1, 4);
+        Instant t0 = startOfSecond();
+        confService.applyAvailability(sessionId, true, 1);
+        // 마지막 폴링이 최대 간격(5초 + 지터 20%)만큼 전이다
+        pollUntil(1, 4, t0.minusSeconds(6));
+
+        confService.applyAvailability(sessionId, false, 2);
+
+        assertThat(admission.admitAll(t0)).isEqualTo(2);
+        assertThat(isActive(1) && isActive(2)).isTrue();
+        assertThat(redis.opsForZSet().zCard(key("waiting"))).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("[QUE-8] 15초 넘게 폴링하지 않은 대기자는 매진이 풀린 뒤 입장 대신 지워지고 다음 사람이 입장한다")
+    void stalePollerIsDroppedAfterRelease() {
+        putConf(-1000, 1);
+        enterUsers(1, 3);
+        Instant t0 = startOfSecond();
+        confService.applyAvailability(sessionId, true, 1);
+        pollUntil(1, 1, t0.minusSeconds(16));
+        pollUntil(2, 3, t0.minusSeconds(3));
+
+        confService.applyAvailability(sessionId, false, 2);
+
+        assertThat(admission.admitAll(t0)).isEqualTo(1);
+        assertThat(isActive(1)).isFalse();
+        assertThat(isActive(2)).isTrue();
+        assertThat(redis.opsForZSet().score(key("waiting"), "1")).isNull();
     }
 }
