@@ -136,10 +136,11 @@ class SessionConfServiceTests extends QueueIntegrationTest {
         service.apply(upsert(1500, 1_800_000_000_000L, 50, 300));
         assertThat(open()).isFalse();
 
-        long other = sessionId + 1;
+        long other = sessionId + 1_000_000;
         service.apply(new SessionConf(other, Type.DELETE, 2000, 0, 0, 0));
 
         assertThat(redis.opsForHash().entries("q:" + other + ":conf")).containsEntry("status", "DELETED");
         assertThat(redis.opsForSet().isMember("q:open", String.valueOf(other))).isFalse();
+        redis.delete("q:" + other + ":conf");
     }
 }
