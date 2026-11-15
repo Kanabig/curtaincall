@@ -3,12 +3,14 @@ package io.github.kanabig.curtaincall.mockpg;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.kanabig.curtaincall.mockpg.entity.Transaction;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -97,6 +99,17 @@ class MockPgTests {
 
         assertThat(found.getBody()).containsEntry("status", "APPROVED");
         assertThat(missing.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("상태를 바꾼 첫 취소만 APPLIED이고 다시 취소하면 ALREADY_CANCELLED이다")
+    void cancelResult() {
+        Transaction approved = Transaction.approved("mpg_t", "o-r", 1000, Instant.now());
+        Transaction declined = Transaction.declined("mpg_d", "o-r2", 1000, "CARD_DECLINED", Instant.now());
+
+        assertThat(approved.cancel(Instant.now())).isEqualTo(Transaction.CancelResult.APPLIED);
+        assertThat(approved.cancel(Instant.now())).isEqualTo(Transaction.CancelResult.ALREADY_CANCELLED);
+        assertThat(declined.cancel(Instant.now())).isEqualTo(Transaction.CancelResult.NOT_APPROVED);
     }
 
     @Test
