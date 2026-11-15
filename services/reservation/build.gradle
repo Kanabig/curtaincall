@@ -9,3 +9,8 @@ dependencies {
     implementation 'org.flywaydb:flyway-mysql'
     runtimeOnly 'com.mysql:mysql-connector-j'
 }
+
+// 서비스 설정의 연결 풀(40)을 테스트에도 쓰면 컨텍스트가 여러 개 캐시될 때 공유 MySQL의 max_connections(151)를 넘는다
+tasks.named('test') {
+    systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
+}
