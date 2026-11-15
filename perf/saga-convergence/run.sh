@@ -181,6 +181,7 @@ s_payment-restart() {
 
 s_reservation-restart() {
     start_scenario reservation-restart "CONFIRMED=$ORDERS"
+    set_faults 2000 0 0 0
     drive 1 "$ORDERS" 0 tok_approve 1
     # 승인 응답이 나가기 시작한 직후에 죽인다
     for _ in $(seq 1 30); do
@@ -188,6 +189,11 @@ s_reservation-restart() {
         sleep 0.2
     done
     log "reservation SIGKILL"; compose kill -s KILL reservation > /dev/null
+    # 죽은 시점에 아직 확정되지 않은 주문이 있어야 처리 중 장애가 된다
+    local pending; pending=$(echo "SELECT COUNT(*) FROM reservation_db.orders WHERE status = 'PAYMENT_REQUESTED'" | sql)
+    echo "kill 시점 미확정 주문: ${pending}건" > "$OUT/kill-pending.txt"
+    [ "${pending:-0}" -gt 0 ] || EXTRA_FAIL="kill 시점에 미확정 주문이 없음(처리 중 장애가 아님)"
+    reset_faults
     sleep 5
     log "reservation 재시작"; compose up -d --wait reservation > /dev/null
     finish_scenario "$(date +%s)"
@@ -225,13 +231,16 @@ s_pg-inquiry-down() { # 첫 거래 조회 전에 PG를 멈춰, 조회가 실패�
     drive 1 "$ORDERS" 0 tok_approve 1
     log "mock-pg 정지(거래 조회 실패)"; compose pause mock-pg > /dev/null
     sleep 50
+    # 정지 중 조회는 실패하거나 pg-query Bulkhead(동시 10)가 거절한다. 둘 다 장애를 겪은 것이다
+    local nf rej
+    nf=$(compose logs --no-color payment 2>&1 | grep "PG 거래 조회에 실패" | grep -o 'merchantOrderId=[^,]*' | sort -u | wc -l)
+    rej=$(compose exec -T payment curl -fs localhost:8085/actuator/prometheus 2> /dev/null < /dev/null | grep 'payment_pg_bulkhead_rejected_total.*bulkhead="pg-query"' | awk '{print int($2)}')
+    rej=${rej:-0}
+    echo "조회 실패 ${nf}건 + Bulkhead 거절 ${rej}건 = $((nf + rej)) (주문 ${ORDERS}건)" > "$OUT/inquiry-failures.txt"
     log "mock-pg 재개"; compose unpause mock-pg > /dev/null
     local t0; t0=$(date +%s)
-    compose logs --no-color payment 2>&1 | grep "PG 거래 조회에 실패" | grep -o 'merchantOrderId=[^,]*' | sort -u | wc -l > "$OUT/inquiry-failures.txt"
-    local nf; nf=$(cat "$OUT/inquiry-failures.txt")
-    # 주입이 걸렸다는 근거: 조회 실패를 겪은 주문이 1건 이상. 그 주문들의 수렴·이중 승인은 finish_scenario가 판정한다
-    [ "$nf" -ge 1 ] || EXTRA_FAIL="조회 실패를 겪은 주문 없음(주입이 걸리지 않음)"
-    echo "조회 실패를 겪은 주문 ${nf}/${ORDERS}건" >> "$OUT/inquiry-failures.txt"
+    # 주입이 걸렸는지만 본다: 조회 실패가 1건 이상이고 실패+거절이 전체 주문 수 이상. 수렴·이중 승인은 공통 검사가 본다
+    { [ "$nf" -ge 1 ] && [ $((nf + rej)) -ge "$ORDERS" ]; } || EXTRA_FAIL="장애를 겪은 주문 부족(조회 실패 ${nf} + Bulkhead 거절 ${rej}, 기대 ${ORDERS} 이상)"
     unset CHAOS_INQUIRY_INITIAL_DELAY CHAOS_INQUIRY_MAX_DURATION
     finish_scenario "$t0"
     COMPOSE_FILES=(-f compose.yml)
@@ -347,7 +356,9 @@ s_dlt-replay() { # 소비가 실패해 DLT로 간 응답을 재투입해 수렴�
     local t_replay; t_replay=$(date +%s)
     {
         echo "DLT 토픽: ${topic:-없음}, 시작 전 $base건, 지금 $(dlt_count)건 (기대 증가 $ORDERS건 이상)"
-        echo "reservation 로그의 테이블 없음 오류: $(compose logs --no-color reservation 2>&1 | grep -ci "reservation_db.reservation' doesn't exist")건"
+        echo "reservation 로그의 테이블 없음 오류: $(compose logs --no-color reservation 2>&1 | grep -ci "doesn't exist")건"
+        echo "reservation 소비 실패 로그(상위 3종):"
+        compose logs --no-color reservation 2>&1 | grep -iE "exception|error" | sed -E 's/^[^|]*\| *//; s/^[0-9T:.+-]+ +//; s/[0-9a-f]{8}-[0-9a-f-]{27}//g; s/ord_[^ ,]*//g' | cut -c1-200 | sort | uniq -c | sort -rn | head -3
         echo "첫 ApprovePayment부터 재투입까지: $((t_replay - t_first))s (재전송 간격 ${resend_s}s)"
     } | tee "$OUT/dlt.txt"
     [ "$(dlt_topics | wc -l)" -le 1 ] || EXTRA_FAIL="payment.payment DLT 토픽이 둘 이상"
