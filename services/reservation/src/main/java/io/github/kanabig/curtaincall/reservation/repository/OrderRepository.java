@@ -3,6 +3,7 @@ package io.github.kanabig.curtaincall.reservation.repository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.kanabig.curtaincall.reservation.entity.FailureCodes;
 import io.github.kanabig.curtaincall.reservation.entity.Order;
 import io.github.kanabig.curtaincall.reservation.entity.OrderStatus;
 import java.sql.ResultSet;
@@ -20,7 +21,7 @@ public class OrderRepository {
 
     private static final TypeReference<List<Long>> LONGS = new TypeReference<>() {};
     private static final String COLUMNS = "order_id, hold_id, user_id, session_id, seat_ids, amount, status,"
-            + " hold_expires_at, card_token, payment_id, command_sent_count";
+            + " hold_expires_at, card_token, payment_id, command_sent_count, failure_code";
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
@@ -97,6 +98,11 @@ public class OrderRepository {
                 orderId);
     }
 
+    /** 주문이 실패로 끝난 사유를 남긴다. 상태를 FAILED로 옮긴 같은 트랜잭션에서 부른다. */
+    public void recordFailure(String orderId, String failureCode) {
+        jdbc.update("UPDATE orders SET failure_code = ? WHERE order_id = ?", failureCode, orderId);
+    }
+
     /** 결제가 끝나 응답을 더 기다리지 않는다. 호출하는 쪽이 주문 행을 이미 잠갔다. */
     public void completePayment(String orderId, String paymentId) {
         jdbc.update("UPDATE orders SET payment_id = ?, next_resend_at = NULL WHERE order_id = ?", paymentId, orderId);
@@ -116,8 +122,9 @@ public class OrderRepository {
     /** 점유가 만료된 채 결제를 시작하지 않은 주문을 만료로 바꾼다. */
     public int expirePending(Instant now) {
         return jdbc.update(
-                "UPDATE orders SET status = ?, updated_at = ? WHERE status = ? AND hold_expires_at < ?",
+                "UPDATE orders SET status = ?, failure_code = ?, updated_at = ? WHERE status = ? AND hold_expires_at < ?",
                 OrderStatus.EXPIRED.name(),
+                FailureCodes.HOLD_EXPIRED,
                 Timestamp.from(now),
                 OrderStatus.PENDING_PAYMENT.name(),
                 Timestamp.from(now));
@@ -155,7 +162,8 @@ public class OrderRepository {
                 rs.getTimestamp("hold_expires_at").toInstant(),
                 rs.getString("card_token"),
                 rs.getString("payment_id"),
-                rs.getInt("command_sent_count"));
+                rs.getInt("command_sent_count"),
+                rs.getString("failure_code"));
     }
 
     private String json(List<Long> seatIds) {

@@ -113,7 +113,8 @@ public class OrderService {
                 expiresAt,
                 null,
                 null,
-                0);
+                0,
+                null);
         try {
             orders.insert(order);
         } catch (DuplicateKeyException e) {
@@ -148,7 +149,8 @@ public class OrderService {
                 order.holdExpiresAt(),
                 cardToken,
                 null,
-                1));
+                1,
+                null));
         log.info("결제 시작: orderId={}", orderId);
         return new PaymentStartedResponse(OrderStatus.PAYMENT_REQUESTED);
     }

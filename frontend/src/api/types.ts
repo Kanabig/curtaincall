@@ -32,6 +32,8 @@ export interface SessionItem {
   saleOpenAt: string
   saleState: SaleState
   prices: PriceItem[]
+  admissionPerSecond: number
+  maxActiveUsers: number
 }
 
 export interface PerformanceDetail {
@@ -144,6 +146,7 @@ export interface OrderDetail {
   amount: number
   status: OrderStatus
   paymentStatus: 'PROCESSING' | 'APPROVED' | 'FAILED' | 'REFUNDED' | null
+  failureCode?: string | null
 }
 
 export type ReservationStatus = 'CONFIRMED' | 'CANCEL_REQUESTED' | 'CANCELLED'

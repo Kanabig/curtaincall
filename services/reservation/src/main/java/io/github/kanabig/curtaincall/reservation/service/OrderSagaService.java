@@ -5,6 +5,7 @@ import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelope;
 import io.github.kanabig.curtaincall.outbox.message.EventTypes;
 import io.github.kanabig.curtaincall.reservation.config.OrderProperties;
+import io.github.kanabig.curtaincall.reservation.entity.FailureCodes;
 import io.github.kanabig.curtaincall.reservation.entity.HeldSeat;
 import io.github.kanabig.curtaincall.reservation.entity.Order;
 import io.github.kanabig.curtaincall.reservation.entity.OrderStatus;
@@ -75,7 +76,7 @@ public class OrderSagaService {
         String orderId = text(payload, "orderId", envelope.aggregateId());
         switch (name) {
             case "PaymentApproved" -> onApproved(orderId, text(payload, "paymentId", null));
-            case "PaymentFailed" -> onFailed(orderId, text(payload, "paymentId", null));
+            case "PaymentFailed" -> onFailed(orderId, text(payload, "paymentId", null), text(payload, "reason", null));
             case "PaymentCancelled" -> onCancelled(orderId);
             default -> log.warn("처리하지 않는 결제 이벤트다: eventType={}, eventId={}", envelope.eventType(), envelope.eventId());
         }
@@ -130,7 +131,7 @@ public class OrderSagaService {
         log.warn("승인됐으나 좌석이 없어 환불한다: orderId={}", orderId);
     }
 
-    private void onFailed(String orderId, String paymentId) {
+    private void onFailed(String orderId, String paymentId, String reason) {
         Order order = lockExpecting(orderId, OrderStatus.PAYMENT_REQUESTED, "PaymentFailed");
         if (order == null) {
             return;
@@ -138,6 +139,7 @@ public class OrderSagaService {
         seats.releaseHeld(order.holdId());
         transition(order, OrderStatus.FAILED, clock.instant());
         orders.completePayment(orderId, paymentId);
+        orders.recordFailure(orderId, FailureCodes.fromPaymentReason(reason));
     }
 
     private void onCancelled(String orderId) {

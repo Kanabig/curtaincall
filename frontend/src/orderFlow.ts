@@ -63,6 +63,23 @@ export const ORDER_DETAIL_TEXT: Partial<Record<OrderStatus, string>> = {
   EXPIRED: '점유 시간 안에 결제를 시작하지 않아 주문이 만료되었습니다. 좌석을 다시 선택해 주세요.',
 }
 
+const FAILURE_TEXT: Record<string, string> = {
+  DECLINED: '카드사가 결제를 거절했습니다. 다른 카드로 다시 시도해 주세요.',
+  PG_REJECTED: '결제 대행사가 결제를 거절했습니다. 카드 정보를 확인한 뒤 다시 시도해 주세요.',
+  NOT_APPROVED: '결제가 승인되지 않았습니다. 선택한 좌석은 해제되었습니다.',
+  PG_UNAVAILABLE: '결제 시스템에 일시적인 문제가 있어 결제하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  PG_NOT_RECEIVED: '결제 요청이 전달되지 않아 결제하지 못했습니다. 청구된 금액은 없습니다.',
+  HOLD_EXPIRED: '점유 시간 안에 결제가 끝나지 않아 주문이 만료되었습니다. 좌석을 다시 선택해 주세요.',
+}
+
+/** 주문 상태 설명. 실패 사유 코드가 있으면 사유별 문구, 모르는 코드나 PAYMENT_FAILED·null이면 상태별 기본 문구. */
+export function orderDetailText(status: OrderStatus, failureCode?: string | null): string | undefined {
+  if ((status === 'FAILED' || status === 'EXPIRED') && failureCode && FAILURE_TEXT[failureCode]) {
+    return FAILURE_TEXT[failureCode]
+  }
+  return ORDER_DETAIL_TEXT[status]
+}
+
 export const RESERVATION_STATUS_TEXT: Record<ReservationStatus, string> = {
   CONFIRMED: '예매 완료',
   CANCEL_REQUESTED: '취소 처리 중',

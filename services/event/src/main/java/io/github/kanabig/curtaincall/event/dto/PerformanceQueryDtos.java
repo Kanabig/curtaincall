@@ -36,7 +36,13 @@ public final class PerformanceQueryDtos {
     public record PriceItem(String grade, int price) {}
 
     public record SessionItem(
-            long id, String startAt, String saleOpenAt, SaleState saleState, List<PriceItem> prices) {}
+            long id,
+            String startAt,
+            String saleOpenAt,
+            SaleState saleState,
+            List<PriceItem> prices,
+            int admissionPerSecond,
+            int maxActiveUsers) {}
 
     public record PerformanceDetail(
             long id,
@@ -64,5 +70,7 @@ public final class PerformanceQueryDtos {
             String startAt,
             String saleOpenAt,
             SaleState saleState,
-            List<PriceItem> prices) {}
+            List<PriceItem> prices,
+            int admissionPerSecond,
+            int maxActiveUsers) {}
 }

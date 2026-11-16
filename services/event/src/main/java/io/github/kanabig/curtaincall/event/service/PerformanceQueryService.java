@@ -52,6 +52,11 @@ public class PerformanceQueryService {
         this.mapper = mapper;
     }
 
+    /** [ADM-1] 관리자용 목록. 조건은 state·keyword만 받고 나머지는 걸지 않는다. */
+    public PerformancePage listForAdmin(PerformanceState state, String keyword, int page, int size) {
+        return list(new Filter(null, null, null, null, state, null, keyword), page, size);
+    }
+
     public PerformancePage list(Filter filter, int page, int size) {
         if (page < 0 || size < 1 || size > MAX_SIZE) {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST, "page는 0 이상, size는 1~%d".formatted(MAX_SIZE));
@@ -89,7 +94,9 @@ public class PerformanceQueryService {
                         format(s.startAt()),
                         format(s.saleOpenAt()),
                         SaleState.of(s.suspended(), s.saleOpenAt(), s.startAt(), now),
-                        prices(s)))
+                        prices(s),
+                        s.admissionPerSecond(),
+                        s.maxActiveUsers()))
                 .toList();
         return new PerformanceDetail(
                 row.id(),
@@ -120,7 +127,9 @@ public class PerformanceQueryService {
                 format(s.startAt()),
                 format(s.saleOpenAt()),
                 SaleState.of(s.suspended(), s.saleOpenAt(), s.startAt(), clock.instant()),
-                prices(s));
+                prices(s),
+                s.admissionPerSecond(),
+                s.maxActiveUsers());
     }
 
     private static List<PriceItem> prices(SaleSession s) {
