@@ -77,7 +77,7 @@ public class PgClient {
             }
             return new InquiryOutcome.Failed(e.getStatusCode().toString());
         } catch (BulkheadFullException e) {
-            return new InquiryOutcome.Failed("bulkhead full");
+            return new InquiryOutcome.Rejected();
         } catch (RuntimeException e) {
             log.warn("PG 거래 조회에 실패했다: merchantOrderId={}, cause={}", merchantOrderId, e.toString());
             return new InquiryOutcome.Failed(e.getClass().getSimpleName());

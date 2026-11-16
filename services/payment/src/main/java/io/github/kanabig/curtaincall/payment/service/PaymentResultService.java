@@ -100,6 +100,17 @@ public class PaymentResultService {
         return payment.isInquiryExhausted() ? onInquiryExhausted(payment) : InquiryMiss.CONTINUE;
     }
 
+    /** Bulkhead 거절은 조회 창에 넣지 않는다. 짧게 뒤로 미루고 다시 조회한다. */
+    @Transactional
+    public void inquiryRejected(String paymentId) {
+        Payment payment = lock(paymentId);
+        if (payment.getStatus() != PaymentStatus.UNKNOWN) {
+            return;
+        }
+        Instant now = clock.instant();
+        payment.inquiryRejected(now, now.plus(inquiry.jitteredRejectedRetryDelay()));
+    }
+
     /**
      * 거래 조회 제한 시간 안에 결과를 얻지 못했을 때의 처리 정책. 내내 404였으면 망취소로 실패를 확정하게 하고, 오류가 섞였으면 UNKNOWN으로 남기고 메트릭을 올린다.
      */

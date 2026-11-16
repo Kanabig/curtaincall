@@ -3,12 +3,17 @@ package io.github.kanabig.curtaincall.payment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import io.github.resilience4j.bulkhead.Bulkhead;
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /** PAY-4 결과 불명(타임아웃·응답 유실)과 거래 조회. */
 class PaymentUnknownTests extends PaymentIntegrationTest {
+
+    @Autowired
+    Bulkhead pgQueryBulkhead;
 
     @Test
     @DisplayName("응답 유실(premature EOF)이면 UNKNOWN이 되고, 거래 조회로 APPROVED가 된다")
@@ -102,6 +107,46 @@ class PaymentUnknownTests extends PaymentIntegrationTest {
                 .atMost(Duration.ofSeconds(5))
                 .untilAsserted(() -> assertThat(PG.hasTransaction(orderId)).isFalse());
         assertThat(status(orderId)).isEqualTo("FAILED");
+    }
+
+    @Test
+    @DisplayName("조회 Bulkhead 거절은 조회 창에 넣지 않고, 이후 PG가 404면 첫 창 뒤 망취소로 확정한다")
+    void bulkheadRejectionDoesNotPolluteInquiryWindow() throws Exception {
+        String orderId = newOrderId();
+        PG.hang = true;
+        PG.hangMs = 2000;
+
+        deliver(approveCommand(orderId, "tok_approve"));
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("UNKNOWN"));
+        double rejectedBefore = meterRegistry
+                .counter("payment.pg.bulkhead.rejected", "bulkhead", "pg-query")
+                .count();
+        int permits = 0;
+        while (pgQueryBulkhead.tryAcquirePermission()) {
+            permits++;
+        }
+        try {
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(meterRegistry
+                                    .counter("payment.pg.bulkhead.rejected", "bulkhead", "pg-query")
+                                    .count())
+                            .isGreaterThan(rejectedBefore));
+            assertThat(attempts(orderId)).isZero();
+            assertThat(nextInquiryIsNull(orderId)).isFalse();
+            assertThat(PG.cancelRequests()).isZero();
+        } finally {
+            for (int i = 0; i < permits; i++) {
+                pgQueryBulkhead.onComplete();
+            }
+        }
+        exhaustInquiryTime(orderId);
+
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertThat(status(orderId)).isEqualTo("FAILED"));
+        assertThat(publishedPayload(orderId, "PaymentFailed").get("reason").asText())
+                .isEqualTo("PG_NOT_RECEIVED");
+        assertThat(PG.cancelRequests()).isEqualTo(1);
     }
 
     @Test
