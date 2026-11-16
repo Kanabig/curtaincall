@@ -257,6 +257,21 @@ class PerformanceQueryTests extends EventIntegrationTest {
     }
 
     @Test
+    @DisplayName("상세 grades: 읽은 priceGuidance의 등급(비싼 순), 읽지 못하면 빈 목록")
+    void expectedGrades() {
+        long parsed = sale("G1", "등급 공연", "뮤지컬", "서울", "공연중", "2026-11-01", "2027-01-31");
+        jdbc.update("UPDATE performance SET price_guidance = 'R석 99,000원, S석 77,000원' WHERE mt20id = 'G1'");
+        long unparsed = sale("G2", "안내 불명 공연", "뮤지컬", "서울", "공연중", "2026-11-01", "2027-01-31");
+        jdbc.update("UPDATE performance SET price_guidance = '현장판매 14,900원, 사전예약 9,900원' WHERE mt20id = 'G2'");
+
+        JsonNode grades = get("/api/v1/performances/" + parsed).get("grades");
+        assertThat(grades).hasSize(2);
+        assertThat(grades.get(0).asText()).isEqualTo("R석");
+        assertThat(grades.get(1).asText()).isEqualTo("S석");
+        assertThat(get("/api/v1/performances/" + unparsed).get("grades")).isEmpty();
+    }
+
+    @Test
     @DisplayName("회차 조회: 시각에 따라 SCHEDULED, ON_SALE, SUSPENDED, CLOSED")
     void sessionState() {
         long p = sale("A", "공연", "뮤지컬", "서울", "공연중", "2026-11-01", "2027-01-31");

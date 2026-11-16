@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultPrices, isEditLocked, parsePrices, toLocalKst, toOffsetKst } from './admin'
+import { defaultPrices, gradeDefaults, isEditLocked, pricesFromGrades, parsePrices, toLocalKst, toOffsetKst } from './admin'
 
 describe('isEditLocked', () => {
   const open = '2026-12-01T20:00:00+09:00'
@@ -40,5 +40,26 @@ describe('defaultPrices', () => {
   })
   it('회차가 없으면 null', () => {
     expect(defaultPrices([])).toBeNull()
+  })
+})
+
+describe('pricesFromGrades', () => {
+  it('등급 순서대로 가격표를 만든다', () => {
+    expect(pricesFromGrades(['R석', 'S석'], { 'R석': '99000', 'S석': ' 77000 ' })).toEqual([
+      { grade: 'R석', price: 99000 },
+      { grade: 'S석', price: 77000 },
+    ])
+  })
+  it('빈 칸·숫자가 아닌 값·0은 null', () => {
+    expect(pricesFromGrades(['R석', 'S석'], { 'R석': '99000' })).toBeNull()
+    expect(pricesFromGrades(['R석'], { 'R석': '9만' })).toBeNull()
+    expect(pricesFromGrades(['R석'], { 'R석': '0' })).toBeNull()
+  })
+})
+
+describe('gradeDefaults', () => {
+  it('첫 회차에 있는 등급만 채우고 나머지는 빈 칸', () => {
+    expect(gradeDefaults(['R석', 'S석'], [{ prices: [{ grade: 'R석', price: 99000 }] }])).toEqual({ 'R석': '99000', 'S석': '' })
+    expect(gradeDefaults(['R석'], [])).toEqual({ 'R석': '' })
   })
 })
