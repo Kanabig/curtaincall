@@ -2,7 +2,7 @@ package io.github.kanabig.curtaincall.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxMaintenance;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxTransactions;
 import java.nio.charset.StandardCharsets;

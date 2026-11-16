@@ -1,6 +1,6 @@
 package io.github.kanabig.curtaincall.payment.contract;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelopes;
 import io.github.kanabig.curtaincall.payment.dto.PaymentApprovedEvent;
 import io.github.kanabig.curtaincall.payment.dto.PaymentCancelledEvent;

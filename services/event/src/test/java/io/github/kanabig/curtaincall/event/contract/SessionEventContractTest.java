@@ -1,6 +1,6 @@
 package io.github.kanabig.curtaincall.event.contract;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.event.dto.SessionPayload;
 import io.github.kanabig.curtaincall.event.dto.SessionPayload.PriceItem;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelopes;

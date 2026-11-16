@@ -1,6 +1,6 @@
 package io.github.kanabig.curtaincall.outbox.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.consumer.DltEndpoint;
 import io.github.kanabig.curtaincall.outbox.consumer.DltReplayer;
 import io.github.kanabig.curtaincall.outbox.consumer.IdempotentConsumer;

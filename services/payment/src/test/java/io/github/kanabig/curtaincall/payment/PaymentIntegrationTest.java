@@ -1,7 +1,7 @@
 package io.github.kanabig.curtaincall.payment;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelope;
 import io.github.kanabig.curtaincall.payment.service.PaymentCommandService;
 import io.github.kanabig.curtaincall.testsupport.TestContainersConfig;

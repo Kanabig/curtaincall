@@ -3,7 +3,7 @@ package io.github.kanabig.curtaincall.reservation.service;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelopes;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxWriter;
 import io.github.kanabig.curtaincall.reservation.entity.Order;

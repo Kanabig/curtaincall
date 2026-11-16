@@ -1,6 +1,6 @@
 package io.github.kanabig.curtaincall.event.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
 import io.github.kanabig.curtaincall.event.dto.PriceTable;
 import io.github.kanabig.curtaincall.event.dto.SeatMapEntry;

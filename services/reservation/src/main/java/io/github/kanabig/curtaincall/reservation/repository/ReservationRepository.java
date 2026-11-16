@@ -1,8 +1,8 @@
 package io.github.kanabig.curtaincall.reservation.repository;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.reservation.entity.Reservation;
 import io.github.kanabig.curtaincall.reservation.entity.ReservationStatus;
 import io.github.kanabig.curtaincall.reservation.entity.ReservationView;
@@ -126,7 +126,7 @@ public class ReservationRepository {
     private List<Long> parse(String json) {
         try {
             return objectMapper.readValue(json, LONGS);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("seat_ids를 읽을 수 없다: " + json, e);
         }
     }

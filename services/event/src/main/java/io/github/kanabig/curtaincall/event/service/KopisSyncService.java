@@ -1,7 +1,7 @@
 package io.github.kanabig.curtaincall.event.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.github.kanabig.curtaincall.event.client.KopisCallException;
 import io.github.kanabig.curtaincall.event.client.KopisClient;
@@ -311,7 +311,7 @@ public class KopisSyncService {
     private String relatesJson(KopisPerformanceDetail detail) {
         try {
             return objectMapper.writeValueAsString(detail.relates());
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return null;
         }
     }

@@ -1,8 +1,8 @@
 package io.github.kanabig.curtaincall.outbox.message;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -33,7 +33,7 @@ public class EventEnvelopes {
         envelope.put("payload", payload);
         try {
             return objectMapper.writeValueAsString(envelope);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("이벤트 payload를 JSON으로 만들 수 없다: " + eventType, e);
         }
     }
@@ -45,7 +45,7 @@ public class EventEnvelopes {
         JsonNode root;
         try {
             root = objectMapper.readTree(json);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new EventDeserializationException("JSON이 아니다", e);
         }
         if (root == null || !root.isObject()) {

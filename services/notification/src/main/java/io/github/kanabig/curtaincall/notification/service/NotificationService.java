@@ -1,6 +1,6 @@
 package io.github.kanabig.curtaincall.notification.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import io.github.kanabig.curtaincall.notification.client.UserClient;
 import io.github.kanabig.curtaincall.notification.client.UserContact;
 import io.github.kanabig.curtaincall.notification.config.NotificationProperties;

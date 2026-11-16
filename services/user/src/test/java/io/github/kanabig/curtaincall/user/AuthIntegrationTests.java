@@ -2,7 +2,7 @@ package io.github.kanabig.curtaincall.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import io.github.kanabig.curtaincall.testsupport.TestContainersConfig;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;

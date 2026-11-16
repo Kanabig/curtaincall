@@ -1,7 +1,7 @@
 package io.github.kanabig.curtaincall.reservation;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelope;
 import io.github.kanabig.curtaincall.reservation.entity.SeatHold;
 import io.github.kanabig.curtaincall.reservation.service.OrderSagaService;

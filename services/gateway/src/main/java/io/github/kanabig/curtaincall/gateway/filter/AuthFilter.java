@@ -66,9 +66,10 @@ public class AuthFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerWebExchange stripped = exchange.mutate()
                 .request(request -> request.headers(headers -> {
-                    headers.keySet()
-                            .removeIf(name ->
-                                    name.regionMatches(true, 0, USER_HEADER_PREFIX, 0, USER_HEADER_PREFIX.length()));
+                    List.copyOf(headers.headerNames()).stream()
+                            .filter(name ->
+                                    name.regionMatches(true, 0, USER_HEADER_PREFIX, 0, USER_HEADER_PREFIX.length()))
+                            .forEach(headers::remove);
                     headers.remove(ENTRY_SESSION_ID);
                 }))
                 .build();

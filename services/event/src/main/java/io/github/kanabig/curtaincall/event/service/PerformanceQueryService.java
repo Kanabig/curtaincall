@@ -1,8 +1,8 @@
 package io.github.kanabig.curtaincall.event.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
 import io.github.kanabig.curtaincall.common.web.error.CommonErrorCode;
 import io.github.kanabig.curtaincall.event.config.KopisProperties;
@@ -146,7 +146,7 @@ public class PerformanceQueryService {
         }
         try {
             return mapper.readTree(json);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return null;
         }
     }

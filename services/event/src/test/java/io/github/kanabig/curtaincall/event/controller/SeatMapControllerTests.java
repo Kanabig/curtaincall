@@ -6,7 +6,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import io.github.kanabig.curtaincall.event.EventIntegrationTest;
 import io.github.kanabig.curtaincall.event.repository.HallSeatRepository;
 import io.github.kanabig.curtaincall.event.repository.SessionRepository;
@@ -227,16 +227,16 @@ class SeatMapControllerTests extends EventIntegrationTest {
     record ReservationSeat(long seatId, String grade, int price) {}
 
     @Autowired
-    com.fasterxml.jackson.databind.ObjectMapper mapper;
+    tools.jackson.databind.ObjectMapper mapper;
 
     @Test
     @DisplayName("내부 API 응답의 모든 좌석이 reservation이 읽는 형식(seatId 숫자, grade 문자열, price 정수)이다")
     void internalSeatMapContract() {
         JsonNode seats =
                 get("/internal/sessions/" + sessionId + "/seat-map", null).getBody();
-        com.fasterxml.jackson.databind.ObjectMapper strict = mapper.copy()
-                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
-                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS);
+        tools.jackson.databind.ObjectMapper strict = mapper.copy()
+                .enable(tools.jackson.databind.DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+                .enable(tools.jackson.databind.DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS);
 
         for (JsonNode seat : seats) {
             assertThat(seat.get("seatId").isIntegralNumber()).isTrue();

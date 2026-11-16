@@ -1,8 +1,8 @@
 package io.github.kanabig.curtaincall.queue.messaging;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.queue.repository.SessionConf;
 import io.github.kanabig.curtaincall.queue.repository.SessionConf.Type;
 import io.github.kanabig.curtaincall.queue.service.SessionConfService;
@@ -50,7 +50,7 @@ public class SessionEventListener {
                 throw new InvalidSessionEventException("봉투가 JSON 객체가 아니다");
             }
             return root;
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new InvalidSessionEventException("회차 이벤트를 읽을 수 없다", e);
         }
     }

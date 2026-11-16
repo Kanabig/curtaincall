@@ -1,8 +1,8 @@
 package io.github.kanabig.curtaincall.queue.messaging;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.queue.repository.QueueRepository;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -39,7 +39,7 @@ public class OrderEventListener {
                 repository.removeActive(longField(payload, "sessionId"), longField(payload, "userId"));
             }
             ConsumedEventLog.processed(root);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new InvalidSessionEventException("주문 이벤트를 읽을 수 없다", e);
         }
     }
