@@ -11,3 +11,17 @@ dependencies {
     implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4jVersion}"
     implementation "io.github.resilience4j:resilience4j-micrometer:${resilience4jVersion}"
 }
+
+// 평가 세트 실행(SRC-4). Mock은 항상, LLM은 ANTHROPIC_API_KEY가 있을 때만. 결과 표는 build/reports/search-assist-eval
+tasks.register('searchAssistEval', Test) {
+    group = 'verification'
+    description = '검색 조건 변환 평가 세트를 돌리고 결과 표를 출력한다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*SearchAssistEvaluationTest' }
+    systemProperty 'searchAssist.evalLlm', 'true'
+    systemProperty 'searchAssist.evalReportDir', layout.buildDirectory.dir('reports/search-assist-eval').get().asFile.path
+    testLogging.showStandardStreams = true
+    outputs.upToDateWhen { false }
+}
