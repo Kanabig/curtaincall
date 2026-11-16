@@ -23,8 +23,8 @@ permissions:
   contents: read
 
 env:
-  # Trivy 실패 기준. 지금은 결과만 남기고(0), 게이트로 바꿀 때 1로 올린다
-  TRIVY_EXIT_CODE: '0'
+  # 수정판이 있는 HIGH 이상이 나오면 실패한다
+  TRIVY_EXIT_CODE: '1'
 
 jobs:
   image:
