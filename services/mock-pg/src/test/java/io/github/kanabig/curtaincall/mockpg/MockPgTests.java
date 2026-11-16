@@ -182,6 +182,20 @@ class MockPgTests {
     }
 
     @Test
+    @DisplayName("PUT 본문에서 빠진 숫자 필드는 400이 아니라 0으로 읽는다")
+    void missingPrimitiveFieldsDefaultToZero() {
+        ResponseEntity<Map<String, Object>> put = putFaults(Map.of("failureRate", 0.5));
+        rest.delete("/pg/admin/faults");
+
+        assertThat(put.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(put.getBody())
+                .containsEntry("delayMs", 0)
+                .containsEntry("failureRate", 0.5)
+                .containsEntry("timeoutRate", 0.0)
+                .containsEntry("dropResponseRate", 0.0);
+    }
+
+    @Test
     @DisplayName("지연 모드는 승인 응답을 delayMs만큼 늦춘다")
     void delayModeSlowsApproval() {
         putFaults(Map.of("delayMs", 400));
