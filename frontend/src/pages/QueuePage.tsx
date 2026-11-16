@@ -6,6 +6,7 @@ import type { QueueEntry } from '../api/types'
 import { useAuth } from '../auth'
 import { entryTokens } from '../entryToken'
 import { formatDateTime } from '../format'
+import { isTerminalQueueError, retryDelay } from '../queuePolling'
 import { formatCountdown, remainingSeconds } from '../seatGrid'
 
 type View = { kind: 'loading' } | { kind: 'closed'; opensAt: number } | { kind: 'queue'; entry: QueueEntry }
@@ -32,6 +33,7 @@ export default function QueuePage() {
       return
     }
     let stopped = false
+    let lastPollAfterMs: number | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const apply = (entry: QueueEntry) => {
@@ -43,6 +45,7 @@ export default function QueuePage() {
       } else if (entry.status === 'EXPIRED') {
         void enter()
       } else {
+        lastPollAfterMs = entry.pollAfterMs
         setView({ kind: 'queue', entry })
         timer = setTimeout(() => void poll(), entry.pollAfterMs)
       }
@@ -57,8 +60,9 @@ export default function QueuePage() {
         return
       }
       setError(errorMessage(e))
-      // 일시 오류는 순번을 잃지 않으므로 계속 폴링한다
-      if (!(e instanceof ApiError) || e.status >= 500) timer = setTimeout(() => void poll(), 3000)
+      // 복구할 수 없는 코드가 아니면 순번을 잃지 않으므로 계속 폴링한다.
+      // 401은 client가 재발급을 시도하고, 재발급이 실패하면 로그아웃되어 이 effect가 정리된다
+      if (!isTerminalQueueError(e)) timer = setTimeout(() => void poll(), retryDelay(lastPollAfterMs))
     }
     async function enter() {
       try {
