@@ -1,10 +1,14 @@
 import { request, tokenStore } from './client'
 import type {
   AdminSession,
+  Hold,
   Page,
   PerformanceDetail,
   PerformanceFilter,
   PerformanceItem,
+  QueueEntry,
+  SeatInfo,
+  SeatStatus,
   TokenResponse,
   SessionBody,
   UserInfo,
@@ -25,6 +29,25 @@ export const api = {
   performances: (f: PerformanceFilter) =>
     request<Page<PerformanceItem>>(`/performances?${buildListQuery(f)}`),
   performance: (id: string) => request<PerformanceDetail>(`/performances/${encodeURIComponent(id)}`),
+
+  enterQueue: (sessionId: string) =>
+    request<QueueEntry>(`/queue/sessions/${sessionId}/entries`, { method: 'POST', auth: true }),
+  queueStatus: (sessionId: string) =>
+    request<QueueEntry>(`/queue/sessions/${sessionId}/entries/me`, { auth: true }),
+  leaveQueue: (sessionId: string) =>
+    request<void>(`/queue/sessions/${sessionId}/entries/me`, { method: 'DELETE', auth: true }),
+
+  // 배치는 회차가 판매되는 동안 바뀌지 않는다. ETag는 브라우저 HTTP 캐시가 처리한다
+  seatMap: (sessionId: string) => request<SeatInfo[]>(`/sessions/${sessionId}/seat-map`),
+  seatStatus: (sessionId: string) => request<SeatStatus>(`/sessions/${sessionId}/seat-status`, { auth: true }),
+  hold: (sessionId: string, seatIds: number[], entryToken: string) =>
+    request<Hold>(`/sessions/${sessionId}/holds`, {
+      method: 'POST',
+      body: { seatIds },
+      auth: true,
+      headers: { 'X-Entry-Token': entryToken },
+    }),
+  releaseHold: (holdId: string) => request<void>(`/holds/${holdId}`, { method: 'DELETE', auth: true }),
 
   signUp: (body: { email: string; password: string; name: string }) =>
     request<UserInfo>('/users', { method: 'POST', body }),

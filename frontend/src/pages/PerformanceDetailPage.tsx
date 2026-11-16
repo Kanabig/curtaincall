@@ -54,6 +54,9 @@ export default function PerformanceDetailPage() {
               <strong>{formatDateTime(s.startAt)}</strong>
               <span className={`sale ${s.saleState}`}>{SALE_LABEL[s.saleState]}</span>
               {s.saleState === 'SCHEDULED' && <span>오픈 {formatDateTime(s.saleOpenAt)}</span>}
+              {(s.saleState === 'ON_SALE' || s.saleState === 'SCHEDULED') && (
+                <Link to={`/sessions/${s.id}/queue`}>{s.saleState === 'ON_SALE' ? '예매하기' : '대기열 입장'}</Link>
+              )}
             </div>
             <table>
               <tbody>

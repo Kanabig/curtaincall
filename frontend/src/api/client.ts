@@ -5,16 +5,20 @@ export interface ProblemDetail {
   status?: number
   code?: string
   detail?: string
+  [extra: string]: unknown
 }
 
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
+  /** 에러 코드별 부가 필드(opensAt, seatIds 등) */
+  readonly problem: ProblemDetail
 
   constructor(status: number, problem: ProblemDetail) {
     super(problem.detail ?? problem.title ?? `HTTP ${status}`)
     this.status = status
     this.code = problem.code ?? 'UNKNOWN'
+    this.problem = problem
   }
 }
 
@@ -34,6 +38,12 @@ const MESSAGES: Record<string, string> = {
   PRICE_GRADE_MISMATCH: '가격 등급이 공연 등급표와 맞지 않습니다.',
   KOPIS_QUOTA_LOW: 'KOPIS 남은 호출 수가 부족합니다.',
   KOPIS_SYNC_IN_PROGRESS: 'KOPIS 동기화가 이미 실행 중입니다.',
+  SALE_NOT_OPENED: '아직 판매가 시작되지 않았습니다.',
+  SEAT_ALREADY_HELD: '다른 사람이 먼저 선택한 좌석입니다. 좌석 상태를 갱신했습니다.',
+  PURCHASE_LIMIT_EXCEEDED: '회차당 최대 4매까지 예매할 수 있습니다.',
+  SESSION_NOT_ON_SALE: '판매 중인 회차가 아닙니다.',
+  HOLD_NOT_FOUND: '점유가 이미 해제되었습니다.',
+  ENTRY_TOKEN_INVALID: '입장 시간이 만료되었습니다. 대기열에 다시 진입해 주세요.',
   INTERNAL_ERROR: '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
 }
 
@@ -89,6 +99,7 @@ interface Options {
   method?: string
   body?: unknown
   auth?: boolean
+  headers?: Record<string, string>
 }
 
 // 동시에 여러 요청이 401을 받아도 refresh는 한 번만 보낸다(refresh token은 한 번 쓰면 폐기된다)
@@ -118,7 +129,7 @@ function refreshTokens(): Promise<boolean> {
 
 export async function request<T>(path: string, opts: Options = {}): Promise<T> {
   const send = () => {
-    const headers: Record<string, string> = {}
+    const headers: Record<string, string> = { ...opts.headers }
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
     const tokens = tokenStore.get()
     if (opts.auth && tokens) headers.Authorization = `Bearer ${tokens.accessToken}`

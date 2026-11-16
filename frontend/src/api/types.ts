@@ -89,3 +89,34 @@ export interface AdminSession extends SessionBody {
   performanceId: number
   venueId: string
 }
+
+export type QueueEntry =
+  | { status: 'WAITING'; position: number; ahead: number; etaSeconds: number; pollAfterMs: number }
+  | { status: 'SOLD_OUT'; position: number; ahead: number; pollAfterMs: number }
+  | { status: 'ADMITTED'; entryToken: string; expiresAt: string }
+  | { status: 'EXPIRED' }
+
+export interface SeatInfo {
+  seatId: number
+  floor: number
+  section: string
+  row: string
+  number: number
+  x: number
+  y: number
+  grade: string
+  price: number
+  wheelchair: boolean
+}
+
+export interface SeatStatus {
+  version: number
+  held: number[]
+  sold: number[]
+}
+
+export interface Hold {
+  holdId: string
+  seatIds: number[]
+  expiresAt: string
+}

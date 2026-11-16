@@ -4,6 +4,8 @@ import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
 import PerformanceDetailPage from './pages/PerformanceDetailPage'
 import PerformanceListPage from './pages/PerformanceListPage'
+import QueuePage from './pages/QueuePage'
+import SeatPage from './pages/SeatPage'
 import SignUpPage from './pages/SignUpPage'
 
 export default function App() {
@@ -32,6 +34,8 @@ export default function App() {
           <Route path="/" element={<PerformanceListPage />} />
           <Route path="/performances/:id" element={<PerformanceDetailPage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/sessions/:sessionId/queue" element={<QueuePage />} />
+          <Route path="/sessions/:sessionId/seats" element={<SeatPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="*" element={<p>페이지를 찾을 수 없습니다.</p>} />
