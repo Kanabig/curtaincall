@@ -202,7 +202,10 @@ export default function SeatPage() {
         {hold ? (
           <>
             <span>점유한 좌석 {hold.seatIds.length}석 · 남은 시간 <strong>{formatCountdown(remainingSeconds(Date.parse(hold.expiresAt), now))}</strong></span>
-            <button disabled={busy} onClick={() => void release()}>점유 해제</button>
+            <span>
+              <button disabled={busy} onClick={() => void release()}>점유 해제</button>{' '}
+              <button disabled={busy} onClick={() => navigate(`/sessions/${sessionId}/checkout`)}>결제하기</button>
+            </span>
           </>
         ) : (
           <>

@@ -120,3 +120,53 @@ export interface Hold {
   seatIds: number[]
   expiresAt: string
 }
+
+export type OrderStatus =
+  | 'PENDING_PAYMENT'
+  | 'PAYMENT_REQUESTED'
+  | 'CONFIRMED'
+  | 'FAILED'
+  | 'REFUNDING'
+  | 'REFUNDED'
+  | 'EXPIRED'
+
+export interface Order {
+  orderId: string
+  amount: number
+  status: OrderStatus
+  expiresAt: string
+}
+
+export interface OrderDetail {
+  orderId: string
+  sessionId: number
+  seatIds: number[]
+  amount: number
+  status: OrderStatus
+  paymentStatus: 'PROCESSING' | 'APPROVED' | 'FAILED' | 'REFUNDED' | null
+}
+
+export type ReservationStatus = 'CONFIRMED' | 'CANCEL_REQUESTED' | 'CANCELLED'
+
+export interface Reservation {
+  reservationId: string
+  sessionId: number
+  sessionStartAt: string
+  seatIds: number[]
+  amount: number
+  status: ReservationStatus
+  createdAt: string
+}
+
+export interface ReservationDetail extends Omit<Reservation, 'seatIds'> {
+  orderId: string
+  seats: { seatId: number; grade: string; price: number }[]
+}
+
+export interface ReservationPage {
+  items: Reservation[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}

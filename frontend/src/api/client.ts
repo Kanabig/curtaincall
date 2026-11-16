@@ -44,6 +44,13 @@ const MESSAGES: Record<string, string> = {
   SESSION_NOT_ON_SALE: '판매 중인 회차가 아닙니다.',
   HOLD_NOT_FOUND: '점유가 이미 해제되었습니다.',
   ENTRY_TOKEN_INVALID: '입장 시간이 만료되었습니다. 대기열에 다시 진입해 주세요.',
+  HOLD_EXPIRED: '점유 시간이 끝났습니다. 좌석을 다시 선택해 주세요.',
+  HOLD_EXPIRING: '점유 만료가 임박해 결제를 시작할 수 없습니다. 좌석을 다시 선택해 주세요.',
+  ORDER_NOT_PAYABLE: '결제할 수 없는 주문입니다.',
+  ORDER_ALREADY_EXISTS: '이미 주문이 만들어진 좌석입니다.',
+  CANCEL_DEADLINE_PASSED: '취소 기한(공연 전날 23:59)이 지났습니다.',
+  RESERVATION_NOT_FOUND: '예매를 찾을 수 없습니다.',
+  SESSION_SCHEDULE_UNKNOWN: '회차 일정을 확인할 수 없어 지금은 취소할 수 없습니다. 잠시 후 다시 시도해 주세요.',
   INTERNAL_ERROR: '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
 }
 
