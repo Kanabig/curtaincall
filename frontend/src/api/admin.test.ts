@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isEditLocked, parsePrices, toLocalKst, toOffsetKst } from './admin'
+import { defaultPrices, isEditLocked, parsePrices, toLocalKst, toOffsetKst } from './admin'
 
 describe('isEditLocked', () => {
   const open = '2026-12-01T20:00:00+09:00'
@@ -31,5 +31,14 @@ describe('parsePrices', () => {
     expect(parsePrices('VIP 0')).toBeNull()
     expect(parsePrices('R 1\nR 2')).toBeNull()
     expect(parsePrices('  ')).toBeNull()
+  })
+})
+
+describe('defaultPrices', () => {
+  it('첫 회차의 가격표를 기본값으로 쓴다', () => {
+    expect(defaultPrices([{ prices: [{ grade: '1층석', price: 90000 }, { grade: '2층석', price: 60000 }] }])).toBe('1층석 90000\n2층석 60000')
+  })
+  it('회차가 없으면 null', () => {
+    expect(defaultPrices([])).toBeNull()
   })
 })

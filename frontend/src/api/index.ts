@@ -101,6 +101,11 @@ export const api = {
     }
   },
   admin: {
+    performances: (keyword = '') => {
+      const p = new URLSearchParams({ page: '0', size: '100' })
+      if (keyword.trim()) p.set('keyword', keyword.trim())
+      return request<Page<PerformanceItem>>(`/admin/performances?${p}`, { auth: true })
+    },
     registerPerformance: (kopisId: string) =>
       request<{ id: number; kopisId: string; name: string; venueId: string }>('/admin/performances', {
         method: 'POST',

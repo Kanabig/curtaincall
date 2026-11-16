@@ -32,6 +32,8 @@ export interface SessionItem {
   saleOpenAt: string
   saleState: SaleState
   prices: PriceItem[]
+  admissionPerSecond: number
+  maxActiveUsers: number
 }
 
 export interface PerformanceDetail {

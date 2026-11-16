@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cancelDeadline, checkoutStore, idempotency, isTerminal, shouldPollReservation } from './orderFlow'
+import { ORDER_DETAIL_TEXT, cancelDeadline, checkoutStore, idempotency, isTerminal, orderDetailText, shouldPollReservation } from './orderFlow'
 
 function memoryStorage() {
   const m = new Map<string, string>()
@@ -60,5 +60,19 @@ describe('shouldPollReservation', () => {
     expect(shouldPollReservation('CANCEL_REQUESTED')).toBe(true)
     expect(shouldPollReservation('CONFIRMED')).toBe(false)
     expect(shouldPollReservation('CANCELLED')).toBe(false)
+  })
+})
+
+describe('orderDetailText', () => {
+  it('실패 사유 코드별 문구를 쓴다', () => {
+    expect(orderDetailText('FAILED', 'DECLINED')).toContain('거절')
+    expect(orderDetailText('FAILED', 'PG_UNAVAILABLE')).toContain('일시적')
+    expect(orderDetailText('EXPIRED', 'HOLD_EXPIRED')).toContain('만료')
+  })
+  it('코드가 없거나 PAYMENT_FAILED·모르는 코드면 기존 문구', () => {
+    expect(orderDetailText('FAILED', null)).toBe(ORDER_DETAIL_TEXT.FAILED)
+    expect(orderDetailText('FAILED', 'PAYMENT_FAILED')).toBe(ORDER_DETAIL_TEXT.FAILED)
+    expect(orderDetailText('FAILED', 'X')).toBe(ORDER_DETAIL_TEXT.FAILED)
+    expect(orderDetailText('REFUNDED', null)).toBe(ORDER_DETAIL_TEXT.REFUNDED)
   })
 })
