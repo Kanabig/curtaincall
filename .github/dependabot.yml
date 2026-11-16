@@ -38,3 +38,28 @@ updates:
     commit-message:
       prefix: ci
     labels: [ci]
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+    labels: [build]
+    ignore:
+      # 메이저는 typescript-eslint 등 peer 지원을 확인한 뒤 수동으로 올린다
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+  - package-ecosystem: npm
+    directory: /frontend/e2e
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+    labels: [build]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
