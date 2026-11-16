@@ -272,7 +272,7 @@ services:
     environment:
       <<: *service-env
       # 비워 두면 Mock 모드로 동작한다
-      LLM_API_KEY: ${LLM_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     healthcheck:
       <<: *java-health
       test: ["CMD", "curl", "-fs", "http://localhost:8087/actuator/health"]

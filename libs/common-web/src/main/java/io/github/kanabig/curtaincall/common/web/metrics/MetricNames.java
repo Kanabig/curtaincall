@@ -60,6 +60,18 @@ public final class MetricNames {
     /** Bulkhead가 거절한 PG 호출 수. Counter. payment가 등록한다. */
     public static final String PAYMENT_PG_BULKHEAD_REJECTED = "payment.pg.bulkhead.rejected";
 
+    /**
+     * LLM 호출 수. Counter. 태그 result = success, timeout, error, rejected(CircuitBreaker), quota_exceeded, invalid(검증 실패). search-assist가
+     * 등록한다.
+     */
+    public static final String SEARCH_ASSIST_LLM_CALLS = "search.assist.llm.calls";
+
+    /** LLM 호출 지연. Timer(히스토그램). search-assist가 등록한다. */
+    public static final String SEARCH_ASSIST_LLM_LATENCY = "search.assist.llm.latency";
+
+    /** 검증에 실패한 조건 수. Counter. 태그 field = region, genre, dateFrom, dateTo, maxPrice, keyword. search-assist가 등록한다. */
+    public static final String SEARCH_ASSIST_VALIDATION_FAILURES = "search.assist.validation.failures";
+
     /** KOPIS 호출 수. Counter. 태그 result = success, failure. event가 등록한다. 하루 한도(100)와 비교한다. */
     public static final String KOPIS_CALLS = "kopis.calls";
 
@@ -69,6 +81,7 @@ public final class MetricNames {
     /** 상세 조회를 기다리는 공연 수. Gauge. 호출 상한 때문에 밀린 양을 본다. event가 등록한다. */
     public static final String KOPIS_DETAIL_PENDING = "kopis.detail.pending";
 
+    public static final String TAG_FIELD = "field";
     public static final String TAG_RESULT = "result";
     public static final String TAG_SCHEDULE = "schedule";
     public static final String TAG_STATE = "state";
