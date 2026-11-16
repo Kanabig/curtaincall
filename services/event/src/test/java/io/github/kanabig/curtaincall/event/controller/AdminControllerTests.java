@@ -171,6 +171,9 @@ class AdminControllerTests extends EventIntegrationTest {
             assertThat(call(role, HttpMethod.POST, "/api/v1/admin/performances", Map.of("kopisId", "PF1"))
                             .getStatusCode())
                     .isEqualTo(HttpStatus.FORBIDDEN);
+            assertThat(call(role, HttpMethod.GET, "/api/v1/admin/performances", null)
+                            .getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN);
             assertThat(call(role, HttpMethod.DELETE, "/api/v1/admin/sessions/1", null)
                             .getStatusCode())
                     .isEqualTo(HttpStatus.FORBIDDEN);
@@ -178,6 +181,36 @@ class AdminControllerTests extends EventIntegrationTest {
             assertThat(sync.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
             assertThat(sync.getBody().get("code").asText()).isEqualTo("FORBIDDEN");
         }
+    }
+
+    @Test
+    @DisplayName("관리자 목록은 등록된 공연만 페이지로 주고 keyword로 거른다. 회차 응답에는 입장 속도와 상한이 있다")
+    void adminListAndSessionFields() {
+        long sessionId = createSession(OPEN);
+
+        JsonNode page =
+                admin(HttpMethod.GET, "/api/v1/admin/performances", null).getBody();
+        assertThat(page.get("totalElements").asLong()).isEqualTo(1);
+        assertThat(page.get("content").get(0).get("id").asLong()).isEqualTo(performanceId);
+        assertThat(admin(HttpMethod.GET, "/api/v1/admin/performances?keyword=없는공연", null)
+                        .getBody()
+                        .get("totalElements")
+                        .asLong())
+                .isZero();
+        assertThat(admin(HttpMethod.GET, "/api/v1/admin/performances?size=0", null)
+                        .getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        JsonNode session = call(null, HttpMethod.GET, "/api/v1/sessions/" + sessionId, null)
+                .getBody();
+        assertThat(session.get("admissionPerSecond").asInt()).isEqualTo(50);
+        assertThat(session.get("maxActiveUsers").asInt()).isEqualTo(500);
+        JsonNode item = call(null, HttpMethod.GET, "/api/v1/performances/" + performanceId, null)
+                .getBody()
+                .get("sessions")
+                .get(0);
+        assertThat(item.get("admissionPerSecond").asInt()).isEqualTo(50);
+        assertThat(item.get("maxActiveUsers").asInt()).isEqualTo(500);
     }
 
     @Test

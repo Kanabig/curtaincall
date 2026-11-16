@@ -1,6 +1,8 @@
 package io.github.kanabig.curtaincall.event.controller;
 
 import io.github.kanabig.curtaincall.event.config.KopisProperties;
+import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformancePage;
+import io.github.kanabig.curtaincall.event.dto.PerformanceState;
 import io.github.kanabig.curtaincall.event.dto.SessionPayload;
 import io.github.kanabig.curtaincall.event.dto.SessionRequests.CreateRequest;
 import io.github.kanabig.curtaincall.event.dto.SessionRequests.RegisterPerformanceRequest;
@@ -9,16 +11,19 @@ import io.github.kanabig.curtaincall.event.entity.SaleSession;
 import io.github.kanabig.curtaincall.event.service.KopisAdminService;
 import io.github.kanabig.curtaincall.event.service.PerformanceAdminService;
 import io.github.kanabig.curtaincall.event.service.PerformanceAdminService.Registered;
+import io.github.kanabig.curtaincall.event.service.PerformanceQueryService;
 import io.github.kanabig.curtaincall.event.service.SessionAdminService;
 import jakarta.validation.Valid;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,16 +35,29 @@ public class AdminController {
     private final SessionAdminService sessions;
     private final KopisAdminService kopis;
     private final KopisProperties properties;
+    private final PerformanceQueryService queries;
 
     public AdminController(
             PerformanceAdminService performances,
             SessionAdminService sessions,
             KopisAdminService kopis,
-            KopisProperties properties) {
+            KopisProperties properties,
+            PerformanceQueryService queries) {
         this.performances = performances;
         this.sessions = sessions;
         this.kopis = kopis;
         this.properties = properties;
+        this.queries = queries;
+    }
+
+    /** 등록된 공연 목록. 일반 조회와 달리 ADMIN만 호출한다. */
+    @GetMapping("/api/v1/admin/performances")
+    public PerformancePage listPerformances(
+            @RequestParam(required = false) PerformanceState state,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "" + PerformanceQueryService.DEFAULT_SIZE) int size) {
+        return queries.listForAdmin(state, keyword, page, size);
     }
 
     /** 새로 등록하면 201, 이미 등록된 공연이면 200. */
