@@ -1,6 +1,5 @@
 package io.github.kanabig.curtaincall.event.contract;
 
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.event.dto.SessionPayload;
 import io.github.kanabig.curtaincall.event.dto.SessionPayload.PriceItem;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelopes;
@@ -11,6 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.json.JsonTest;
+import tools.jackson.databind.ObjectMapper;
 
 /** event.session 이벤트의 와이어 형식. 골든은 libs/test-support의 contract/. */
 @JsonTest

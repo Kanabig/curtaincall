@@ -2,7 +2,6 @@ package io.github.kanabig.curtaincall.payment.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelope;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelopes;
 import io.github.kanabig.curtaincall.payment.dto.ApprovePaymentCommand;
@@ -13,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.json.JsonTest;
+import tools.jackson.databind.ObjectMapper;
 
 /** reservation이 발행한 명령 골든을 payment가 읽는 방식(payload → 명령 DTO)으로 읽는다. */
 @JsonTest

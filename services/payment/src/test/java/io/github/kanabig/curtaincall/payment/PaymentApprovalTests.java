@@ -3,7 +3,6 @@ package io.github.kanabig.curtaincall.payment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import tools.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +11,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
 
 /** PAY-1 승인, PAY-3 멱등성(NFR-2), PAY-6 결과 이벤트. */
 class PaymentApprovalTests extends PaymentIntegrationTest {

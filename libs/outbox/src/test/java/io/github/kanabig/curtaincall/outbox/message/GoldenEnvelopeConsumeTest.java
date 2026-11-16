@@ -2,14 +2,14 @@ package io.github.kanabig.curtaincall.outbox.message;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.testsupport.EventContract;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /** 골든 봉투(이미 발행된 형식)를 소비 측이 쓰는 방식 그대로 읽을 수 있는지 확인한다. */
 class GoldenEnvelopeConsumeTest {

@@ -3,7 +3,6 @@ package io.github.kanabig.curtaincall.reservation.service;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelopes;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxWriter;
 import io.github.kanabig.curtaincall.reservation.entity.Order;
@@ -18,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.json.JsonTest;
+import tools.jackson.databind.ObjectMapper;
 
 /** reservation 서비스가 내는 이벤트·명령의 와이어 형식. 골든은 libs/test-support의 contract/. */
 @JsonTest

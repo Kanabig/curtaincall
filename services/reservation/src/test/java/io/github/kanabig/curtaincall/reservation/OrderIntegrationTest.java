@@ -1,7 +1,5 @@
 package io.github.kanabig.curtaincall.reservation;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelope;
 import io.github.kanabig.curtaincall.reservation.entity.SeatHold;
 import io.github.kanabig.curtaincall.reservation.service.OrderSagaService;
@@ -18,6 +16,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /** 주문·Saga 테스트의 공통 준비. 회차 1에 좌석 20개를 만들고, 결제 응답은 Kafka 없이 서비스에 직접 전달한다. */
 public abstract class OrderIntegrationTest extends InventoryIntegrationTest {

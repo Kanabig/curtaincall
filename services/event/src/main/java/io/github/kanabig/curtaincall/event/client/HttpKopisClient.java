@@ -8,7 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.function.Function;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
-import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
+import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -31,7 +31,7 @@ public class HttpKopisClient implements KopisClient {
         if (properties.apiKey().isBlank()) {
             throw new IllegalStateException("curtaincall.kopis.mode=live에는 KOPIS_API_KEY가 필요하다");
         }
-        ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.defaults()
+        HttpClientSettings settings = HttpClientSettings.defaults()
                 .withConnectTimeout(properties.connectTimeout())
                 .withReadTimeout(properties.readTimeout());
         // 외부 서비스에 내부 추적 ID 헤더를 보내지 않으려고 Boot가 만든 빌더 대신 새 빌더를 쓴다

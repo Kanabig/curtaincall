@@ -1,8 +1,5 @@
 package io.github.kanabig.curtaincall.queue.messaging;
 
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.queue.repository.SessionConf;
 import io.github.kanabig.curtaincall.queue.repository.SessionConf.Type;
 import io.github.kanabig.curtaincall.queue.service.SessionConfService;
@@ -10,6 +7,9 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * [QUE-1] event.session의 회차 이벤트로 Redis conf를 갱신한다. Redis에는 processed_event 테이블이 없으므로 이벤트에 실린 전체 값을 덮어써 멱등을 얻고,

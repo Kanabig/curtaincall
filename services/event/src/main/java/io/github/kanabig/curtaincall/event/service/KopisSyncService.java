@@ -1,7 +1,5 @@
 package io.github.kanabig.curtaincall.event.service;
 
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.github.kanabig.curtaincall.event.client.KopisCallException;
 import io.github.kanabig.curtaincall.event.client.KopisClient;
@@ -35,6 +33,8 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * EVT-1, EVT-3. KOPIS 증분 동기화. 목록(앞으로 windowDays일) → 상세(처음 보거나 바뀐 공연) → 시설상세(처음 보는 시설, 오래된 시설) 순서다.

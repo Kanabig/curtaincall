@@ -1,8 +1,5 @@
 package io.github.kanabig.curtaincall.event.service;
 
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
 import io.github.kanabig.curtaincall.common.web.error.CommonErrorCode;
 import io.github.kanabig.curtaincall.event.config.KopisProperties;
@@ -24,6 +21,9 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /** [EVT-4, EVT-5] 공연·회차 조회. 읽기 전용이고 KOPIS 상태와 무관하게 DB의 마지막 동기화 결과를 돌려준다. */
 @Service

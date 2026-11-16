@@ -2,8 +2,6 @@ package io.github.kanabig.curtaincall.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.config.OutboxProperties;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxProducerSettings;
 import io.github.kanabig.curtaincall.outbox.relay.OutboxRelay;
@@ -25,6 +23,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /** NFR-4 릴레이 동시 실행. */
 class OutboxRelayConcurrencyTests extends OutboxIntegrationTest {

@@ -4,8 +4,8 @@ import com.redis.testcontainers.RedisContainer;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.mysql.MySQLContainer;
 
 /**
  * 서비스 통합 테스트가 {@code @Import(TestContainersConfig.class)}로 가져다 쓴다.
@@ -20,7 +20,7 @@ public class TestContainersConfig {
 
     @Bean(destroyMethod = "")
     @ServiceConnection
-    MySQLContainer<?> mysql() {
+    MySQLContainer mysql() {
         return Containers.MYSQL;
     }
 

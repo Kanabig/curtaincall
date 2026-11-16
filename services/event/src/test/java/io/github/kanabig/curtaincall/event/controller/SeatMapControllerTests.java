@@ -6,7 +6,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import tools.jackson.databind.JsonNode;
 import io.github.kanabig.curtaincall.event.EventIntegrationTest;
 import io.github.kanabig.curtaincall.event.repository.HallSeatRepository;
 import io.github.kanabig.curtaincall.event.repository.SessionRepository;
@@ -23,8 +22,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -32,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import tools.jackson.databind.JsonNode;
 
 /** EVT-9, EVT-10. 좌석 배치도 조회와 캐시. */
 @SpringBootTest(
@@ -120,8 +120,7 @@ class SeatMapControllerTests extends EventIntegrationTest {
         JsonNode seats = response.getBody();
         assertThat(seats).hasSize(100);
         JsonNode first = seats.get(0);
-        assertThat(first.fieldNames())
-                .toIterable()
+        assertThat(first.propertyNames())
                 .containsExactlyInAnyOrder(
                         "seatId", "floor", "section", "row", "number", "x", "y", "grade", "price", "wheelchair");
         assertThat(first.get("grade").asText()).isEqualTo("VIP");
@@ -234,9 +233,10 @@ class SeatMapControllerTests extends EventIntegrationTest {
     void internalSeatMapContract() {
         JsonNode seats =
                 get("/internal/sessions/" + sessionId + "/seat-map", null).getBody();
-        tools.jackson.databind.ObjectMapper strict = mapper.copy()
+        tools.jackson.databind.ObjectMapper strict = mapper.rebuild()
                 .enable(tools.jackson.databind.DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
-                .enable(tools.jackson.databind.DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS);
+                .enable(tools.jackson.databind.cfg.EnumFeature.FAIL_ON_NUMBERS_FOR_ENUMS)
+                .build();
 
         for (JsonNode seat : seats) {
             assertThat(seat.get("seatId").isIntegralNumber()).isTrue();
