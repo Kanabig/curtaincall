@@ -78,3 +78,6 @@ export function cancelDeadline(startAtIso: string): Date {
   const d = kstDay.getUTCDate()
   return new Date(Date.UTC(y, m, d - 1, 23, 59, 0) - 9 * 3600_000)
 }
+
+/** 환불이 끝나기 전(CANCEL_REQUESTED)에는 예매 상태를 계속 읽는다. */
+export const shouldPollReservation = (s: ReservationStatus) => s === 'CANCEL_REQUESTED'

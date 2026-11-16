@@ -5,7 +5,7 @@ import { errorMessage } from '../api/client'
 import type { ReservationDetail } from '../api/types'
 import { useAuth } from '../auth'
 import { formatDateTime, won } from '../format'
-import { RESERVATION_STATUS_TEXT, cancelDeadline, idempotency } from '../orderFlow'
+import { RESERVATION_STATUS_TEXT, cancelDeadline, idempotency, shouldPollReservation } from '../orderFlow'
 
 const POLL_MS = 2000
 
@@ -17,35 +17,37 @@ export default function ReservationPage() {
   const [busy, setBusy] = useState(false)
   const [now] = useState(() => Date.now())
 
-  const load = useCallback(async () => {
-    const d = await api.reservation(id)
-    setR(d)
-    return d
-  }, [id])
+  const load = useCallback(() => api.reservation(id), [id])
 
-  // 취소 요청 뒤(CANCEL_REQUESTED)에는 환불이 끝날 때까지 상태를 폴링한다
   useEffect(() => {
     if (loading || !user) return
-    let stopped = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const tick = async () => {
-      try {
-        const d = await load()
-        if (stopped) return
+    let stale = false
+    load()
+      .then((d) => {
+        if (stale) return
+        setR(d)
         setError(null)
-        if (d.status !== 'CANCEL_REQUESTED') return
-      } catch (e) {
-        if (stopped) return
-        setError(errorMessage(e))
-      }
-      timer = setTimeout(() => void tick(), POLL_MS)
-    }
-    void tick()
+      })
+      .catch((e) => !stale && setError(errorMessage(e)))
     return () => {
-      stopped = true
-      clearTimeout(timer)
+      stale = true
     }
   }, [load, loading, user])
+
+  // 취소 요청 뒤(CANCEL_REQUESTED)에는 환불이 끝날 때까지 상태를 폴링한다
+  const polling = r ? shouldPollReservation(r.status) : false
+  useEffect(() => {
+    if (!polling) return
+    const t = setInterval(() => {
+      load()
+        .then((d) => {
+          setR(d)
+          setError(null)
+        })
+        .catch((e) => setError(errorMessage(e)))
+    }, POLL_MS)
+    return () => clearInterval(t)
+  }, [polling, load])
 
   const cancel = async () => {
     if (!r || !window.confirm('예매를 취소하고 전액 환불받습니다. 계속할까요?')) return
@@ -54,8 +56,6 @@ export default function ReservationPage() {
     try {
       const res = await api.cancelReservation(r.reservationId, idempotency.keyFor(`cancel:${r.reservationId}`))
       setR({ ...r, status: res.status })
-      // 상태가 CANCEL_REQUESTED이면 폴링을 다시 시작하도록 한 번 더 읽는다
-      await load()
     } catch (e) {
       setError(errorMessage(e))
     } finally {

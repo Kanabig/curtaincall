@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cancelDeadline, checkoutStore, idempotency, isTerminal } from './orderFlow'
+import { cancelDeadline, checkoutStore, idempotency, isTerminal, shouldPollReservation } from './orderFlow'
 
 function memoryStorage() {
   const m = new Map<string, string>()
@@ -52,5 +52,13 @@ describe('isTerminal', () => {
     expect(isTerminal('PAYMENT_REQUESTED')).toBe(false)
     expect(isTerminal('REFUNDING')).toBe(false)
     expect(isTerminal('REFUNDED')).toBe(true)
+  })
+})
+
+describe('shouldPollReservation', () => {
+  it('취소 요청 상태에서만 폴링한다', () => {
+    expect(shouldPollReservation('CANCEL_REQUESTED')).toBe(true)
+    expect(shouldPollReservation('CONFIRMED')).toBe(false)
+    expect(shouldPollReservation('CANCELLED')).toBe(false)
   })
 })
