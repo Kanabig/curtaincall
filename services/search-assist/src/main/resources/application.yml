@@ -6,6 +6,16 @@ spring:
     name: search-assist
 server:
   port: 8087
+search-assist:
+  # auto: 키가 있으면 LLM, 없으면 Mock. mock으로 고정할 수도 있다
+  mode: ${SEARCH_ASSIST_MODE:auto}
+  llm:
+    api-key: ${ANTHROPIC_API_KEY:}
+    base-url: ${ANTHROPIC_BASE_URL:}
+    model: ${SEARCH_ASSIST_LLM_MODEL:claude-haiku-5-5}
+    effort: low
+    timeout: 2s
+    daily-limit: ${SEARCH_ASSIST_DAILY_LIMIT:1000}
 logging:
   pattern:
     level: "%5p [${spring.application.name},%X{requestId:-}]"
