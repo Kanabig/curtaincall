@@ -10,7 +10,7 @@ spring:
         webflux:
           # 하위 서비스가 멈췄을 때 요청과 gateway 연결이 오래 붙잡히지 않게 한다. 라우트 metadata로 덮어쓴다
           httpclient:
-            connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:1000}
+            connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:3000}
             response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:5s}
           routes:
             - id: user
