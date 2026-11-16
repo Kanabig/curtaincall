@@ -1,9 +1,9 @@
 package io.github.kanabig.curtaincall.searchassist.service;
 
 import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
-import io.github.kanabig.curtaincall.searchassist.client.ClaudeConditionExtractor;
 import io.github.kanabig.curtaincall.searchassist.client.ConditionExtractor;
 import io.github.kanabig.curtaincall.searchassist.client.ExtractionException;
+import io.github.kanabig.curtaincall.searchassist.client.LlmConditionExtractor;
 import io.github.kanabig.curtaincall.searchassist.client.MockConditionExtractor;
 import io.github.kanabig.curtaincall.searchassist.client.RawConditions;
 import io.github.kanabig.curtaincall.searchassist.config.SearchAssistProperties;
@@ -39,7 +39,7 @@ public class SearchAssistService {
     private final Timer llmLatency;
 
     public SearchAssistService(
-            ClaudeConditionExtractor llm,
+            LlmConditionExtractor llm,
             MockConditionExtractor mock,
             ConditionValidator validator,
             CircuitBreaker llmCircuitBreaker,
@@ -85,7 +85,7 @@ public class SearchAssistService {
             llmCall("rejected");
             return fallback(query);
         } catch (ExtractionException e) {
-            llmCall(e.isTimeout() ? "timeout" : "error");
+            llmCall(e.isRateLimited() ? "rate_limited" : e.isTimeout() ? "timeout" : "error");
             return fallback(query);
         } catch (RuntimeException e) {
             llmCall("error");

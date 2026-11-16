@@ -1,11 +1,16 @@
 package io.github.kanabig.curtaincall.searchassist.eval;
 
+import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.github.kanabig.curtaincall.searchassist.client.ClaudeConditionExtractor;
+import io.github.kanabig.curtaincall.searchassist.client.LlmConditionExtractor;
 import io.github.kanabig.curtaincall.searchassist.client.MockConditionExtractor;
+import io.github.kanabig.curtaincall.searchassist.client.OpenAiCompatibleConditionExtractor;
+import io.github.kanabig.curtaincall.searchassist.client.Usage;
 import io.github.kanabig.curtaincall.searchassist.config.SearchAssistProperties;
 import io.github.kanabig.curtaincall.searchassist.config.SearchAssistProperties.Breaker;
 import io.github.kanabig.curtaincall.searchassist.config.SearchAssistProperties.Llm;
 import io.github.kanabig.curtaincall.searchassist.config.SearchAssistProperties.Mode;
+import io.github.kanabig.curtaincall.searchassist.config.SearchAssistProperties.ProviderType;
 import io.github.kanabig.curtaincall.searchassist.dto.AssistResponse;
 import io.github.kanabig.curtaincall.searchassist.dto.SearchConditions;
 import io.github.kanabig.curtaincall.searchassist.eval.EvalSet.EvalCase;
@@ -14,7 +19,9 @@ import io.github.kanabig.curtaincall.searchassist.service.ConditionValidator;
 import io.github.kanabig.curtaincall.searchassist.service.SearchAssistService;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -24,6 +31,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.io.ClassPathResource;
 import tools.jackson.databind.json.JsonMapper;
 
 /** 평가 세트를 실제 서비스 경로(추출 → 검증 → fallback)로 돌리고 지표를 모은다. */
@@ -36,31 +47,79 @@ public final class EvalRunner {
 
     public record Outcome(EvalCase evalCase, AssistResponse response, long nanos) {}
 
-    /** usage가 null이면 토큰을 쓰지 않는 경로(Mock). 단가는 100만 토큰당 달러이고 모르면 null. */
+    /**
+     * usage가 null이면 토큰을 쓰지 않는 경로(Mock). 단가는 100만 토큰당 달러이고 모르면 null. calls는 호출 결과(success, timeout, rate_limited 등)별 건수.
+     */
     public record Run(
             String label,
             EvalSet set,
             List<Outcome> outcomes,
-            ClaudeConditionExtractor.Usage usage,
+            Usage usage,
             Double inputPrice,
-            Double outputPrice) {}
+            Double outputPrice,
+            Map<String, Long> calls) {}
 
     private EvalRunner() {}
 
     public static Run runMock(EvalSet set) {
-        SearchAssistProperties props = new SearchAssistProperties(Mode.MOCK, llm("", ""), breaker());
-        return run("Mock", set, service(set, props, claude(props)), null, null, null);
+        SearchAssistProperties props = new SearchAssistProperties(
+                Mode.MOCK, llm("", ProviderType.CLAUDE, Duration.ofSeconds(2)), breaker(), Map.of());
+        MeterRegistry meters = new SimpleMeterRegistry();
+        return run(
+                "Mock",
+                set,
+                service(set, props, new ClaudeConditionExtractor(props, mapper()), meters),
+                null,
+                meters,
+                Duration.ZERO);
     }
 
-    /** 키는 호출하는 쪽이 환경변수에서 읽어 넘긴다. 모델은 빈 값이면 설정 기본값. */
-    public static Run runLlm(EvalSet set, String apiKey, String model) {
-        SearchAssistProperties props = new SearchAssistProperties(Mode.LLM, llm(apiKey, model), breaker());
-        ClaudeConditionExtractor claude = claude(props);
-        // 단가는 모델마다 달라 기본값(haiku-5-5)이 아니면 환경변수로 받는다
-        boolean haiku = props.llm().model().equals("claude-haiku-5-5");
+    /** application.yml의 기본값과 환경변수(키·모델)를 그대로 읽는다. */
+    public static SearchAssistProperties loadProperties() {
+        try {
+            var sources = new YamlPropertySourceLoader().load("application", new ClassPathResource("application.yml"));
+            StandardEnvironment env = new StandardEnvironment();
+            sources.forEach(env.getPropertySources()::addLast);
+            return Binder.get(env)
+                    .bind("search-assist", SearchAssistProperties.class)
+                    .get();
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public static boolean hasKey(SearchAssistProperties props, ProviderType type) {
+        return type == ProviderType.CLAUDE
+                ? props.llm().hasKey()
+                : props.provider(type).hasKey();
+    }
+
+    /**
+     * 제공자 하나로 평가를 돌린다. timeout은 서비스 기본(2초)이 기본이고, 늘리면 타임아웃에 걸리지 않은 원래 지연을 잴 수 있다(결과는 fallback 비율이 달라져 서비스 동작 평가와 다르다). 요청
+     * 사이에는 제공자 설정의 minInterval만큼 간격을 둬 무료 한도를 지킨다.
+     */
+    public static Run runLlm(EvalSet set, ProviderType type, String model, Duration timeout) {
+        SearchAssistProperties loaded = loadProperties();
+        Llm base = loaded.llm();
+        String claudeModel = model == null || model.isBlank() ? base.model() : model;
+        Llm llm = new Llm(base.apiKey(), base.baseUrl(), claudeModel, base.effort(), timeout, 1000, type);
+        SearchAssistProperties props = new SearchAssistProperties(Mode.LLM, llm, breaker(), loaded.providers());
+        LlmConditionExtractor extractor = type == ProviderType.CLAUDE
+                ? new ClaudeConditionExtractor(props, mapper())
+                : new OpenAiCompatibleConditionExtractor(props, type, mapper());
+        MeterRegistry meters = new SimpleMeterRegistry();
+        String modelName =
+                type == ProviderType.CLAUDE ? claudeModel : props.provider(type).model();
+        String label = "LLM " + type.name().toLowerCase() + " " + modelName + " (타임아웃 " + timeout.toMillis() + "ms)";
+        // 단가는 모델마다 달라 haiku-5-5가 아니면 환경변수로 받는다. 무료 제공자는 비용 없음(-)
+        boolean haiku = type == ProviderType.CLAUDE && claudeModel.equals("claude-haiku-5-5");
         Double in = price("SEARCH_ASSIST_EVAL_INPUT_PRICE", haiku ? 0.10 : null);
         Double out = price("SEARCH_ASSIST_EVAL_OUTPUT_PRICE", haiku ? 0.50 : null);
-        return run("LLM " + props.llm().model(), set, service(set, props, claude), claude, in, out);
+        Duration interval = type == ProviderType.CLAUDE
+                ? Duration.ZERO
+                : props.provider(type).minInterval();
+        Run run = run(label, set, service(set, props, extractor, meters), extractor, meters, interval);
+        return new Run(run.label(), run.set(), run.outcomes(), run.usage(), in, out, run.calls());
     }
 
     private static Double price(String env, Double fallback) {
@@ -68,29 +127,45 @@ public final class EvalRunner {
         return v == null || v.isBlank() ? fallback : Double.valueOf(v);
     }
 
-    private static ClaudeConditionExtractor claude(SearchAssistProperties props) {
-        return new ClaudeConditionExtractor(props, JsonMapper.builder().build());
+    private static JsonMapper mapper() {
+        return JsonMapper.builder().build();
     }
 
     private static Run run(
             String label,
             EvalSet set,
             SearchAssistService service,
-            ClaudeConditionExtractor claude,
-            Double inputPrice,
-            Double outputPrice) {
+            LlmConditionExtractor extractor,
+            MeterRegistry meters,
+            Duration interval) {
         List<Outcome> outcomes = new ArrayList<>();
         for (EvalCase c : set.cases()) {
             long start = System.nanoTime();
             AssistResponse response = service.assist(c.query());
-            outcomes.add(new Outcome(c, response, System.nanoTime() - start));
+            long elapsed = System.nanoTime() - start;
+            outcomes.add(new Outcome(c, response, elapsed));
+            sleep(interval.toNanos() - elapsed);
         }
-        return new Run(label, set, outcomes, claude == null ? null : claude.usage(), inputPrice, outputPrice);
+        Map<String, Long> calls = new LinkedHashMap<>();
+        meters.find(MetricNames.SEARCH_ASSIST_LLM_CALLS)
+                .counters()
+                .forEach(counter -> calls.put(counter.getId().getTag(MetricNames.TAG_RESULT), (long) counter.count()));
+        return new Run(label, set, outcomes, extractor == null ? null : extractor.usage(), null, null, calls);
     }
 
-    private static Llm llm(String apiKey, String model) {
-        String m = model == null || model.isBlank() ? "claude-haiku-5-5" : model;
-        return new Llm(apiKey, "", m, "low", Duration.ofSeconds(2), 1000);
+    private static void sleep(long nanos) {
+        if (nanos <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(nanos / 1_000_000, (int) (nanos % 1_000_000));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static Llm llm(String apiKey, ProviderType type, Duration timeout) {
+        return new Llm(apiKey, "", "claude-haiku-5-5", "low", timeout, 1000, type);
     }
 
     private static Breaker breaker() {
@@ -98,7 +173,7 @@ public final class EvalRunner {
     }
 
     private static SearchAssistService service(
-            EvalSet set, SearchAssistProperties props, ClaudeConditionExtractor claude) {
+            EvalSet set, SearchAssistProperties props, LlmConditionExtractor extractor, MeterRegistry meters) {
         Clock clock = Clock.fixed(
                 ZonedDateTime.of(set.today().atTime(12, 0), ZoneId.of("Asia/Seoul"))
                         .toInstant(),
@@ -111,13 +186,7 @@ public final class EvalRunner {
                         .minimumNumberOfCalls(1000)
                         .build());
         return new SearchAssistService(
-                claude,
-                new MockConditionExtractor(),
-                new ConditionValidator(),
-                breaker,
-                props,
-                clock,
-                new SimpleMeterRegistry());
+                extractor, new MockConditionExtractor(), new ConditionValidator(), breaker, props, clock, meters);
     }
 
     // 지표
@@ -203,6 +272,11 @@ public final class EvalRunner {
         all.forEach(o -> sources.merge(o.response().source().name(), 1, Integer::sum));
         sb.append("\n### source 분포\n\n| source | 건수 | 비율 |\n|---|---|---|\n");
         sources.forEach((k, v) -> sb.append(String.format("| %s | %d | %.1f%% |%n", k, v, 100.0 * v / all.size())));
+
+        if (!run.calls().isEmpty()) {
+            sb.append("\n### LLM 호출 결과\n\n| result | 건수 |\n|---|---|\n");
+            run.calls().forEach((k, v) -> sb.append(String.format("| %s | %d |%n", k, v)));
+        }
 
         long[] sorted = all.stream().mapToLong(Outcome::nanos).sorted().toArray();
         sb.append(String.format(
