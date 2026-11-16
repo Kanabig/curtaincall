@@ -112,6 +112,15 @@ services:
       # actuator는 외부 포트(8080)와 분리된 관리 포트에서만 연다
       test: ["CMD", "curl", "-fs", "http://localhost:8089/actuator/health"]
 
+  frontend:
+    build: { context: ./frontend }
+    image: curtaincall/frontend:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_HOST_PORT:-5173}:80"
+    depends_on:
+      gateway: { condition: service_healthy }
+
   user:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: user } }
