@@ -7,7 +7,7 @@ import { useAuth } from '../auth'
 import { entryTokens } from '../entryToken'
 import { won } from '../format'
 import { holdStore } from '../holdStore'
-import { ORDER_DETAIL_TEXT, ORDER_STATUS_TEXT, isTerminal } from '../orderFlow'
+import { ORDER_STATUS_TEXT, isTerminal, orderDetailText } from '../orderFlow'
 
 const POLL_MS = 1500
 
@@ -49,7 +49,7 @@ export default function OrderPage() {
   }, [orderId, loading, user])
 
   if (!loading && !user) return <p><Link to="/login">로그인</Link>이 필요합니다.</p>
-  const detail = order ? ORDER_DETAIL_TEXT[order.status] : undefined
+  const detail = order ? orderDetailText(order.status, order.failureCode) : undefined
   const bad = order && ['FAILED', 'REFUNDED', 'EXPIRED', 'REFUNDING'].includes(order.status)
 
   return (

@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
-import { InputError, isEditLocked, parsePrices, pricesToText, toLocalKst, toOffsetKst } from '../api/admin'
-import { errorMessage } from '../api/client'
-import type { PerformanceDetail, SessionBody, SessionItem } from '../api/types'
+import { FALLBACK_PRICES, InputError, defaultPrices, isEditLocked, parsePrices, pricesToText, toLocalKst, toOffsetKst } from '../api/admin'
+import { ApiError, errorMessage } from '../api/client'
+import type { PerformanceDetail, PerformanceItem, SessionBody, SessionItem } from '../api/types'
 import { useAuth } from '../auth'
 import { SALE_LABEL, formatDateTime } from '../format'
 
@@ -20,6 +20,14 @@ export default function AdminPage() {
   )
 }
 
+function adminErrorMessage(e: unknown): string {
+  // 등급 불일치는 어떤 등급이 틀렸는지 서버 detail에 담겨 온다
+  if (e instanceof ApiError && e.code === 'PRICE_GRADE_MISMATCH' && e.problem.detail) {
+    return `${errorMessage(e)} (${e.problem.detail})`
+  }
+  return errorMessage(e)
+}
+
 function useAction() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -29,7 +37,7 @@ function useAction() {
     try {
       setMsg({ ok: true, text: await fn() })
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof InputError ? e.message : errorMessage(e) })
+      setMsg({ ok: false, text: e instanceof InputError ? e.message : adminErrorMessage(e) })
     } finally {
       setBusy(false)
     }
@@ -78,11 +86,16 @@ function RegisterSection() {
 }
 
 function SessionSection() {
+  const [list, setList] = useState<PerformanceItem[]>([])
   const [perfId, setPerfId] = useState('')
   const [perf, setPerf] = useState<PerformanceDetail | null>(null)
   // 렌더 중에 시계를 읽지 않도록 불러온 시점의 시각을 들고 있는다
   const [now, setNow] = useState(0)
   const { busy, run, note } = useAction()
+
+  useEffect(() => {
+    api.admin.performances().then((p) => setList(p.content)).catch(() => setList([]))
+  }, [])
 
   const load = (id: string) =>
     api.performance(id).then((d) => {
@@ -90,13 +103,10 @@ function SessionSection() {
       setPerf(d)
     })
 
-  function submit(e: FormEvent) {
-    e.preventDefault()
+  function choose(id: string) {
+    setPerfId(id)
     setPerf(null)
-    void run(async () => {
-      await load(perfId.trim())
-      return '불러왔습니다.'
-    })
+    if (id) void run(async () => { await load(id); return '불러왔습니다.' })
   }
   const reload = async () => {
     if (perf) await load(String(perf.id))
@@ -105,10 +115,15 @@ function SessionSection() {
   return (
     <section>
       <h2>회차 관리</h2>
-      <form onSubmit={submit}>
-        <label>공연 ID<input value={perfId} onChange={(e) => setPerfId(e.target.value)} inputMode="numeric" required /></label>
-        <button disabled={busy}>불러오기</button>
-      </form>
+      <label>
+        공연
+        <select value={perfId} onChange={(e) => choose(e.target.value)} disabled={busy}>
+          <option value="">공연을 선택하세요</option>
+          {list.map((p) => (
+            <option key={p.id} value={p.id}>{p.name} ({p.startDate})</option>
+          ))}
+        </select>
+      </label>
       {note}
       {perf && (
         <>
@@ -120,7 +135,9 @@ function SessionSection() {
           </ul>
           <h3>회차 추가</h3>
           <SessionForm
+            key={perf.id}
             now={now}
+            defaultPrices={defaultPrices(perf.sessions)}
             submitLabel="회차 등록"
             onSubmit={async (body) => {
               await api.admin.createSession(perf.id, body)
@@ -179,21 +196,22 @@ function SessionRow({ s, now, onChanged }: { s: SessionItem; now: number; onChan
 function SessionForm({
   session,
   now,
+  defaultPrices: defaultText,
   submitLabel,
   onSubmit,
 }: {
   session?: SessionItem
   now: number
+  defaultPrices?: string | null
   submitLabel: string
   onSubmit: (body: SessionBody) => Promise<string>
 }) {
   const locked = session ? isEditLocked(session.saleOpenAt, now) : false
   const [startAt, setStartAt] = useState(session ? toLocalKst(session.startAt) : '')
   const [saleOpenAt, setSaleOpenAt] = useState(session ? toLocalKst(session.saleOpenAt) : '')
-  const [prices, setPrices] = useState(session ? pricesToText(session.prices) : 'VIP 150000\nR 110000\nS 80000\nA 50000')
-  // 목록 응답에는 입장 속도·활성 상한이 없어 수정 시 새로 입력한다
-  const [rate, setRate] = useState(session ? '' : '100')
-  const [maxActive, setMaxActive] = useState(session ? '' : '1000')
+  const [prices, setPrices] = useState(session ? pricesToText(session.prices) : (defaultText ?? FALLBACK_PRICES))
+  const [rate, setRate] = useState(session ? String(session.admissionPerSecond) : '100')
+  const [maxActive, setMaxActive] = useState(session ? String(session.maxActiveUsers) : '1000')
   const { busy, run, note } = useAction()
 
   function submit(e: FormEvent) {
@@ -207,9 +225,8 @@ function SessionForm({
         body.saleOpenAt = toOffsetKst(saleOpenAt)
         body.prices = parsed
       }
-      if (rate !== '') body.admissionPerSecond = Number(rate)
-      if (maxActive !== '') body.maxActiveUsers = Number(maxActive)
-      if (Object.keys(body).length === 0) throw new InputError('수정할 값을 입력해 주세요.')
+      body.admissionPerSecond = Number(rate)
+      body.maxActiveUsers = Number(maxActive)
       return onSubmit(body as SessionBody)
     })
   }
@@ -220,8 +237,8 @@ function SessionForm({
       <label>공연 일시(KST)<input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} disabled={locked} required /></label>
       <label>판매 오픈(KST)<input type="datetime-local" value={saleOpenAt} onChange={(e) => setSaleOpenAt(e.target.value)} disabled={locked} required /></label>
       <label>등급별 가격<textarea rows={4} value={prices} onChange={(e) => setPrices(e.target.value)} disabled={locked} /></label>
-      <label>초당 입장 수<input type="number" min={1} value={rate} onChange={(e) => setRate(e.target.value)} required={!session} placeholder={session ? '변경 시에만 입력' : ''} /></label>
-      <label>활성 사용자 상한<input type="number" min={1} value={maxActive} onChange={(e) => setMaxActive(e.target.value)} required={!session} placeholder={session ? '변경 시에만 입력' : ''} /></label>
+      <label>초당 입장 수<input type="number" min={1} value={rate} onChange={(e) => setRate(e.target.value)} required /></label>
+      <label>활성 사용자 상한<input type="number" min={1} value={maxActive} onChange={(e) => setMaxActive(e.target.value)} required /></label>
       <button disabled={busy}>{submitLabel}</button>
       {note}
     </form>

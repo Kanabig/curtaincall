@@ -41,3 +41,11 @@ export function parsePrices(text: string): { grade: string; price: number }[] | 
 export function pricesToText(prices: { grade: string; price: number }[]): string {
   return prices.map((p) => `${p.grade} ${p.price}`).join('\n')
 }
+
+/** 공연에 이미 있는 회차의 가격표를 새 회차 기본값으로 쓴다. 회차가 없으면 null. */
+export function defaultPrices(sessions: { prices: { grade: string; price: number }[] }[]): string | null {
+  const first = sessions.find((s) => s.prices.length > 0)
+  return first ? pricesToText(first.prices) : null
+}
+
+export const FALLBACK_PRICES = 'VIP 150000\nR 110000\nS 80000\nA 50000'
