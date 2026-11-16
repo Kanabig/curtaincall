@@ -98,6 +98,12 @@ public class PaymentInquiryService {
                     log.info("PG에 거래 기록이 없다. UNKNOWN을 유지하고 조회를 이어 간다: orderId={}", payment.getOrderId());
                     onMiss(payment, true);
                 }
+                case InquiryOutcome.Rejected rejected -> {
+                    log.warn(
+                            "거래 조회가 Bulkhead에서 거절돼 PG에 보내지 못했다. 조회 창에 넣지 않고 곧 다시 시도한다: orderId={}",
+                            payment.getOrderId());
+                    results.inquiryRejected(paymentId);
+                }
                 case InquiryOutcome.Failed failed -> onMiss(payment, false);
             }
         } catch (RuntimeException e) {

@@ -1,6 +1,7 @@
 package io.github.kanabig.curtaincall.payment.config;
 
 import java.time.Duration;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -37,7 +38,14 @@ public record PaymentProperties(
             @DefaultValue("1s") Duration pollInterval,
             @DefaultValue("50") int batchSize,
             @DefaultValue("30s") Duration lease,
-            @DefaultValue("1m") Duration requestedStaleAfter) {
+            @DefaultValue("1m") Duration requestedStaleAfter,
+            @DefaultValue("500ms") Duration rejectedRetryDelay) {
+
+        /** Bulkhead 거절 뒤 다시 시도하기까지의 간격. 같이 거절된 건이 한꺼번에 돌아오지 않게 1~2배로 흩뜨린다. */
+        public Duration jitteredRejectedRetryDelay() {
+            return rejectedRetryDelay.plusMillis(
+                    ThreadLocalRandom.current().nextLong(rejectedRetryDelay.toMillis() + 1));
+        }
 
         public Duration delayAfter(int attempts) {
             long factor = 1L << Math.min(attempts, 20);
