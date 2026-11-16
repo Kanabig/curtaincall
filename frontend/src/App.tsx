@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth'
+import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
 import PerformanceDetailPage from './pages/PerformanceDetailPage'
 import PerformanceListPage from './pages/PerformanceListPage'
@@ -14,6 +15,7 @@ export default function App() {
         <nav>
           {user ? (
             <>
+              {user.role === 'ADMIN' && <Link to="/admin">관리</Link>}
               <span>{user.name}</span>
               <button onClick={() => void logout()}>로그아웃</button>
             </>
@@ -29,6 +31,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<PerformanceListPage />} />
           <Route path="/performances/:id" element={<PerformanceDetailPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="*" element={<p>페이지를 찾을 수 없습니다.</p>} />

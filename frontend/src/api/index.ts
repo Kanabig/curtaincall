@@ -1,10 +1,12 @@
 import { request, tokenStore } from './client'
 import type {
+  AdminSession,
   Page,
   PerformanceDetail,
   PerformanceFilter,
   PerformanceItem,
   TokenResponse,
+  SessionBody,
   UserInfo,
 } from './types'
 
@@ -40,6 +42,21 @@ export const api = {
         // 서버 폐기에 실패해도 로컬 세션은 이미 지웠다
       }
     }
+  },
+  admin: {
+    registerPerformance: (kopisId: string) =>
+      request<{ id: number; kopisId: string; name: string; venueId: string }>('/admin/performances', {
+        method: 'POST',
+        body: { kopisId },
+        auth: true,
+      }),
+    createSession: (performanceId: number | string, body: SessionBody) =>
+      request<AdminSession>(`/admin/performances/${performanceId}/sessions`, { method: 'POST', body, auth: true }),
+    updateSession: (id: number, body: Partial<SessionBody>) =>
+      request<AdminSession>(`/admin/sessions/${id}`, { method: 'PATCH', body, auth: true }),
+    deleteSession: (id: number) => request<void>(`/admin/sessions/${id}`, { method: 'DELETE', auth: true }),
+    suspendSession: (id: number) => request<void>(`/admin/sessions/${id}/suspend`, { method: 'POST', auth: true }),
+    syncKopis: () => request<{ runId: number }>('/admin/kopis/sync', { method: 'POST', auth: true }),
   },
   me: () => request<UserInfo>('/users/me', { auth: true }),
 }
