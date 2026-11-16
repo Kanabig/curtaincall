@@ -1,0 +1,129 @@
+name: Images
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'docker/service.Dockerfile'
+      - 'frontend/**'
+      - 'services/**'
+      - 'libs/**'
+      - 'build-logic/**'
+      - '*.gradle'
+      - 'gradle.properties'
+      - '.github/workflows/images.yml'
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Trivy 실패 기준. 지금은 결과만 남기고(0), 게이트로 바꿀 때 1로 올린다
+  TRIVY_EXIT_CODE: '0'
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: gateway, context: ., file: docker/service.Dockerfile, service: gateway }
+          - { name: user, context: ., file: docker/service.Dockerfile, service: user }
+          - { name: event, context: ., file: docker/service.Dockerfile, service: event }
+          - { name: queue, context: ., file: docker/service.Dockerfile, service: queue }
+          - { name: reservation, context: ., file: docker/service.Dockerfile, service: reservation }
+          - { name: payment, context: ., file: docker/service.Dockerfile, service: payment }
+          - { name: mock-pg, context: ., file: docker/service.Dockerfile, service: mock-pg }
+          - { name: notification, context: ., file: docker/service.Dockerfile, service: notification }
+          - { name: search-assist, context: ., file: docker/service.Dockerfile, service: search-assist }
+          - { name: frontend, context: ./frontend, file: frontend/Dockerfile, service: '' }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      # 스캔용으로 로컬에만 적재한다. PR에서는 push하지 않는다
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: SERVICE=${{ matrix.service }}
+          load: true
+          tags: scan/${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+      # 수정판이 있는 HIGH 이상을 보고한다. TRIVY_EXIT_CODE=1이면 해당 항목이 있을 때 실패한다
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: scan/${{ matrix.name }}:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: ${{ env.TRIVY_EXIT_CODE }}
+          format: table
+          output: trivy-${{ matrix.name }}.txt
+
+      - name: Trivy result
+        if: ${{ !cancelled() }}
+        run: |
+          echo "### Trivy ${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat trivy-${{ matrix.name }}.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: trivy-${{ matrix.name }}
+          path: trivy-${{ matrix.name }}.txt
+          retention-days: 7
+
+  publish:
+    # main push에서만 실행하고, packages 쓰기 권한도 이 잡에만 준다
+    if: github.event_name == 'push'
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: gateway, context: ., file: docker/service.Dockerfile, service: gateway }
+          - { name: user, context: ., file: docker/service.Dockerfile, service: user }
+          - { name: event, context: ., file: docker/service.Dockerfile, service: event }
+          - { name: queue, context: ., file: docker/service.Dockerfile, service: queue }
+          - { name: reservation, context: ., file: docker/service.Dockerfile, service: reservation }
+          - { name: payment, context: ., file: docker/service.Dockerfile, service: payment }
+          - { name: mock-pg, context: ., file: docker/service.Dockerfile, service: mock-pg }
+          - { name: notification, context: ., file: docker/service.Dockerfile, service: notification }
+          - { name: search-assist, context: ., file: docker/service.Dockerfile, service: search-assist }
+          - { name: frontend, context: ./frontend, file: frontend/Dockerfile, service: '' }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # GHCR 경로는 소문자만 허용한다
+      - run: echo "REGISTRY=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: SERVICE=${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ matrix.name }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ matrix.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
