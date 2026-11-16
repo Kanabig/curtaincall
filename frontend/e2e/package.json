@@ -8,7 +8,7 @@
     "bench": "node render-bench.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.55.0",
+    "@playwright/test": "1.65.1",
     "@types/node": "^24.0.0",
     "typescript": "6.0.3"
   }
