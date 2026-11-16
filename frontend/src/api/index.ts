@@ -2,11 +2,17 @@ import { request, tokenStore } from './client'
 import type {
   AdminSession,
   Hold,
+  Order,
+  OrderDetail,
   Page,
   PerformanceDetail,
   PerformanceFilter,
   PerformanceItem,
   QueueEntry,
+  Reservation,
+  ReservationDetail,
+  ReservationPage,
+  ReservationStatus,
   SeatInfo,
   SeatStatus,
   TokenResponse,
@@ -48,6 +54,34 @@ export const api = {
       headers: { 'X-Entry-Token': entryToken },
     }),
   releaseHold: (holdId: string) => request<void>(`/holds/${holdId}`, { method: 'DELETE', auth: true }),
+
+  createOrder: (holdId: string, entryToken: string, idempotencyKey: string) =>
+    request<Order>('/orders', {
+      method: 'POST',
+      body: { holdId },
+      auth: true,
+      headers: { 'X-Entry-Token': entryToken, 'Idempotency-Key': idempotencyKey },
+    }),
+  startPayment: (orderId: string, cardToken: string, entryToken: string, idempotencyKey: string) =>
+    request<{ status: string }>(`/orders/${orderId}/payment`, {
+      method: 'POST',
+      body: { method: 'CARD', cardToken },
+      auth: true,
+      headers: { 'X-Entry-Token': entryToken, 'Idempotency-Key': idempotencyKey },
+    }),
+  order: (orderId: string) => request<OrderDetail>(`/orders/${orderId}`, { auth: true }),
+  reservations: (page: number, status?: ReservationStatus) => {
+    const p = new URLSearchParams({ page: String(page), size: '20' })
+    if (status) p.set('status', status)
+    return request<ReservationPage>(`/reservations?${p}`, { auth: true })
+  },
+  reservation: (id: string) => request<ReservationDetail>(`/reservations/${id}`, { auth: true }),
+  cancelReservation: (id: string, idempotencyKey: string) =>
+    request<Pick<Reservation, 'reservationId' | 'status'>>(`/reservations/${id}/cancel`, {
+      method: 'POST',
+      auth: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }),
 
   signUp: (body: { email: string; password: string; name: string }) =>
     request<UserInfo>('/users', { method: 'POST', body }),

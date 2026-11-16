@@ -1,10 +1,14 @@
 import { Link, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth'
 import AdminPage from './pages/AdminPage'
+import CheckoutPage from './pages/CheckoutPage'
 import LoginPage from './pages/LoginPage'
 import PerformanceDetailPage from './pages/PerformanceDetailPage'
+import OrderPage from './pages/OrderPage'
 import PerformanceListPage from './pages/PerformanceListPage'
 import QueuePage from './pages/QueuePage'
+import ReservationListPage from './pages/ReservationListPage'
+import ReservationPage from './pages/ReservationPage'
 import SeatPage from './pages/SeatPage'
 import SignUpPage from './pages/SignUpPage'
 
@@ -18,6 +22,7 @@ export default function App() {
           {user ? (
             <>
               {user.role === 'ADMIN' && <Link to="/admin">관리</Link>}
+              <Link to="/reservations">예매 내역</Link>
               <span>{user.name}</span>
               <button onClick={() => void logout()}>로그아웃</button>
             </>
@@ -36,6 +41,10 @@ export default function App() {
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/sessions/:sessionId/queue" element={<QueuePage />} />
           <Route path="/sessions/:sessionId/seats" element={<SeatPage />} />
+          <Route path="/sessions/:sessionId/checkout" element={<CheckoutPage />} />
+          <Route path="/orders/:orderId" element={<OrderPage />} />
+          <Route path="/reservations" element={<ReservationListPage />} />
+          <Route path="/reservations/:id" element={<ReservationPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="*" element={<p>페이지를 찾을 수 없습니다.</p>} />
