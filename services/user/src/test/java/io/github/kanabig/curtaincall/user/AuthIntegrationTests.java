@@ -53,6 +53,9 @@ class AuthIntegrationTests {
     @Autowired
     StringRedisTemplate redis;
 
+    @Autowired
+    io.micrometer.core.instrument.MeterRegistry meters;
+
     @Value("${curtaincall.jwt.access-secret}")
     String secret;
 
@@ -175,9 +178,116 @@ class AuthIntegrationTests {
                 .isNotEqualTo(first.get("refreshToken").asText());
         assertThat(reuse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(reuse.getBody().get("code").asText()).isEqualTo("INVALID_REFRESH_TOKEN");
-        // 새 토큰은 계속 쓸 수 있다
+        // 재사용이 감지되면 계열이 폐기돼 새 토큰도 쓸 수 없다(reuseRevokesFamily 참고)
         assertThat(refresh(second.getBody().get("refreshToken").asText()).getStatusCode())
-                .isEqualTo(HttpStatus.OK);
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("[USR-3] 재사용이 없으면 회전한 토큰을 계속 이어서 쓸 수 있다")
+    void refreshChainContinues() {
+        String token = signUpAndLogin().get("refreshToken").asText();
+        for (int i = 0; i < 3; i++) {
+            ResponseEntity<JsonNode> next = refresh(token);
+            assertThat(next.getStatusCode()).isEqualTo(HttpStatus.OK);
+            token = next.getBody().get("refreshToken").asText();
+        }
+    }
+
+    @RepeatedTest(5)
+    @DisplayName("[USR-3] 같은 토큰으로 동시에 요청하면 재사용으로 판정돼 이긴 요청의 새 토큰도 폐기된다")
+    void concurrentRefreshRevokesWinnersToken() throws Exception {
+        String token = signUpAndLogin().get("refreshToken").asText();
+
+        List<ResponseEntity<JsonNode>> results = runConcurrently(6, () -> refresh(token));
+
+        String winnerToken = results.stream()
+                .filter(r -> r.getStatusCode() == HttpStatus.OK)
+                .findFirst()
+                .orElseThrow()
+                .getBody()
+                .get("refreshToken")
+                .asText();
+        assertThat(refresh(winnerToken).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("[USR-3] 이미 회전된 refresh token이 다시 오면 401이고 계열의 최신 토큰도 폐기된다")
+    void reuseRevokesFamily() {
+        String first = signUpAndLogin().get("refreshToken").asText();
+        String second = refresh(first).getBody().get("refreshToken").asText();
+        String third = refresh(second).getBody().get("refreshToken").asText();
+        double before = reuseCount();
+
+        // 두 단계 전 토큰을 공격자가 먼저 썼다고 본다
+        ResponseEntity<JsonNode> reuse = refresh(first);
+
+        assertThat(reuse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(reuse.getBody().get("code").asText()).isEqualTo("INVALID_REFRESH_TOKEN");
+        assertThat(redis.hasKey("user:refresh:" + sha256(third))).isFalse();
+        assertThat(reuseCount()).isEqualTo(before + 1);
+        assertThat(refresh(third).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(refresh(second).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("[USR-3] 다른 로그인(계열)의 토큰은 재사용 감지의 영향을 받지 않는다")
+    void reuseDoesNotAffectOtherFamily() {
+        String email = email();
+        signUpRaw(email, PASSWORD, "홍길동");
+        String a = login(email, PASSWORD).getBody().get("refreshToken").asText();
+        String b = login(email, PASSWORD).getBody().get("refreshToken").asText();
+        refresh(a);
+
+        refresh(a);
+
+        assertThat(refresh(b).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @DisplayName("[USR-3] 계열 도입 전에 발급된 토큰(값이 userId뿐)도 회전되고 그 뒤부터 재사용을 감지한다")
+    void legacyTokenRotatesIntoFamily() {
+        JsonNode login = signUpAndLogin();
+        String userId = redisValueOf(login.get("refreshToken").asText()).split(":")[0];
+        String legacy = "legacy-" + UUID.randomUUID();
+        redis.opsForValue().set("user:refresh:" + sha256(legacy), userId, java.time.Duration.ofDays(14));
+
+        ResponseEntity<JsonNode> rotated = refresh(legacy);
+        String next = rotated.getBody().get("refreshToken").asText();
+
+        assertThat(rotated.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(redisValueOf(next)).startsWith(userId + ":");
+        assertThat(refresh(legacy).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(refresh(next).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("[USR-3] 로그아웃하면 계열이 폐기되고, 이미 쓴 토큰으로 로그아웃해도 최신 토큰이 폐기된다")
+    void logoutRevokesFamily() {
+        String first = signUpAndLogin().get("refreshToken").asText();
+        String second = refresh(first).getBody().get("refreshToken").asText();
+
+        ResponseEntity<Void> logout =
+                rest.postForEntity("/api/v1/auth/logout", body("refreshToken", first), Void.class);
+
+        assertThat(logout.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(refresh(second).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("[USR-3] 흔적과 계열 키도 TTL을 가지고 토큰 값이 키·값에 그대로 들어가지 않는다")
+    void usedAndFamilyKeysHaveTtl() {
+        String first = signUpAndLogin().get("refreshToken").asText();
+        String second = refresh(first).getBody().get("refreshToken").asText();
+
+        Long usedTtl = redis.getExpire("user:refresh:used:" + sha256(first), java.util.concurrent.TimeUnit.SECONDS);
+        String family = redisValueOf(second).split(":")[1];
+        Long familyTtl = redis.getExpire("user:refresh:family:" + family, java.util.concurrent.TimeUnit.SECONDS);
+
+        assertThat(usedTtl).isBetween(14L * 24 * 3600 - 60, 14L * 24 * 3600);
+        assertThat(familyTtl).isBetween(14L * 24 * 3600 - 60, 14L * 24 * 3600);
+        assertThat(redis.opsForValue().get("user:refresh:family:" + family)).isEqualTo(sha256(second));
+        assertThat(redis.keys("user:refresh:*" + first + "*")).isEmpty();
     }
 
     @RepeatedTest(10)
@@ -278,6 +388,15 @@ class AuthIntegrationTests {
 
     private ResponseEntity<JsonNode> login(String email, String password) {
         return rest.postForEntity("/api/v1/auth/login", body("email", email, "password", password), JsonNode.class);
+    }
+
+    private String redisValueOf(String token) {
+        return redis.opsForValue().get("user:refresh:" + sha256(token));
+    }
+
+    private double reuseCount() {
+        var counter = meters.find("user.refresh.reuse.detected").counter();
+        return counter == null ? 0 : counter.count();
     }
 
     private ResponseEntity<JsonNode> refresh(String token) {
