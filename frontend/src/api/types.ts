@@ -144,6 +144,7 @@ export interface OrderDetail {
   amount: number
   status: OrderStatus
   paymentStatus: 'PROCESSING' | 'APPROVED' | 'FAILED' | 'REFUNDED' | null
+  failureCode?: string | null
 }
 
 export type ReservationStatus = 'CONFIRMED' | 'CANCEL_REQUESTED' | 'CANCELLED'

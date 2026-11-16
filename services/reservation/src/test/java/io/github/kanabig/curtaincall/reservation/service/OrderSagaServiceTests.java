@@ -75,6 +75,24 @@ class OrderSagaServiceTests extends OrderIntegrationTest {
         assertThat(seatsWithStatus("AVAILABLE")).isEqualTo(20);
         assertThat(outboxTypes(orderId)).containsExactly("ApprovePayment");
         assertThat(orderService.get(USER, orderId).paymentStatus()).isEqualTo("FAILED");
+        assertThat(orderService.get(USER, orderId).failureCode()).isEqualTo("DECLINED");
+    }
+
+    @Test
+    @DisplayName("결제 실패 사유별로 failureCode가 다르고, 사유를 모르면 PAYMENT_FAILED, 성공·진행 중·환불 주문은 비어 있다")
+    void failureCodeByReason() {
+        String notReceived = orderInPayment(USER, 1L);
+        deliver("PaymentFailed", notReceived, Map.of("reason", "PG_NOT_RECEIVED"));
+        String noReason = orderInPayment(USER + 1, 2L);
+        deliver("PaymentFailed", noReason, Map.of());
+        String paying = orderInPayment(USER + 2, 3L);
+        String confirmed = orderInPayment(USER + 3, 4L);
+        approved(confirmed);
+
+        assertThat(orderService.get(USER, notReceived).failureCode()).isEqualTo("PG_NOT_RECEIVED");
+        assertThat(orderService.get(USER + 1, noReason).failureCode()).isEqualTo("PAYMENT_FAILED");
+        assertThat(orderService.get(USER + 2, paying).failureCode()).isNull();
+        assertThat(orderService.get(USER + 3, confirmed).failureCode()).isNull();
     }
 
     @Test

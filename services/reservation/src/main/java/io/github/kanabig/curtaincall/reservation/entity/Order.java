@@ -15,4 +15,5 @@ public record Order(
         Instant holdExpiresAt,
         String cardToken,
         String paymentId,
-        int commandSentCount) {}
+        int commandSentCount,
+        String failureCode) {}

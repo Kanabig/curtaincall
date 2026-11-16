@@ -280,6 +280,8 @@ class OrderServiceTests extends OrderIntegrationTest {
         assertThat(expired).isEqualTo(1);
         assertThat(status(pending)).isEqualTo("EXPIRED");
         assertThat(status(paying)).isEqualTo("PAYMENT_REQUESTED");
+        assertThat(orderService.get(USER, pending).failureCode()).isEqualTo("HOLD_EXPIRED");
+        assertThat(orderService.get(USER + 1, paying).failureCode()).isNull();
     }
 
     private int count(String table) {
