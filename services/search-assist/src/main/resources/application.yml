@@ -10,12 +10,42 @@ search-assist:
   # auto: 키가 있으면 LLM, 없으면 Mock. mock으로 고정할 수도 있다
   mode: ${SEARCH_ASSIST_MODE:auto}
   llm:
+    # claude | gemini | groq | exaone. 선택한 제공자의 키가 없으면 Mock
+    provider: ${SEARCH_ASSIST_LLM_PROVIDER:claude}
+    # claude 전용(api-key, base-url, model, effort). 나머지 제공자는 아래 providers
     api-key: ${ANTHROPIC_API_KEY:}
     base-url: ${ANTHROPIC_BASE_URL:}
     model: ${SEARCH_ASSIST_LLM_MODEL:claude-haiku-5-5}
     effort: low
     timeout: 2s
     daily-limit: ${SEARCH_ASSIST_DAILY_LIMIT:1000}
+  # OpenAI 호환 제공자. response-format: json-schema | json-object | none
+  # min-interval은 평가 실행기가 무료 한도를 지키려고 요청 사이에 두는 간격(서비스는 쓰지 않는다)
+  providers:
+    gemini:
+      api-key: ${GEMINI_API_KEY:}
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+      response-format: json-schema
+      reasoning-effort: minimal
+      min-interval: 7s
+    groq:
+      api-key: ${GROQ_API_KEY:}
+      base-url: https://api.groq.com/openai/v1
+      model: ${GROQ_MODEL:openai/gpt-oss-120b}
+      response-format: json-schema
+      reasoning-effort: low
+      min-interval: 6s
+    exaone:
+      api-key: ${EXAONE_API_KEY:}
+      base-url: https://api.exaone.ai
+      path: /v1/chat/completions
+      model: ${EXAONE_MODEL:k-exaone_v2.5}
+      response-format: none
+      reasoning-effort: low
+      # 추론 토큰을 포함한 상한
+      max-tokens: 4096
+      min-interval: 1s
 logging:
   pattern:
     level: "%5p [${spring.application.name},%X{requestId:-}]"

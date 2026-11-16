@@ -1,20 +1,23 @@
 package io.github.kanabig.curtaincall.searchassist.eval;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import io.github.kanabig.curtaincall.searchassist.config.SearchAssistProperties.ProviderType;
 import io.github.kanabig.curtaincall.searchassist.domain.KopisCodes;
 import io.github.kanabig.curtaincall.searchassist.eval.EvalSet.EvalCase;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.convert.DurationStyle;
 
 /**
  * SRC-4. Mock은 항상 돌고 결과 표를 build/reports/search-assist-eval에 쓴다. 정확도 기준치는 두지 않는다. LLM은 {@code searchAssistEval} 태스크로, API 키가 있을
@@ -70,13 +73,23 @@ class SearchAssistEvaluationTest {
 
     @Test
     @EnabledIfSystemProperty(named = "searchAssist.evalLlm", matches = "true")
-    @EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = ".+")
-    @DisplayName("SRC-4: 키가 있으면 같은 세트로 실제 모델을 평가한다(토큰·비용은 추출기가 usage를 노출하지 않아 미집계)")
+    @DisplayName("SRC-4: 선택한 제공자의 키가 있으면 같은 세트로 실제 모델을 평가한다")
     void llmEvaluation() throws IOException {
-        EvalRunner.Run run =
-                EvalRunner.runLlm(set, System.getenv("ANTHROPIC_API_KEY"), System.getenv("SEARCH_ASSIST_EVAL_MODEL"));
+        // SEARCH_ASSIST_EVAL_PROVIDER: claude(기본)|gemini|groq|exaone, SEARCH_ASSIST_EVAL_TIMEOUT: 원래 지연을 보려면 30s처럼 늘린다
+        ProviderType type = ProviderType.valueOf(
+                env("SEARCH_ASSIST_EVAL_PROVIDER", "claude").toUpperCase());
+        Duration timeout = DurationStyle.detectAndParse(env("SEARCH_ASSIST_EVAL_TIMEOUT", "2s"));
+        assumeTrue(EvalRunner.hasKey(EvalRunner.loadProperties(), type), type + " API 키가 없다");
 
-        write("llm.md", EvalRunner.render(run));
+        EvalRunner.Run run = EvalRunner.runLlm(set, type, System.getenv("SEARCH_ASSIST_EVAL_MODEL"), timeout);
+
+        String suffix = timeout.equals(Duration.ofSeconds(2)) ? "" : "-timeout" + timeout.toSeconds() + "s";
+        write("llm-" + type.name().toLowerCase() + suffix + ".md", EvalRunner.render(run));
+    }
+
+    private static String env(String name, String fallback) {
+        String v = System.getenv(name);
+        return v == null || v.isBlank() ? fallback : v;
     }
 
     private void write(String name, String markdown) throws IOException {
