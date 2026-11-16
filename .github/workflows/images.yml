@@ -94,6 +94,7 @@ jobs:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix:
         include:
           - { name: gateway, context: ., file: docker/service.Dockerfile, service: gateway }
