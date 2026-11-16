@@ -23,6 +23,9 @@ public sealed interface InquiryOutcome {
     /** PG가 해당 주문을 받은 기록이 없다고 답했다. 승인 요청이 PG에 닿지 않았을 수도, 아직 기록 전일 수도 있어 실패로 단정하지 않는다. */
     record NotFound() implements InquiryOutcome {}
 
-    /** 조회 자체를 못 했다(타임아웃, 5xx, Bulkhead 거절). */
+    /** 로컬 Bulkhead가 거절해 PG에 보내지 않았다. PG의 응답이 아니므로 조회 창의 판정에 넣지 않는다. */
+    record Rejected() implements InquiryOutcome {}
+
+    /** 조회 자체를 못 했다(타임아웃, 5xx 등 PG까지 갔거나 갔을 수 있는 실패). */
     record Failed(String detail) implements InquiryOutcome {}
 }

@@ -152,7 +152,7 @@ new_buyer() { # new_buyer 회차 번호 → "access토큰 입장토큰"(1인 4�
     echo "$t $(enter_token "$1" "$t")"
 }
 
-sql_event() { compose exec -T mysql sh -c "mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -N event_db -e \"$1\" 2>/dev/null" | tr -d '\r'; }
+sql_event() { compose exec -T mysql sh -c "mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\" --default-character-set=utf8mb4 -N event_db -e \"$1\" 2>/dev/null" | tr -d '\r'; }
 
 metric() { # metric 서비스 포트 정규식 → 일치하는 줄(없으면 빈 문자열)
     compose exec -T "$1" curl -s "http://localhost:$2/actuator/prometheus" | grep -E "$3" || true
@@ -415,11 +415,12 @@ scenario_pg() {
 
 # 기대: KOPIS가 5xx·깨진 XML·타임아웃이어도 동기화 실행이 끝까지 기록되고(RUNNING에 머물지 않음), 5xx·타임아웃은 FAILED와 error, 깨진 XML은
 # FAILED·PARTIAL 또는 parse_failures>0이며 호출 수(calls)가 장부에 남는다. 공연 수는 그대로, 공연 조회 200, 대기열·점유·결제 요청이 정상이다.
+# 단독 실행도 되도록 전체 스택을 띄운다(override로 event가 스텁을 본다).
 # 복구(ok) 뒤 동기화가 다시 SUCCESS 또는 PARTIAL로 끝나고 공연 수가 줄지 않는다. 읽기 타임아웃 3초(override)와 재시도를 감안해 실행당 최대 90초 기다린다.
 scenario_kopis() {
     FAILED=0
     COMPOSE_FILES=(-f compose.yml -f perf/fault/kopis-override.yml)
-    compose up -d --build --wait event kopis-stub
+    compose up -d --build --wait  # event만이 아니라 gateway·예매 경로 서비스도 필요하다(단독 실행 대비)
     local admin sid a ta before mode row o seat=0
     admin=$(admin_login)
     stub() { compose exec -T kopis-stub python -c "import urllib.request;print(urllib.request.urlopen('http://localhost:9000/__mode/$1').read().decode())"; }

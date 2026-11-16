@@ -1,0 +1,38 @@
+import { useState, type FormEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { errorMessage } from '../api/client'
+import { useAuth } from '../auth'
+
+export default function LoginPage() {
+  const { login } = useAuth()
+  const nav = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await login(email, password)
+      nav('/')
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="card" onSubmit={(e) => void submit(e)}>
+      <h1>로그인</h1>
+      <label>이메일<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+      <label>비밀번호<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+      {error && <p role="alert" className="error">{error}</p>}
+      <button disabled={busy}>로그인</button>
+      <p><Link to="/signup">계정이 없으면 가입</Link></p>
+    </form>
+  )
+}
