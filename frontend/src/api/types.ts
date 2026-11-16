@@ -75,3 +75,17 @@ export interface PerformanceFilter {
   maxPrice?: string
   page?: number
 }
+
+export interface SessionBody {
+  startAt: string
+  saleOpenAt: string
+  prices: PriceItem[]
+  admissionPerSecond: number
+  maxActiveUsers: number
+}
+
+export interface AdminSession extends SessionBody {
+  sessionId: number
+  performanceId: number
+  venueId: string
+}

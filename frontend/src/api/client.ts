@@ -24,6 +24,16 @@ const MESSAGES: Record<string, string> = {
   INVALID_REFRESH_TOKEN: '로그인이 만료되었습니다. 다시 로그인해 주세요.',
   INVALID_REQUEST: '입력값을 확인해 주세요.',
   NOT_FOUND: '찾을 수 없습니다.',
+  FORBIDDEN: '관리자만 사용할 수 있습니다.',
+  PERFORMANCE_NOT_FOUND: '공연을 찾을 수 없습니다.',
+  PERFORMANCE_NOT_SYNCED: '상세 동기화가 끝나지 않은 공연입니다.',
+  HALL_LAYOUT_UNAVAILABLE: '좌석 배치를 만들 수 없는 공연장입니다.',
+  SESSION_NOT_FOUND: '회차를 찾을 수 없습니다.',
+  SESSION_ALREADY_OPENED: '판매가 이미 열린 회차입니다.',
+  SESSION_EDIT_LOCKED: '판매 오픈 10분 전부터는 입장 속도와 활성 상한만 수정할 수 있습니다.',
+  PRICE_GRADE_MISMATCH: '가격 등급이 공연 등급표와 맞지 않습니다.',
+  KOPIS_QUOTA_LOW: 'KOPIS 남은 호출 수가 부족합니다.',
+  KOPIS_SYNC_IN_PROGRESS: 'KOPIS 동기화가 이미 실행 중입니다.',
   INTERNAL_ERROR: '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
 }
 
