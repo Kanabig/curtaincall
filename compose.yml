@@ -271,8 +271,8 @@ services:
     image: ${IMAGE_REGISTRY:-curtaincall}/search-assist:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
-      # 비워 두면 Mock 모드로 동작한다
-      SEARCH_ASSIST_LLM_PROVIDER: ${SEARCH_ASSIST_LLM_PROVIDER:-claude}
+      # 선택한 제공자(기본 gemini)의 키가 비어 있으면 Mock 모드로 동작한다
+      SEARCH_ASSIST_LLM_PROVIDER: ${SEARCH_ASSIST_LLM_PROVIDER:-gemini}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}

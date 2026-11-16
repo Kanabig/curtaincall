@@ -2,6 +2,7 @@ package io.github.kanabig.curtaincall.searchassist.eval;
 
 import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.github.kanabig.curtaincall.searchassist.client.ClaudeConditionExtractor;
+import io.github.kanabig.curtaincall.searchassist.client.ExtractionException;
 import io.github.kanabig.curtaincall.searchassist.client.LlmConditionExtractor;
 import io.github.kanabig.curtaincall.searchassist.client.MockConditionExtractor;
 import io.github.kanabig.curtaincall.searchassist.client.OpenAiCompatibleConditionExtractor;
@@ -57,7 +58,11 @@ public final class EvalRunner {
             Usage usage,
             Double inputPrice,
             Double outputPrice,
-            Map<String, Long> calls) {}
+            Map<String, Long> calls,
+            String abortReason) {}
+
+    /** 앞 N건이 모두 인증 오류(401·403)면 키·권한 문제라 나머지를 돌리지 않는다. */
+    public static final int AUTH_ABORT_AFTER = 5;
 
     private EvalRunner() {}
 
@@ -71,7 +76,8 @@ public final class EvalRunner {
                 service(set, props, new ClaudeConditionExtractor(props, mapper()), meters),
                 null,
                 meters,
-                Duration.ZERO);
+                Duration.ZERO,
+                0);
     }
 
     /** application.yml의 기본값과 환경변수(키·모델)를 그대로 읽는다. */
@@ -107,7 +113,6 @@ public final class EvalRunner {
         LlmConditionExtractor extractor = type == ProviderType.CLAUDE
                 ? new ClaudeConditionExtractor(props, mapper())
                 : new OpenAiCompatibleConditionExtractor(props, type, mapper());
-        MeterRegistry meters = new SimpleMeterRegistry();
         String modelName =
                 type == ProviderType.CLAUDE ? claudeModel : props.provider(type).model();
         String label = "LLM " + type.name().toLowerCase() + " " + modelName + " (타임아웃 " + timeout.toMillis() + "ms)";
@@ -118,8 +123,65 @@ public final class EvalRunner {
         Duration interval = type == ProviderType.CLAUDE
                 ? Duration.ZERO
                 : props.provider(type).minInterval();
-        Run run = run(label, set, service(set, props, extractor, meters), extractor, meters, interval);
-        return new Run(run.label(), run.set(), run.outcomes(), run.usage(), in, out, run.calls());
+        Run run = runWith(set, props, extractor, label, interval, AUTH_ABORT_AFTER);
+        return new Run(run.label(), run.set(), run.outcomes(), run.usage(), in, out, run.calls(), run.abortReason());
+    }
+
+    /** 추출기를 직접 받아 돌린다. authAbortAfter건 연속으로 처음부터 인증 오류가 나면 중단하고 사유를 남긴다. */
+    public static Run runWith(
+            EvalSet set,
+            SearchAssistProperties props,
+            LlmConditionExtractor extractor,
+            String label,
+            Duration interval,
+            int authAbortAfter) {
+        MeterRegistry meters = new SimpleMeterRegistry();
+        AuthWatch watch = new AuthWatch(extractor);
+        return run(label, set, service(set, props, watch, meters), watch, meters, interval, authAbortAfter);
+    }
+
+    /** 호출을 그대로 넘기면서 처음부터 이어진 인증 오류 건수를 센다. */
+    private static final class AuthWatch implements LlmConditionExtractor {
+        private final LlmConditionExtractor delegate;
+        private int calls;
+        private int leadingAuthFailures;
+        private boolean streak = true;
+
+        AuthWatch(LlmConditionExtractor delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public boolean enabled() {
+            return delegate.enabled();
+        }
+
+        @Override
+        public Usage usage() {
+            return delegate.usage();
+        }
+
+        @Override
+        public io.github.kanabig.curtaincall.searchassist.client.RawConditions extract(
+                String query, java.time.LocalDate today) {
+            calls++;
+            try {
+                var raw = delegate.extract(query, today);
+                streak = false;
+                return raw;
+            } catch (ExtractionException e) {
+                if (streak && e.isAuthFailure()) {
+                    leadingAuthFailures++;
+                } else {
+                    streak = false;
+                }
+                throw e;
+            }
+        }
+
+        boolean authBroken(int after) {
+            return streak && leadingAuthFailures >= after;
+        }
     }
 
     private static Double price(String env, Double fallback) {
@@ -135,22 +197,29 @@ public final class EvalRunner {
             String label,
             EvalSet set,
             SearchAssistService service,
-            LlmConditionExtractor extractor,
+            AuthWatch watch,
             MeterRegistry meters,
-            Duration interval) {
+            Duration interval,
+            int authAbortAfter) {
         List<Outcome> outcomes = new ArrayList<>();
+        String abortReason = null;
         for (EvalCase c : set.cases()) {
             long start = System.nanoTime();
             AssistResponse response = service.assist(c.query());
             long elapsed = System.nanoTime() - start;
             outcomes.add(new Outcome(c, response, elapsed));
+            if (watch != null && watch.authBroken(authAbortAfter)) {
+                abortReason =
+                        "앞 " + authAbortAfter + "건이 모두 인증 오류(401·403)라 " + outcomes.size() + "건에서 중단했다. 키와 권한을 확인한다";
+                break;
+            }
             sleep(interval.toNanos() - elapsed);
         }
         Map<String, Long> calls = new LinkedHashMap<>();
         meters.find(MetricNames.SEARCH_ASSIST_LLM_CALLS)
                 .counters()
                 .forEach(counter -> calls.put(counter.getId().getTag(MetricNames.TAG_RESULT), (long) counter.count()));
-        return new Run(label, set, outcomes, extractor == null ? null : extractor.usage(), null, null, calls);
+        return new Run(label, set, outcomes, watch == null ? null : watch.usage(), null, null, calls, abortReason);
     }
 
     private static void sleep(long nanos) {
@@ -241,6 +310,9 @@ public final class EvalRunner {
 
     public static String render(Run run) {
         List<Outcome> all = run.outcomes();
+        if (run.abortReason() != null) {
+            return abortedReport(run);
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("## ")
                 .append(run.label())
@@ -311,6 +383,20 @@ public final class EvalRunner {
                         o.response().source()));
             }
         }
+        return sb.toString();
+    }
+
+    /** 중단된 실행은 정확도·지연 표가 의미 없어 사유와 호출 결과만 남긴다. */
+    private static String abortedReport(Run run) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("## ")
+                .append(run.label())
+                .append(" (기준일 ")
+                .append(run.set().today())
+                .append(")\n\n");
+        sb.append("### 중단\n\n").append(run.abortReason()).append("\n\n");
+        sb.append("### LLM 호출 결과\n\n| result | 건수 |\n|---|---|\n");
+        run.calls().forEach((k, v) -> sb.append(String.format("| %s | %d |%n", k, v)));
         return sb.toString();
     }
 

@@ -12,7 +12,7 @@ dependencies {
     implementation "io.github.resilience4j:resilience4j-micrometer:${resilience4jVersion}"
 }
 
-// 평가 세트 실행(SRC-4). Mock은 항상, LLM은 SEARCH_ASSIST_EVAL_PROVIDER(기본 claude)의 키가 있을 때만. 결과 표는 build/reports/search-assist-eval
+// 평가 세트 실행(SRC-4). Mock은 항상, LLM은 SEARCH_ASSIST_EVAL_PROVIDER(기본 gemini)의 키가 있을 때만. 결과 표는 build/reports/search-assist-eval
 tasks.register('searchAssistEval', Test) {
     group = 'verification'
     description = '검색 조건 변환 평가 세트를 돌리고 결과 표를 출력한다'

@@ -71,7 +71,7 @@ public record SearchAssistProperties(
             @DefaultValue("low") String effort,
             @DefaultValue("2s") Duration timeout,
             @DefaultValue("1000") int dailyLimit,
-            @DefaultValue("claude") ProviderType provider) {
+            @DefaultValue("gemini") ProviderType provider) {
 
         public boolean hasKey() {
             return apiKey != null && !apiKey.isBlank();

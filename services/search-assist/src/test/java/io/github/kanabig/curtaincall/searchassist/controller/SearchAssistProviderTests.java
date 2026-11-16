@@ -11,14 +11,18 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /** SRC-1, SRC-2. llm.provider=groq로 OpenAI 호환 추출기가 공통 검증·FALLBACK·지표 경로를 그대로 타는지 본다. 제공자는 로컬 가짜 서버다. */
+@ExtendWith(OutputCaptureExtension.class)
 @AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class SearchAssistProviderTests {
@@ -93,14 +97,29 @@ class SearchAssistProviderTests {
     void rateLimited() {
         FAKE.reply(429, "{\"error\":{\"message\":\"quota\"}}", 0);
         double before = calls("rate_limited");
+        double errorsBefore = calls("error");
 
         AssistResponse response = assist("강릉 연극");
 
         assertThat(response.source()).isEqualTo(Source.FALLBACK);
         assertThat(response.conditions().keyword()).isEqualTo("강릉 연극");
         assertThat(calls("rate_limited")).isEqualTo(before + 1);
-        assertThat(calls("error")).isZero();
+        assertThat(calls("error")).isEqualTo(errorsBefore);
         assertThat(FAKE.requests()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("호출 실패 사유(제공자, 사유, 상태 코드)를 WARN으로 남기고 질의 원문과 키는 남기지 않는다")
+    void logsFailureReason(CapturedOutput output) {
+        FAKE.reply(401, "{\"error\":{\"message\":\"Invalid API Key test-key\"}}", 0);
+
+        assertThat(assist("비밀스러운 질의어").source()).isEqualTo(Source.FALLBACK);
+
+        assertThat(output.getOut())
+                .contains("llm call failed provider=GROQ reason=AUTH status=401")
+                .contains("length=9")
+                .doesNotContain("비밀스러운 질의어")
+                .doesNotContain("test-key");
     }
 
     @Test

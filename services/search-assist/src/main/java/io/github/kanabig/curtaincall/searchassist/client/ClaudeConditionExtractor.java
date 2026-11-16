@@ -80,7 +80,7 @@ public class ClaudeConditionExtractor implements LlmConditionExtractor {
                 .flatMap(block -> block.text().stream())
                 .map(text -> text.text())
                 .findFirst()
-                .orElseThrow(() -> new ExtractionException("llm returned no text", null, false));
+                .orElseThrow(() -> ExtractionException.badResponse("llm returned no text", null));
         return ConditionJson.parse(objectMapper, json);
     }
 

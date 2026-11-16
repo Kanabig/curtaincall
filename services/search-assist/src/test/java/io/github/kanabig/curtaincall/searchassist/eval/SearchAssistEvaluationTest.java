@@ -75,9 +75,9 @@ class SearchAssistEvaluationTest {
     @EnabledIfSystemProperty(named = "searchAssist.evalLlm", matches = "true")
     @DisplayName("SRC-4: 선택한 제공자의 키가 있으면 같은 세트로 실제 모델을 평가한다")
     void llmEvaluation() throws IOException {
-        // SEARCH_ASSIST_EVAL_PROVIDER: claude(기본)|gemini|groq|exaone, SEARCH_ASSIST_EVAL_TIMEOUT: 원래 지연을 보려면 30s처럼 늘린다
+        // SEARCH_ASSIST_EVAL_PROVIDER: gemini(기본)|groq|exaone|claude, SEARCH_ASSIST_EVAL_TIMEOUT: 원래 지연을 보려면 30s처럼 늘린다
         ProviderType type = ProviderType.valueOf(
-                env("SEARCH_ASSIST_EVAL_PROVIDER", "claude").toUpperCase());
+                env("SEARCH_ASSIST_EVAL_PROVIDER", "gemini").toUpperCase());
         Duration timeout = DurationStyle.detectAndParse(env("SEARCH_ASSIST_EVAL_TIMEOUT", "2s"));
         assumeTrue(EvalRunner.hasKey(EvalRunner.loadProperties(), type), type + " API 키가 없다");
 

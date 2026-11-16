@@ -25,6 +25,7 @@ class SearchAssistBreakerTests {
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
+        registry.add("search-assist.llm.provider", () -> "claude");
         registry.add("search-assist.llm.api-key", () -> "test-key");
         registry.add("search-assist.llm.base-url", FAKE::baseUrl);
         registry.add("search-assist.llm.timeout", () -> "500ms");

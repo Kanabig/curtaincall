@@ -11,7 +11,7 @@ search-assist:
   mode: ${SEARCH_ASSIST_MODE:auto}
   llm:
     # claude | gemini | groq | exaone. 선택한 제공자의 키가 없으면 Mock
-    provider: ${SEARCH_ASSIST_LLM_PROVIDER:claude}
+    provider: ${SEARCH_ASSIST_LLM_PROVIDER:gemini}
     # claude 전용(api-key, base-url, model, effort). 나머지 제공자는 아래 providers
     api-key: ${ANTHROPIC_API_KEY:}
     base-url: ${ANTHROPIC_BASE_URL:}

@@ -15,8 +15,8 @@ import java.util.concurrent.atomic.LongAdder;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -82,10 +82,15 @@ public class OpenAiCompatibleConditionExtractor implements LlmConditionExtractor
                     .body(objectMapper.writeValueAsString(request(query, today)))
                     .retrieve()
                     .body(String.class);
-        } catch (HttpClientErrorException.TooManyRequests e) {
-            throw new ExtractionException("llm rate limited", e, false, true);
+        } catch (RestClientResponseException e) {
+            int status = e.getStatusCode().value();
+            throw new ExtractionException("llm call failed", e, reason(status), status);
         } catch (RuntimeException e) {
-            throw new ExtractionException("llm call failed", e, isTimeout(e));
+            throw new ExtractionException(
+                    "llm call failed",
+                    e,
+                    isTimeout(e) ? ExtractionException.Reason.TIMEOUT : ExtractionException.Reason.CONNECTION,
+                    null);
         }
         return parse(response);
     }
@@ -126,15 +131,23 @@ public class OpenAiCompatibleConditionExtractor implements LlmConditionExtractor
             JsonNode message = root.path("choices").path(0).path("message");
             JsonNode text = message.path("content");
             if (!text.isString()) {
-                throw new ExtractionException("llm returned no text", null, false);
+                throw ExtractionException.badResponse("llm returned no text", null);
             }
             content = text.asString();
             inputTokens.add(usage.path("prompt_tokens").asLong(0));
             outputTokens.add(usage.path("completion_tokens").asLong(0));
         } catch (JacksonException e) {
-            throw new ExtractionException("llm returned malformed response", e, false);
+            throw ExtractionException.badResponse("llm returned malformed response", e);
         }
         return ConditionJson.parse(objectMapper, ConditionJson.firstObject(content));
+    }
+
+    private static ExtractionException.Reason reason(int status) {
+        return switch (status) {
+            case 429 -> ExtractionException.Reason.RATE_LIMITED;
+            case 401, 403 -> ExtractionException.Reason.AUTH;
+            default -> ExtractionException.Reason.HTTP_ERROR;
+        };
     }
 
     private static boolean isTimeout(Throwable e) {

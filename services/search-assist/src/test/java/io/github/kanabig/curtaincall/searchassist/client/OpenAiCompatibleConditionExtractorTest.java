@@ -169,6 +169,34 @@ class OpenAiCompatibleConditionExtractorTest {
     }
 
     @Test
+    @DisplayName("401·403은 AUTH, 그 밖의 HTTP 오류는 HTTP_ERROR로 상태 코드와 함께 구분한다")
+    void classifiesHttpStatus() {
+        OpenAiCompatibleConditionExtractor extractor = extractor(ResponseFormat.JSON_SCHEMA);
+
+        for (int status : new int[] {401, 403}) {
+            FAKE.reply(status, "{\"error\":{\"message\":\"Invalid API Key\"}}", 0);
+            assertThatThrownBy(() -> extractor.extract("서울 뮤지컬", TODAY))
+                    .isInstanceOfSatisfying(ExtractionException.class, e -> {
+                        assertThat(e.reason()).isEqualTo(ExtractionException.Reason.AUTH);
+                        assertThat(e.isAuthFailure()).isTrue();
+                        assertThat(e.status()).isEqualTo(status);
+                    });
+        }
+        FAKE.reply(500, "{\"error\":\"boom\"}", 0);
+        assertThatThrownBy(() -> extractor.extract("서울 뮤지컬", TODAY))
+                .isInstanceOfSatisfying(ExtractionException.class, e -> {
+                    assertThat(e.reason()).isEqualTo(ExtractionException.Reason.HTTP_ERROR);
+                    assertThat(e.status()).isEqualTo(500);
+                });
+        FAKE.replyContent("조건을 찾지 못했습니다.");
+        assertThatThrownBy(() -> extractor.extract("서울 뮤지컬", TODAY))
+                .isInstanceOfSatisfying(ExtractionException.class, e -> {
+                    assertThat(e.reason()).isEqualTo(ExtractionException.Reason.BAD_RESPONSE);
+                    assertThat(e.status()).isNull();
+                });
+    }
+
+    @Test
     @DisplayName("타임아웃은 timeout으로 구분하고 재시도하지 않는다")
     void timeout() {
         FAKE.reply(200, FakeChatCompletionsServer.completion(JSON), 3_000);
