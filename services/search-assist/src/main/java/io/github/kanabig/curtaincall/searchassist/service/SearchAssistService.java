@@ -14,8 +14,12 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.HexFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -128,10 +132,9 @@ public class SearchAssistService {
 
     private static String hash(String query) {
         try {
-            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(query.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest, 0, 4);
-        } catch (java.security.NoSuchAlgorithmException e) {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(query.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest, 0, 4);
+        } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
     }
