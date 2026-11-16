@@ -62,7 +62,7 @@ describe('request: 401 → refresh', () => {
   })
 
   it('다른 탭이 이미 회전했으면 refresh를 보내지 않고 저장된 토큰으로 재시도한다', async () => {
-    handler = (url, n) => {
+    handler = (_url, n) => {
       if (n === 1) {
         // 요청이 나간 사이 다른 탭이 새 토큰을 저장했다
         tokenStore.set({ accessToken: 'tab2-access', refreshToken: 'tab2-refresh' })
