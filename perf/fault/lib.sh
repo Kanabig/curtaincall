@@ -415,7 +415,8 @@ scenario_pg() {
 
 # 기대: KOPIS가 5xx·깨진 XML·타임아웃이어도 동기화 실행이 끝까지 기록되고(RUNNING에 머물지 않음), 5xx·타임아웃은 FAILED와 error, 깨진 XML은
 # FAILED·PARTIAL 또는 parse_failures>0이며 호출 수(calls)가 장부에 남는다. 공연 수는 그대로, 공연 조회 200, 대기열·점유·결제 요청이 정상이다.
-# 단독 실행도 되도록 전체 스택을 띄운다(override로 event가 스텁을 본다). 복구(ok) 뒤 동기화가 다시 SUCCESS 또는 PARTIAL로 끝나고 공연 수가 줄지 않는다. 읽기 타임아웃 3초(override)와 재시도를 감안해 실행당 최대 90초 기다린다.
+# 단독 실행도 되도록 전체 스택을 띄운다(override로 event가 스텁을 본다).
+# 복구(ok) 뒤 동기화가 다시 SUCCESS 또는 PARTIAL로 끝나고 공연 수가 줄지 않는다. 읽기 타임아웃 3초(override)와 재시도를 감안해 실행당 최대 90초 기다린다.
 scenario_kopis() {
     FAILED=0
     COMPOSE_FILES=(-f compose.yml -f perf/fault/kopis-override.yml)
