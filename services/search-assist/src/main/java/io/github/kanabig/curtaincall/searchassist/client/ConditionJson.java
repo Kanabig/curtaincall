@@ -11,6 +11,7 @@ final class ConditionJson {
 
     /**
      * 코드 펜스나 앞뒤 설명이 붙어 있어도 첫 JSON 객체 하나만 읽는다. 문자열 안의 중괄호는 세지 않는다. 닫히지 않으면(출력이 잘림) 실패.
+     * 한계: 앞 설명에 '{'가 섞여 있으면 그 지점부터 읽다 실패하고, 호출하는 쪽에서 FALLBACK이 된다.
      */
     static String firstObject(String text) {
         int start = text.indexOf('{');

@@ -1,6 +1,7 @@
 package io.github.kanabig.curtaincall.searchassist.client;
 
 import io.github.kanabig.curtaincall.searchassist.domain.KopisCodes;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,7 +29,7 @@ final class ConditionSchema {
                 """.formatted(String.join(", ", KopisCodes.REGIONS), String.join(", ", KopisCodes.GENRES));
     }
 
-    static String userMessage(String query, java.time.LocalDate today) {
+    static String userMessage(String query, LocalDate today) {
         return "기준일(Asia/Seoul): " + today + "\n검색어: " + query;
     }
 
