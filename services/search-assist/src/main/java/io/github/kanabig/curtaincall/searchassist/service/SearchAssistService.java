@@ -37,6 +37,7 @@ public class SearchAssistService {
     private final Clock clock;
     private final MeterRegistry meters;
     private final Timer llmLatency;
+    private final String provider;
 
     public SearchAssistService(
             LlmConditionExtractor llm,
@@ -47,6 +48,7 @@ public class SearchAssistService {
             Clock clock,
             MeterRegistry meters) {
         this.llm = llm.enabled() ? llm : null;
+        this.provider = properties.llm().provider().name();
         this.mock = mock;
         this.validator = validator;
         this.breaker = llmCircuitBreaker;
@@ -86,9 +88,24 @@ public class SearchAssistService {
             return fallback(query);
         } catch (ExtractionException e) {
             llmCall(e.isRateLimited() ? "rate_limited" : e.isTimeout() ? "timeout" : "error");
+            // 원인 구분용. 입력 원문과 키는 남기지 않는다
+            log.warn(
+                    "llm call failed provider={} reason={} status={} cause={} length={} hash={}",
+                    provider,
+                    e.reason(),
+                    e.status(),
+                    e.getCause() == null ? "-" : e.getCause().getClass().getSimpleName(),
+                    query.length(),
+                    hash(query));
             return fallback(query);
         } catch (RuntimeException e) {
             llmCall("error");
+            log.warn(
+                    "llm call failed provider={} reason=UNEXPECTED cause={} length={} hash={}",
+                    provider,
+                    e.getClass().getSimpleName(),
+                    query.length(),
+                    hash(query));
             return fallback(query);
         } finally {
             sample.stop(llmLatency);

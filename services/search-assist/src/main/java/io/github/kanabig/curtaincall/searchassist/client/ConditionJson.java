@@ -16,7 +16,7 @@ final class ConditionJson {
     static String firstObject(String text) {
         int start = text.indexOf('{');
         if (start < 0) {
-            throw new ExtractionException("llm returned no json object", null, false);
+            throw ExtractionException.badResponse("llm returned no json object", null);
         }
         int depth = 0;
         boolean inString = false;
@@ -39,14 +39,14 @@ final class ConditionJson {
                 return text.substring(start, i + 1);
             }
         }
-        throw new ExtractionException("llm returned unterminated json", null, false);
+        throw ExtractionException.badResponse("llm returned unterminated json", null);
     }
 
     static RawConditions parse(ObjectMapper objectMapper, String json) {
         try {
             JsonNode node = objectMapper.readTree(json);
             if (node == null || !node.isObject()) {
-                throw new ExtractionException("llm returned non-object", null, false);
+                throw ExtractionException.badResponse("llm returned non-object", null);
             }
             return new RawConditions(
                     text(node, "region"),
@@ -56,7 +56,7 @@ final class ConditionJson {
                     integer(node, "maxPrice"),
                     text(node, "keyword"));
         } catch (JacksonException e) {
-            throw new ExtractionException("llm returned malformed json", e, false);
+            throw ExtractionException.badResponse("llm returned malformed json", e);
         }
     }
 
@@ -66,7 +66,7 @@ final class ConditionJson {
             return null;
         }
         if (!value.isString()) {
-            throw new ExtractionException("llm field has wrong type: " + field, null, false);
+            throw ExtractionException.badResponse("llm field has wrong type: " + field, null);
         }
         return value.asString();
     }
@@ -77,7 +77,7 @@ final class ConditionJson {
             return null;
         }
         if (!value.isIntegralNumber() || !value.canConvertToLong()) {
-            throw new ExtractionException("llm field has wrong type: " + field, null, false);
+            throw ExtractionException.badResponse("llm field has wrong type: " + field, null);
         }
         return value.asLong();
     }
