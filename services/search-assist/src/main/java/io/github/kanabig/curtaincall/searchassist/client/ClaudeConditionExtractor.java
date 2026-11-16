@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.LongAdder;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -37,6 +38,11 @@ public class ClaudeConditionExtractor implements ConditionExtractor {
     private final String model;
     private final OutputConfig.Effort effort;
     private final Map<String, JsonValue> schema;
+    private final LongAdder inputTokens = new LongAdder();
+    private final LongAdder outputTokens = new LongAdder();
+
+    /** 지금까지 성공한 호출이 쓴 토큰 합계. 평가 실행기가 비용을 계산하는 데 쓰며 API 응답에는 나가지 않는다. */
+    public record Usage(long inputTokens, long outputTokens) {}
 
     /**
      * 키가 있고 mode가 mock이 아닐 때만 클라이언트를 만든다. 재시도는 지연만 늘리고 실패해도 키워드 검색이라는 대안이 있으므로 0회, 타임아웃은 요청 전체에 건다. 키는 설정에서만
@@ -66,6 +72,10 @@ public class ClaudeConditionExtractor implements ConditionExtractor {
         }
     }
 
+    public Usage usage() {
+        return new Usage(inputTokens.sum(), outputTokens.sum());
+    }
+
     /** 호출할 수 있는 상태(키가 있고 mock으로 고정되지 않음). */
     public boolean enabled() {
         return client != null;
@@ -79,6 +89,8 @@ public class ClaudeConditionExtractor implements ConditionExtractor {
         } catch (RuntimeException e) {
             throw new ExtractionException("llm call failed", e, isTimeout(e));
         }
+        inputTokens.add(message.usage().inputTokens());
+        outputTokens.add(message.usage().outputTokens());
         String json = message.content().stream()
                 .flatMap(block -> block.text().stream())
                 .map(text -> text.text())

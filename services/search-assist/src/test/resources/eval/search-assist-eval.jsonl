@@ -1,4 +1,4 @@
-{"meta": {"today": "2026-11-16", "note": "기준일은 월요일. 이번 주말=토~일, 다음 주=다음 월~일, 이번 주=오늘~일, N월=그 달 전체, N만원대=N만9천원 이하. 기대값은 사람이 문장에서 기대하는 조건이며 추출기 구현과 무관하게 정했다."}}
+{"meta": {"today": "2026-11-16", "note": "기준일은 월요일. 이번 주말=토~일, 다음 주=다음 월~일, 이번 주=오늘~일, N월=그 달 전체, maxPrice는 포함 상한이라 이하=N, 미만=N-1, N만원대=N만9999원. keyword는 다른 필드로 표현되지 않은 공연명·장소·출연자·지원하지 않는 장르 단어이고, 해당 단어가 없으면 null. 기대값은 사람이 문장에서 기대하는 조건이며 추출기 구현과 무관하게 정했다."}}
 {"query": "서울에서 볼 만한 공연 있어?", "expected": {"region": "서울특별시", "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": null, "keyword": null}, "category": "normal"}
 {"query": "부산에서 하는 공연", "expected": {"region": "부산광역시", "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": null, "keyword": null}, "category": "normal"}
 {"query": "대구에서 하는 공연 좀 찾아줘", "expected": {"region": "대구광역시", "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": null, "keyword": null}, "category": "normal"}
@@ -39,7 +39,7 @@
 {"query": "12월 24일 공연", "expected": {"region": null, "dateFrom": "2026-12-24", "dateTo": "2026-12-24", "genre": null, "maxPrice": null, "keyword": null}, "category": "normal"}
 {"query": "5만원 이하 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 50000, "keyword": null}, "category": "normal"}
 {"query": "3만원 이하로 볼 수 있는 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 30000, "keyword": null}, "category": "normal"}
-{"query": "10만원 미만 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 100000, "keyword": null}, "category": "normal"}
+{"query": "10만원 미만 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 99999, "keyword": null}, "category": "normal"}
 {"query": "7만원 이하", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 70000, "keyword": null}, "category": "normal"}
 {"query": "2만원 이하 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 20000, "keyword": null}, "category": "normal"}
 {"query": "15만원 이하로 볼 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 150000, "keyword": null}, "category": "normal"}
@@ -72,7 +72,7 @@
 {"query": "이번 주 공연", "expected": {"region": null, "dateFrom": "2026-11-16", "dateTo": "2026-11-22", "genre": null, "maxPrice": null, "keyword": null}, "category": "ambiguous"}
 {"query": "연말 공연", "expected": {"region": null, "dateFrom": "2026-12-20", "dateTo": "2026-12-31", "genre": null, "maxPrice": null, "keyword": null}, "category": "ambiguous"}
 {"query": "싼 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": null, "keyword": null}, "category": "ambiguous"}
-{"query": "3만원대 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 39000, "keyword": null}, "category": "ambiguous"}
+{"query": "3만원대 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": 39999, "keyword": null}, "category": "ambiguous"}
 {"query": "비싸지 않은 뮤지컬", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": "뮤지컬", "maxPrice": null, "keyword": null}, "category": "ambiguous"}
 {"query": "뮤지컬 말고 연극", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": "연극", "maxPrice": null, "keyword": null}, "category": "ambiguous"}
 {"query": "서울이나 경기 공연", "expected": {"region": null, "dateFrom": null, "dateTo": null, "genre": null, "maxPrice": null, "keyword": null}, "category": "ambiguous"}

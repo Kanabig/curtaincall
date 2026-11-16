@@ -36,28 +36,56 @@ public final class EvalRunner {
 
     public record Outcome(EvalCase evalCase, AssistResponse response, long nanos) {}
 
-    public record Run(String label, EvalSet set, List<Outcome> outcomes) {}
+    /** usage가 null이면 토큰을 쓰지 않는 경로(Mock). 단가는 100만 토큰당 달러이고 모르면 null. */
+    public record Run(
+            String label,
+            EvalSet set,
+            List<Outcome> outcomes,
+            ClaudeConditionExtractor.Usage usage,
+            Double inputPrice,
+            Double outputPrice) {}
 
     private EvalRunner() {}
 
     public static Run runMock(EvalSet set) {
-        return run("Mock", set, service(set, new SearchAssistProperties(Mode.MOCK, llm("", ""), breaker())));
+        SearchAssistProperties props = new SearchAssistProperties(Mode.MOCK, llm("", ""), breaker());
+        return run("Mock", set, service(set, props, claude(props)), null, null, null);
     }
 
     /** 키는 호출하는 쪽이 환경변수에서 읽어 넘긴다. 모델은 빈 값이면 설정 기본값. */
     public static Run runLlm(EvalSet set, String apiKey, String model) {
         SearchAssistProperties props = new SearchAssistProperties(Mode.LLM, llm(apiKey, model), breaker());
-        return run("LLM " + props.llm().model(), set, service(set, props));
+        ClaudeConditionExtractor claude = claude(props);
+        // 단가는 모델마다 달라 기본값(haiku-5-5)이 아니면 환경변수로 받는다
+        boolean haiku = props.llm().model().equals("claude-haiku-5-5");
+        Double in = price("SEARCH_ASSIST_EVAL_INPUT_PRICE", haiku ? 0.10 : null);
+        Double out = price("SEARCH_ASSIST_EVAL_OUTPUT_PRICE", haiku ? 0.50 : null);
+        return run("LLM " + props.llm().model(), set, service(set, props, claude), claude, in, out);
     }
 
-    private static Run run(String label, EvalSet set, SearchAssistService service) {
+    private static Double price(String env, Double fallback) {
+        String v = System.getenv(env);
+        return v == null || v.isBlank() ? fallback : Double.valueOf(v);
+    }
+
+    private static ClaudeConditionExtractor claude(SearchAssistProperties props) {
+        return new ClaudeConditionExtractor(props, JsonMapper.builder().build());
+    }
+
+    private static Run run(
+            String label,
+            EvalSet set,
+            SearchAssistService service,
+            ClaudeConditionExtractor claude,
+            Double inputPrice,
+            Double outputPrice) {
         List<Outcome> outcomes = new ArrayList<>();
         for (EvalCase c : set.cases()) {
             long start = System.nanoTime();
             AssistResponse response = service.assist(c.query());
             outcomes.add(new Outcome(c, response, System.nanoTime() - start));
         }
-        return new Run(label, set, outcomes);
+        return new Run(label, set, outcomes, claude == null ? null : claude.usage(), inputPrice, outputPrice);
     }
 
     private static Llm llm(String apiKey, String model) {
@@ -69,7 +97,8 @@ public final class EvalRunner {
         return new Breaker(20, 10, 50f, Duration.ofSeconds(30));
     }
 
-    private static SearchAssistService service(EvalSet set, SearchAssistProperties props) {
+    private static SearchAssistService service(
+            EvalSet set, SearchAssistProperties props, ClaudeConditionExtractor claude) {
         Clock clock = Clock.fixed(
                 ZonedDateTime.of(set.today().atTime(12, 0), ZoneId.of("Asia/Seoul"))
                         .toInstant(),
@@ -82,7 +111,7 @@ public final class EvalRunner {
                         .minimumNumberOfCalls(1000)
                         .build());
         return new SearchAssistService(
-                new ClaudeConditionExtractor(props, JsonMapper.builder().build()),
+                claude,
                 new MockConditionExtractor(),
                 new ConditionValidator(),
                 breaker,
@@ -180,6 +209,8 @@ public final class EvalRunner {
                 "%n### 지연%n%n| p50 | p95 | max |%n|---|---|---|%n| %s | %s | %s |%n",
                 ms(percentile(sorted, 50)), ms(percentile(sorted, 95)), ms(sorted[sorted.length - 1])));
 
+        sb.append(tokens(run, all.size()));
+
         List<Outcome> adversarial = all.stream()
                 .filter(o -> o.evalCase().category().equals("adversarial"))
                 .toList();
@@ -207,6 +238,26 @@ public final class EvalRunner {
             }
         }
         return sb.toString();
+    }
+
+    static String tokens(Run run, int cases) {
+        var u = run.usage();
+        String header = "%n### 토큰·비용%n%n| 입력 토큰 | 출력 토큰 | 문항당 입력 | 문항당 출력 | 추정 비용 |%n|---|---|---|---|---|%n";
+        if (u == null) {
+            return String.format(header + "| 0 | 0 | 0 | 0 | - |%n");
+        }
+        String cost = run.inputPrice() == null || run.outputPrice() == null
+                ? "-"
+                : String.format(
+                        "$%.5f",
+                        (u.inputTokens() * run.inputPrice() + u.outputTokens() * run.outputPrice()) / 1_000_000.0);
+        return String.format(
+                header + "| %d | %d | %.1f | %.1f | %s |%n",
+                u.inputTokens(),
+                u.outputTokens(),
+                (double) u.inputTokens() / cases,
+                (double) u.outputTokens() / cases,
+                cost);
     }
 
     private static void row(StringBuilder sb, String name, List<Outcome> rows) {
