@@ -24,8 +24,9 @@ dependencyManagement {
         mavenBom 'org.springframework.boot:spring-boot-dependencies:4.1.2'
     }
     dependencies {
-        // kafka-clients가 끌어오는 lz4-java의 취약 버전을 수정판으로 올린다
+        // kafka-clients가 끌어오는 압축 라이브러리의 취약 버전을 수정판으로 올린다
         dependency 'at.yawk.lz4:lz4-java:1.11.4'
+        dependency 'org.xerial.snappy:snappy-java:1.1.10.9'
     }
 }
 
