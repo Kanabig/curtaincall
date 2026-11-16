@@ -80,9 +80,15 @@ function RegisterSection() {
 function SessionSection() {
   const [perfId, setPerfId] = useState('')
   const [perf, setPerf] = useState<PerformanceDetail | null>(null)
+  // 렌더 중에 시계를 읽지 않도록 불러온 시점의 시각을 들고 있는다
+  const [now, setNow] = useState(0)
   const { busy, run, note } = useAction()
 
-  const load = (id: string) => api.performance(id).then(setPerf)
+  const load = (id: string) =>
+    api.performance(id).then((d) => {
+      setNow(Date.now())
+      setPerf(d)
+    })
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -109,11 +115,12 @@ function SessionSection() {
           <h3>{perf.name}</h3>
           <ul className="sessions">
             {perf.sessions.map((s) => (
-              <SessionRow key={s.id} s={s} onChanged={reload} />
+              <SessionRow key={s.id} s={s} now={now} onChanged={reload} />
             ))}
           </ul>
           <h3>회차 추가</h3>
           <SessionForm
+            now={now}
             submitLabel="회차 등록"
             onSubmit={async (body) => {
               await api.admin.createSession(perf.id, body)
@@ -127,10 +134,10 @@ function SessionSection() {
   )
 }
 
-function SessionRow({ s, onChanged }: { s: SessionItem; onChanged: () => Promise<void> }) {
+function SessionRow({ s, now, onChanged }: { s: SessionItem; now: number; onChanged: () => Promise<void> }) {
   const [editing, setEditing] = useState(false)
   const { busy, run, note } = useAction()
-  const opened = new Date(s.saleOpenAt).getTime() <= Date.now()
+  const opened = new Date(s.saleOpenAt).getTime() <= now
   return (
     <li>
       <div>
@@ -156,6 +163,7 @@ function SessionRow({ s, onChanged }: { s: SessionItem; onChanged: () => Promise
       {editing && (
         <SessionForm
           session={s}
+          now={now}
           submitLabel="저장"
           onSubmit={async (body) => {
             await api.admin.updateSession(s.id, body)
@@ -170,14 +178,16 @@ function SessionRow({ s, onChanged }: { s: SessionItem; onChanged: () => Promise
 
 function SessionForm({
   session,
+  now,
   submitLabel,
   onSubmit,
 }: {
   session?: SessionItem
+  now: number
   submitLabel: string
   onSubmit: (body: SessionBody) => Promise<string>
 }) {
-  const locked = session ? isEditLocked(session.saleOpenAt) : false
+  const locked = session ? isEditLocked(session.saleOpenAt, now) : false
   const [startAt, setStartAt] = useState(session ? toLocalKst(session.startAt) : '')
   const [saleOpenAt, setSaleOpenAt] = useState(session ? toLocalKst(session.saleOpenAt) : '')
   const [prices, setPrices] = useState(session ? pricesToText(session.prices) : 'VIP 150000\nR 110000\nS 80000\nA 50000')
@@ -199,6 +209,7 @@ function SessionForm({
       }
       if (rate !== '') body.admissionPerSecond = Number(rate)
       if (maxActive !== '') body.maxActiveUsers = Number(maxActive)
+      if (Object.keys(body).length === 0) throw new InputError('수정할 값을 입력해 주세요.')
       return onSubmit(body as SessionBody)
     })
   }
