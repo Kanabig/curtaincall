@@ -1,4 +1,7 @@
 spring:
+  jackson:
+    deserialization:
+      fail-on-null-for-primitives: false
   application:
     name: mock-pg
   mvc:

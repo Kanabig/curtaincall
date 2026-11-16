@@ -15,6 +15,7 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-actuator'
     testImplementation 'io.micrometer:micrometer-registry-prometheus'
     testImplementation 'org.flywaydb:flyway-core'
+    testImplementation 'org.springframework.boot:spring-boot-flyway'
     testImplementation 'org.flywaydb:flyway-mysql'
     testRuntimeOnly 'com.mysql:mysql-connector-j'
 }

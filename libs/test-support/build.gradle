@@ -6,6 +6,7 @@ dependencies {
     api 'org.springframework.boot:spring-boot-starter-test'
     api 'org.springframework.boot:spring-boot-testcontainers'
     api 'org.springframework.boot:spring-boot-resttestclient'
+    api 'org.springframework.boot:spring-boot-webtestclient'
     api 'org.springframework.boot:spring-boot-webmvc-test'
     api 'org.springframework.boot:spring-boot-micrometer-metrics-test'
     api 'org.springframework.boot:spring-boot-micrometer-metrics'
@@ -19,7 +20,9 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-jdbc'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-redis'
     testImplementation 'org.springframework.kafka:spring-kafka'
+    testImplementation 'org.springframework.boot:spring-boot-kafka'
     testImplementation 'org.flywaydb:flyway-core'
+    testImplementation 'org.springframework.boot:spring-boot-flyway'
     testImplementation 'org.flywaydb:flyway-mysql'
     testRuntimeOnly 'com.mysql:mysql-connector-j'
 }

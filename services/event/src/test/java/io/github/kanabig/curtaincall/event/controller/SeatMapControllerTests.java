@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -34,6 +35,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.databind.JsonNode;
 
 /** EVT-9, EVT-10. 좌석 배치도 조회와 캐시. */
+@AutoConfigureTestRestTemplate
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -159,10 +161,13 @@ class SeatMapControllerTests extends EventIntegrationTest {
     @DisplayName("Accept-Encoding: gzip이면 압축 본문과 인코딩별 ETag로 응답하고, 풀면 평문과 같다")
     void gzipVariant() throws Exception {
         String path = "/api/v1/sessions/" + sessionId + "/seat-map";
-        HttpHeaders plainHeaders = new HttpHeaders();
-        ResponseEntity<byte[]> plain =
-                rest.exchange(path, HttpMethod.GET, new HttpEntity<>(plainHeaders), byte[].class);
         java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+        // TestRestTemplate의 요청 팩토리는 Accept-Encoding을 자동으로 붙이므로 압축 없는 요청은 JDK 클라이언트로 보낸다
+        java.net.http.HttpResponse<byte[]> plain = client.send(
+                java.net.http.HttpRequest.newBuilder(
+                                rest.getRestTemplate().getUriTemplateHandler().expand(path))
+                        .build(),
+                java.net.http.HttpResponse.BodyHandlers.ofByteArray());
         java.net.http.HttpResponse<byte[]> gz = client.send(
                 java.net.http.HttpRequest.newBuilder(
                                 rest.getRestTemplate().getUriTemplateHandler().expand(path))
@@ -173,10 +178,10 @@ class SeatMapControllerTests extends EventIntegrationTest {
         assertThat(gz.headers().firstValue("Content-Encoding")).hasValue("gzip");
         assertThat(gz.headers().firstValue("Vary")).hasValue("Accept-Encoding");
         String gzEtag = gz.headers().firstValue("ETag").orElseThrow();
-        assertThat(gzEtag).isNotEqualTo(plain.getHeaders().getETag());
-        assertThat(gz.body().length).isLessThan(plain.getBody().length);
+        assertThat(gzEtag).isNotEqualTo(plain.headers().firstValue("ETag").orElseThrow());
+        assertThat(gz.body().length).isLessThan(plain.body().length);
         try (var in = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(gz.body()))) {
-            assertThat(in.readAllBytes()).isEqualTo(plain.getBody());
+            assertThat(in.readAllBytes()).isEqualTo(plain.body());
         }
         assertThat(client.send(
                                 java.net.http.HttpRequest.newBuilder(rest.getRestTemplate()

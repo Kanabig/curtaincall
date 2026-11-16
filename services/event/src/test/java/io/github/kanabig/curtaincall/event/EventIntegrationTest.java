@@ -21,6 +21,7 @@ public abstract class EventIntegrationTest {
         jdbc.update("DELETE FROM hall_seat");
         jdbc.update("DELETE FROM hall_layout");
         jdbc.update("DELETE FROM hall");
+        jdbc.update("DELETE FROM venue_fetch_failure");
         jdbc.update("DELETE FROM venue");
         jdbc.update("DELETE FROM performance");
         jdbc.update("DELETE FROM kopis_call_log");
