@@ -218,7 +218,10 @@ public class Payment {
         this.nextInquiryAt = nextAt.isAfter(deadline) ? null : nextAt;
     }
 
-    /** 로컬에서 거절돼 PG에 가지 못했다. 시도 횟수와 오류·404 기록은 그대로 두고 다음 조회만 앞당겨 예약한다. */
+    /**
+     * 로컬에서 거절돼 PG에 가지 못했다. 시도 횟수와 오류·404 기록은 그대로 두고 다음 조회만 앞당겨 예약한다. 제한 시간(deadline)은 보지 않는다. 거절이 풀려 PG까지 간 첫 조회가 만료를
+     * 판정한다.
+     */
     public void inquiryRejected(Instant now, Instant nextAt) {
         this.updatedAt = now;
         this.nextInquiryAt = nextAt;
