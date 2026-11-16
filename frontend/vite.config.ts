@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 // 개발 서버는 /api를 gateway로 넘긴다
 export default defineConfig({
@@ -8,5 +8,6 @@ export default defineConfig({
     port: 5173,
     proxy: { '/api': process.env.GATEWAY_URL ?? 'http://localhost:8080' },
   },
-  test: { environment: 'node' },
+  // e2e는 Playwright가 따로 돌린다
+  test: { environment: 'node', exclude: [...configDefaults.exclude, 'e2e/**'] },
 })
