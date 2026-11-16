@@ -178,9 +178,9 @@ class AuthIntegrationTests {
                 .isNotEqualTo(first.get("refreshToken").asText());
         assertThat(reuse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(reuse.getBody().get("code").asText()).isEqualTo("INVALID_REFRESH_TOKEN");
-        // 재사용이 감지되면 계열이 폐기돼 새 토큰도 쓸 수 없다(reuseRevokesFamily 참고)
+        // 회전 직후의 재사용은 유예 안이라 계열이 남는다(탭 동시 회전). 유예 밖은 reuseRevokesFamily 참고
         assertThat(refresh(second.getBody().get("refreshToken").asText()).getStatusCode())
-                .isEqualTo(HttpStatus.UNAUTHORIZED);
+                .isEqualTo(HttpStatus.OK);
     }
 
     @Test
@@ -195,9 +195,10 @@ class AuthIntegrationTests {
     }
 
     @RepeatedTest(5)
-    @DisplayName("[USR-3] 같은 토큰으로 동시에 요청하면 재사용으로 판정돼 이긴 요청의 새 토큰도 폐기된다")
-    void concurrentRefreshRevokesWinnersToken() throws Exception {
+    @DisplayName("[USR-3] 같은 토큰으로 동시에 요청하면(유예 안) 하나만 성공하고 그 새 토큰은 계속 쓸 수 있다")
+    void concurrentRefreshKeepsWinnersToken() throws Exception {
         String token = signUpAndLogin().get("refreshToken").asText();
+        double reuseBefore = reuseCount();
 
         List<ResponseEntity<JsonNode>> results = runConcurrently(6, () -> refresh(token));
 
@@ -208,7 +209,25 @@ class AuthIntegrationTests {
                 .getBody()
                 .get("refreshToken")
                 .asText();
-        assertThat(refresh(winnerToken).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(refresh(winnerToken).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(reuseCount()).isEqualTo(reuseBefore);
+    }
+
+    @Test
+    @DisplayName("[USR-3] 회전 직후(유예 안) 같은 토큰이 다시 오면 401이지만 계열은 폐기되지 않고 유예 지표만 오른다")
+    void reuseWithinGraceKeepsFamily() {
+        String first = signUpAndLogin().get("refreshToken").asText();
+        String second = refresh(first).getBody().get("refreshToken").asText();
+        double graceBefore = counter("user.refresh.reuse.grace");
+        double reuseBefore = reuseCount();
+
+        ResponseEntity<JsonNode> again = refresh(first);
+
+        assertThat(again.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(again.getBody().get("code").asText()).isEqualTo("INVALID_REFRESH_TOKEN");
+        assertThat(counter("user.refresh.reuse.grace")).isEqualTo(graceBefore + 1);
+        assertThat(reuseCount()).isEqualTo(reuseBefore);
+        assertThat(refresh(second).getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
@@ -219,13 +238,16 @@ class AuthIntegrationTests {
         String third = refresh(second).getBody().get("refreshToken").asText();
         double before = reuseCount();
 
-        // 두 단계 전 토큰을 공격자가 먼저 썼다고 본다
+        // 두 단계 전 토큰을 유예 시간이 한참 지난 뒤 공격자가 썼다고 본다
+        ageUsedMarker(first);
+        double graceBefore = counter("user.refresh.reuse.grace");
         ResponseEntity<JsonNode> reuse = refresh(first);
 
         assertThat(reuse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(reuse.getBody().get("code").asText()).isEqualTo("INVALID_REFRESH_TOKEN");
         assertThat(redis.hasKey("user:refresh:" + sha256(third))).isFalse();
         assertThat(reuseCount()).isEqualTo(before + 1);
+        assertThat(counter("user.refresh.reuse.grace")).isEqualTo(graceBefore);
         assertThat(refresh(third).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(refresh(second).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
@@ -238,8 +260,9 @@ class AuthIntegrationTests {
         String a = login(email, PASSWORD).getBody().get("refreshToken").asText();
         String b = login(email, PASSWORD).getBody().get("refreshToken").asText();
         refresh(a);
+        ageUsedMarker(a);
 
-        refresh(a);
+        assertThat(refresh(a).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
 
         assertThat(refresh(b).getStatusCode()).isEqualTo(HttpStatus.OK);
     }
@@ -257,6 +280,7 @@ class AuthIntegrationTests {
 
         assertThat(rotated.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(redisValueOf(next)).startsWith(userId + ":");
+        ageUsedMarker(legacy);
         assertThat(refresh(legacy).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(refresh(next).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
@@ -395,8 +419,21 @@ class AuthIntegrationTests {
     }
 
     private double reuseCount() {
-        var counter = meters.find("user.refresh.reuse.detected").counter();
+        return counter("user.refresh.reuse.detected");
+    }
+
+    private double counter(String name) {
+        var counter = meters.find(name).counter();
         return counter == null ? 0 : counter.count();
+    }
+
+    /** 흔적의 회전 시각을 한 시간 전으로 돌려 유예 시간이 지난 상태를 만든다(sleep 없이). */
+    private void ageUsedMarker(String token) {
+        String key = "user:refresh:used:" + sha256(token);
+        String value = redis.opsForValue().get(key);
+        String family = value.split(":")[0];
+        long aged = System.currentTimeMillis() - 3_600_000L;
+        redis.opsForValue().set(key, family + ":" + aged, java.time.Duration.ofDays(14));
     }
 
     private ResponseEntity<JsonNode> refresh(String token) {

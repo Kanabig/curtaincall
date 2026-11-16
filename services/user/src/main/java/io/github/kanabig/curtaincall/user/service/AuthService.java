@@ -66,6 +66,11 @@ public class AuthService {
                 meters.counter(MetricNames.USER_REFRESH_REUSE_DETECTED).increment();
                 throw new BusinessException(UserErrorCode.INVALID_REFRESH_TOKEN);
             }
+            case GRACE -> {
+                // 같은 브라우저의 탭이 동시에 회전한 경우로 본다. 계열은 그대로 두고 이 요청만 거절한다
+                meters.counter(MetricNames.USER_REFRESH_REUSE_GRACE).increment();
+                throw new BusinessException(UserErrorCode.INVALID_REFRESH_TOKEN);
+            }
             case UNKNOWN -> throw new BusinessException(UserErrorCode.INVALID_REFRESH_TOKEN);
             default -> {}
         }

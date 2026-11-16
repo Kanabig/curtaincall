@@ -19,12 +19,12 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  *   <li>{@code user:refresh:<hash>} = {@code userId:familyId}. 지금 쓸 수 있는 토큰. 계열 도입 전 토큰은 값이 {@code userId}뿐이다.
- *   <li>{@code user:refresh:used:<hash>} = {@code familyId}. 회전으로 폐기된 토큰의 흔적. 재사용을 알아보는 용도다.
+ *   <li>{@code user:refresh:used:<hash>} = {@code familyId:회전시각(ms, Redis TIME)}. 회전으로 폐기된 토큰의 흔적. 재사용을 알아보는 용도다.
  *   <li>{@code user:refresh:family:<familyId>} = 계열의 최신 토큰 해시. 계열을 폐기할 때 살아 있는 토큰을 찾는 용도다.
  * </ul>
  *
  * 회전(조회, 폐기, 흔적, 새 토큰 등록)과 재사용 판정·계열 폐기는 각각 Lua 스크립트 하나로 실행해 Redis 안에서 원자적이다. 같은 토큰으로 동시에 요청하면 하나만 새 토큰을 받고, 나머지는 재사용으로
- * 판정돼 계열 전체(방금 발급된 토큰 포함)가 폐기된다.
+ * 판정되지만, 회전 직후 유예 시간 안이면 계열은 두고 그 요청만 거절한다(탭 두 개가 동시에 회전하는 경우). 유예가 지난 뒤의 재사용은 계열 전체를 폐기한다.
  */
 @Component
 public class RefreshTokenStore {
@@ -33,7 +33,7 @@ public class RefreshTokenStore {
     static final String USED_PREFIX = "user:refresh:used:";
     static final String FAMILY_PREFIX = "user:refresh:family:";
 
-    /** KEYS: 제시된 토큰, 흔적, 새 토큰. ARGV: TTL 초, 새 계열 ID(계열이 없는 토큰용), 계열 키 접두사, 새 토큰 해시, 토큰 키 접두사. */
+    /** KEYS: 제시된 토큰, 흔적, 새 토큰. ARGV: TTL 초, 새 계열 ID(계열이 없는 토큰용), 계열 키 접두사, 새 토큰 해시, 토큰 키 접두사, 유예 밀리초. 시각은 Redis TIME. */
     private static final String ROTATE_SCRIPT = """
             local value = redis.call('GETDEL', KEYS[1])
             if value then
@@ -44,13 +44,27 @@ public class RefreshTokenStore {
                 userId = string.sub(value, 1, sep - 1)
                 family = string.sub(value, sep + 1)
               end
-              redis.call('SET', KEYS[2], family, 'EX', ARGV[1])
+              local t = redis.call('TIME')
+              local now = t[1] * 1000 + math.floor(t[2] / 1000)
+              redis.call('SET', KEYS[2], family .. ':' .. now, 'EX', ARGV[1])
               redis.call('SET', KEYS[3], userId .. ':' .. family, 'EX', ARGV[1])
               redis.call('SET', ARGV[3] .. family, ARGV[4], 'EX', ARGV[1])
               return {'ROTATED', userId}
             end
-            local family = redis.call('GET', KEYS[2])
-            if family then
+            local used = redis.call('GET', KEYS[2])
+            if used then
+              local sep = string.find(used, ':', 1, true)
+              local family = used
+              local rotatedAt = nil
+              if sep then
+                family = string.sub(used, 1, sep - 1)
+                rotatedAt = tonumber(string.sub(used, sep + 1))
+              end
+              local t = redis.call('TIME')
+              local now = t[1] * 1000 + math.floor(t[2] / 1000)
+              if rotatedAt and now - rotatedAt <= tonumber(ARGV[6]) then
+                return {'GRACE', family}
+              end
               local current = redis.call('GET', ARGV[3] .. family)
               if current then redis.call('DEL', ARGV[5] .. current) end
               redis.call('DEL', ARGV[3] .. family)
@@ -68,7 +82,11 @@ public class RefreshTokenStore {
               if sep then family = string.sub(value, sep + 1) end
               redis.call('DEL', KEYS[1])
             else
-              family = redis.call('GET', KEYS[2])
+              local used = redis.call('GET', KEYS[2])
+              if used then
+                local sep = string.find(used, ':', 1, true)
+                family = sep and string.sub(used, 1, sep - 1) or used
+              end
             end
             if family then
               local current = redis.call('GET', ARGV[1] .. family)
@@ -83,7 +101,10 @@ public class RefreshTokenStore {
 
         public enum Outcome {
             ROTATED,
+            /** 회전된 지 오래된 토큰이 다시 왔다. 계열이 폐기됐다. */
             REUSED,
+            /** 회전된 직후(유예 시간 안)에 다시 왔다. 계열은 그대로이고 이 요청만 거절한다. */
+            GRACE,
             UNKNOWN
         }
     }
@@ -120,12 +141,14 @@ public class RefreshTokenStore {
                 newToken(),
                 FAMILY_PREFIX,
                 newHash,
-                KEY_PREFIX);
+                KEY_PREFIX,
+                String.valueOf(properties.refreshReuseGrace().toMillis()));
         String outcome = String.valueOf(result.get(0));
         return switch (outcome) {
             case "ROTATED" ->
                 new Rotation(Rotation.Outcome.ROTATED, Long.valueOf(String.valueOf(result.get(1))), newToken, null);
             case "REUSED" -> new Rotation(Rotation.Outcome.REUSED, null, null, String.valueOf(result.get(1)));
+            case "GRACE" -> new Rotation(Rotation.Outcome.GRACE, null, null, String.valueOf(result.get(1)));
             default -> new Rotation(Rotation.Outcome.UNKNOWN, null, null, null);
         };
     }

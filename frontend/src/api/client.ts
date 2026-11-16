@@ -109,19 +109,24 @@ interface Options {
   headers?: Record<string, string>
 }
 
-// 동시에 여러 요청이 401을 받아도 refresh는 한 번만 보낸다(refresh token은 한 번 쓰면 폐기된다)
+// 동시에 여러 요청이 401을 받아도 refresh는 한 번만 보낸다(refresh token은 한 번 쓰면 폐기된다).
+// 토큰은 탭이 공유하는 localStorage에 있어서 다른 탭이 먼저 회전했을 수 있다. 보내기 전에 저장값을 다시 읽어
+// 이미 바뀌었으면 refresh를 보내지 않고 저장된 토큰으로 재시도하고, 실패해도 그 사이 저장값이 바뀌었으면 지우지 않는다.
 let refreshing: Promise<boolean> | null = null
 
-function refreshTokens(): Promise<boolean> {
+function refreshTokens(sent: Tokens | null): Promise<boolean> {
   refreshing ??= (async () => {
     const current = tokenStore.get()
     if (!current) return false
+    if (sent && current.refreshToken !== sent.refreshToken) return true
     const res = await fetch('/api/v1/auth/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: current.refreshToken }),
     })
     if (!res.ok) {
+      const latest = tokenStore.get()
+      if (latest && latest.refreshToken !== current.refreshToken) return true
       tokenStore.set(null)
       return false
     }
@@ -135,10 +140,12 @@ function refreshTokens(): Promise<boolean> {
 }
 
 export async function request<T>(path: string, opts: Options = {}): Promise<T> {
+  let sent: Tokens | null = null
   const send = () => {
     const headers: Record<string, string> = { ...opts.headers }
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
     const tokens = tokenStore.get()
+    sent = tokens
     if (opts.auth && tokens) headers.Authorization = `Bearer ${tokens.accessToken}`
     return fetch(`/api/v1${path}`, {
       method: opts.method ?? 'GET',
@@ -147,7 +154,7 @@ export async function request<T>(path: string, opts: Options = {}): Promise<T> {
     })
   }
   let res = await send()
-  if (res.status === 401 && opts.auth && (await refreshTokens())) res = await send()
+  if (res.status === 401 && opts.auth && (await refreshTokens(sent))) res = await send()
   if (!res.ok) throw await parseError(res)
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T)
 }

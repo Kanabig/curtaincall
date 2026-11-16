@@ -61,6 +61,39 @@ describe('request: 401 → refresh', () => {
     expect(calls.filter((c) => c.url === '/api/v1/users/me')).toHaveLength(1)
   })
 
+  it('다른 탭이 이미 회전했으면 refresh를 보내지 않고 저장된 토큰으로 재시도한다', async () => {
+    handler = (url, n) => {
+      if (n === 1) {
+        // 요청이 나간 사이 다른 탭이 새 토큰을 저장했다
+        tokenStore.set({ accessToken: 'tab2-access', refreshToken: 'tab2-refresh' })
+        return json(401, { code: 'UNAUTHORIZED' })
+      }
+      return json(200, { ok: true })
+    }
+
+    await expect(request('/users/me', { auth: true })).resolves.toEqual({ ok: true })
+
+    expect(calls.map((c) => c.url)).toEqual(['/api/v1/users/me', '/api/v1/users/me'])
+    expect(calls[1].auth).toBe('Bearer tab2-access')
+    expect(tokenStore.get()).toEqual({ accessToken: 'tab2-access', refreshToken: 'tab2-refresh' })
+  })
+
+  it('refresh가 401이어도 그 사이 다른 탭이 새 토큰을 저장했으면 지우지 않고 저장값으로 재시도한다', async () => {
+    handler = (url, n) => {
+      if (url === '/api/v1/auth/refresh') {
+        tokenStore.set({ accessToken: 'tab2-access', refreshToken: 'tab2-refresh' })
+        return json(401, { code: 'INVALID_REFRESH_TOKEN' })
+      }
+      return n === 1 ? json(401, { code: 'UNAUTHORIZED' }) : json(200, { ok: true })
+    }
+
+    await expect(request('/users/me', { auth: true })).resolves.toEqual({ ok: true })
+
+    expect(calls.map((c) => c.url)).toEqual(['/api/v1/users/me', '/api/v1/auth/refresh', '/api/v1/users/me'])
+    expect(calls[2].auth).toBe('Bearer tab2-access')
+    expect(tokenStore.get()).toEqual({ accessToken: 'tab2-access', refreshToken: 'tab2-refresh' })
+  })
+
   it('auth가 아닌 요청은 401이어도 refresh하지 않는다', async () => {
     handler = () => json(401, { code: 'INVALID_CREDENTIALS' })
     await expect(request('/auth/login', { method: 'POST', body: {} })).rejects.toBeInstanceOf(ApiError)

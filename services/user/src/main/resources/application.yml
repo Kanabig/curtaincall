@@ -34,6 +34,8 @@ curtaincall:
     access-ttl: 30m
   user:
     refresh-ttl: 14d
+    # 이 시간 안의 재사용은 탭 동시 회전으로 보고 계열을 폐기하지 않는다
+    refresh-reuse-grace: 10s
     # 둘 다 있을 때만 ADMIN 시드 계정을 만든다(USR-4)
     admin:
       email: ${CURTAINCALL_ADMIN_EMAIL:}
