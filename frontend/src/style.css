@@ -1,0 +1,25 @@
+:root { font-family: system-ui, sans-serif; color: #222; background: #fafafa; }
+body { margin: 0; }
+main, .top, footer { max-width: 1000px; margin: 0 auto; padding: 12px 16px; }
+.top { display: flex; justify-content: space-between; align-items: center; }
+.top nav { display: flex; gap: 12px; align-items: center; }
+.brand { font-weight: 700; font-size: 1.2rem; text-decoration: none; color: inherit; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.filters label { display: flex; gap: 4px; align-items: center; font-size: .85rem; }
+.grid { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.grid a { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: inherit; font-size: .85rem; }
+.grid img, .noposter { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: #ddd; }
+.pager { display: flex; gap: 12px; justify-content: center; align-items: center; margin: 16px 0; }
+.card { display: flex; flex-direction: column; gap: 10px; max-width: 360px; margin: 24px auto; }
+.card label { display: flex; flex-direction: column; gap: 4px; }
+.error { color: #b00020; }
+.detail-head { display: flex; gap: 16px; flex-wrap: wrap; }
+.detail-head img { width: 220px; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+dt { color: #666; }
+.sessions { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.sessions li { border: 1px solid #ddd; padding: 10px; background: #fff; }
+.sessions li > div { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.sale { font-size: .8rem; padding: 2px 6px; background: #eee; }
+.sale.ON_SALE { background: #d9f2dd; }
+.source, footer { color: #666; font-size: .8rem; }
