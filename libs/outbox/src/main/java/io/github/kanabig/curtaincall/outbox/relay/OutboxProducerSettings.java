@@ -4,8 +4,8 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.springframework.boot.autoconfigure.kafka.KafkaConnectionDetails;
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.boot.kafka.autoconfigure.KafkaConnectionDetails;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 
 /**
  * 프로듀서 설정. {@code acks=all}과 {@code enable.idempotence=true}는 kafka-clients 3.x 기본값이지만 명시하고, {@code
@@ -18,7 +18,7 @@ public final class OutboxProducerSettings {
     /** 접속 정보는 {@link KafkaConnectionDetails}에서 가져온다. 테스트의 서비스 연결처럼 properties 밖에서 오는 값을 반영하기 위해서다. */
     public static Map<String, Object> from(
             KafkaProperties kafkaProperties, KafkaConnectionDetails connectionDetails, Duration sendTimeout) {
-        Map<String, Object> properties = kafkaProperties.buildProducerProperties(null);
+        Map<String, Object> properties = kafkaProperties.buildProducerProperties();
         properties.put(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
                 connectionDetails.getProducer().getBootstrapServers());

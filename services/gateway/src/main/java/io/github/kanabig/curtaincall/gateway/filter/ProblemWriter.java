@@ -1,7 +1,5 @@
 package io.github.kanabig.curtaincall.gateway.filter;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -9,6 +7,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /** gateway가 직접 거절할 때 쓰는 오류 본문(RFC 9457, code 확장 필드). */
 @Component
@@ -27,7 +27,7 @@ public class ProblemWriter {
         byte[] body;
         try {
             body = objectMapper.writeValueAsBytes(problem);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
         exchange.getResponse().setStatusCode(status);

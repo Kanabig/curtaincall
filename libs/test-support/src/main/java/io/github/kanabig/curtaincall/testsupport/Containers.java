@@ -1,8 +1,8 @@
 package io.github.kanabig.curtaincall.testsupport;
 
 import com.redis.testcontainers.RedisContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.mysql.MySQLContainer;
 
 /**
  * 테스트 JVM 하나에서 컨테이너를 한 번만 띄운다.
@@ -21,7 +21,7 @@ public final class Containers {
     static final String KAFKA_IMAGE = "apache/kafka:4.3.2";
     static final String REDIS_IMAGE = "redis:8.0.6";
 
-    static final MySQLContainer<?> MYSQL = new SharedMySql(MYSQL_IMAGE);
+    static final MySQLContainer MYSQL = new SharedMySql(MYSQL_IMAGE);
     static final KafkaContainer KAFKA = new SharedKafka(KAFKA_IMAGE);
     static final RedisContainer REDIS = new SharedRedis(REDIS_IMAGE);
 
@@ -34,7 +34,7 @@ public final class Containers {
     private Containers() {}
 
     /** stop()을 비운 컨테이너. 위 설명처럼 컨텍스트가 닫혀도 공유 컨테이너를 멈추지 않는다. */
-    private static final class SharedMySql extends MySQLContainer<SharedMySql> {
+    private static final class SharedMySql extends MySQLContainer {
         SharedMySql(String image) {
             super(image);
         }

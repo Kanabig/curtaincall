@@ -8,7 +8,7 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 
 class OutboxProducerSettingsTest {
 
@@ -24,7 +24,7 @@ class OutboxProducerSettingsTest {
     @Test
     @DisplayName("spring.kafka.producer를 설정하지 않으면 Boot는 해당 키를 넣지 않아 클라이언트 기본값이 적용된다")
     void bootDoesNotSetUnconfiguredKeys() {
-        Map<String, Object> boot = new KafkaProperties().buildProducerProperties(null);
+        Map<String, Object> boot = new KafkaProperties().buildProducerProperties();
 
         assertThat(boot).doesNotContainKeys(ProducerConfig.ACKS_CONFIG, ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG);
     }
@@ -36,7 +36,7 @@ class OutboxProducerSettingsTest {
         kafkaProperties.getProducer().setAcks("1");
         kafkaProperties.getProducer().setRetries(0);
         kafkaProperties.getProducer().getProperties().put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "10");
-        Map<String, Object> boot = kafkaProperties.buildProducerProperties(null);
+        Map<String, Object> boot = kafkaProperties.buildProducerProperties();
         assertThat(boot.get(ProducerConfig.ACKS_CONFIG)).isEqualTo("1");
 
         Map<String, Object> enforced = OutboxProducerSettings.enforce(boot, Duration.ofSeconds(5));
@@ -60,7 +60,7 @@ class OutboxProducerSettingsTest {
         KafkaProperties kafkaProperties = new KafkaProperties();
         kafkaProperties.getProducer().getProperties().put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "600000");
         kafkaProperties.getProducer().getProperties().put(ProducerConfig.LINGER_MS_CONFIG, "5000");
-        Map<String, Object> boot = kafkaProperties.buildProducerProperties(null);
+        Map<String, Object> boot = kafkaProperties.buildProducerProperties();
         boot.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:1");
 
         Map<String, Object> enforced = OutboxProducerSettings.enforce(boot, Duration.ofSeconds(5));

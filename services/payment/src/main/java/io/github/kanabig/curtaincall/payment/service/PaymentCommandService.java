@@ -1,7 +1,5 @@
 package io.github.kanabig.curtaincall.payment.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.message.EventEnvelope;
 import io.github.kanabig.curtaincall.outbox.message.EventTypes;
 import io.github.kanabig.curtaincall.payment.config.PaymentProperties;
@@ -17,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * [PAY-1, PAY-3] {@code payment.command}를 처리한다. IdempotentConsumer의 트랜잭션 안에서 호출된다.
@@ -165,7 +165,7 @@ public class PaymentCommandService {
     private <T> T read(EventEnvelope envelope, Class<T> type) {
         try {
             return objectMapper.treeToValue(envelope.payload(), type);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException(type.getSimpleName() + " payload를 읽을 수 없다: " + envelope.eventId(), e);
         }
     }

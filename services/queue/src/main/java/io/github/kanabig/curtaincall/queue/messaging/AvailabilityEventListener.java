@@ -1,11 +1,11 @@
 package io.github.kanabig.curtaincall.queue.messaging;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.queue.service.SessionConfService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * [QUE-8] reservation.session의 SessionAvailabilityChanged로 회차의 매진 여부를 반영한다. 이벤트에 실린 전체 상태와 회차별 version으로 덮어쓰고 더 큰
@@ -44,7 +44,7 @@ public class AvailabilityEventListener {
                         longField(payload, "sessionId"), soldOut.asBoolean(), longField(payload, "version"));
             }
             ConsumedEventLog.processed(root);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new InvalidSessionEventException("매진 이벤트를 읽을 수 없다", e);
         }
     }

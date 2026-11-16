@@ -2,8 +2,6 @@ package io.github.kanabig.curtaincall.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
@@ -28,6 +26,8 @@ import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.kafka.KafkaContainer;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * [NFR-4] 브로커를 멈췄다 다시 띄우는 시나리오라 공유 브로커 대신 전용 컨테이너를 쓴다. 재시작 뒤에도 같은 주소로 접속하도록 호스트 포트를 고정한다.

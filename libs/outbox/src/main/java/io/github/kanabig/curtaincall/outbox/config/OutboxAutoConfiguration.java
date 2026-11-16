@@ -1,6 +1,5 @@
 package io.github.kanabig.curtaincall.outbox.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.outbox.consumer.DltEndpoint;
 import io.github.kanabig.curtaincall.outbox.consumer.DltReplayer;
 import io.github.kanabig.curtaincall.outbox.consumer.IdempotentConsumer;
@@ -31,11 +30,11 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
-import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
-import org.springframework.boot.autoconfigure.kafka.KafkaConnectionDetails;
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration;
+import org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration;
+import org.springframework.boot.kafka.autoconfigure.KafkaConnectionDetails;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -47,6 +46,7 @@ import org.springframework.kafka.core.MicrometerConsumerListener;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * 발행({@code curtaincall.outbox.enabled})과 소비({@code curtaincall.outbox.consumer.enabled})를 각각 켠다.
@@ -189,7 +189,7 @@ public class OutboxAutoConfiguration {
                 MeterRegistry meterRegistry) {
             return new DltReplayer(
                     () -> {
-                        Map<String, Object> consumerProperties = kafkaProperties.buildConsumerProperties(null);
+                        Map<String, Object> consumerProperties = kafkaProperties.buildConsumerProperties();
                         consumerProperties.put(
                                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
                                 connectionDetails.getConsumer().getBootstrapServers());
@@ -217,7 +217,7 @@ public class OutboxAutoConfiguration {
                 MeterRegistry meterRegistry) {
             ConcurrentKafkaListenerContainerFactory<String, String> factory =
                     new ConcurrentKafkaListenerContainerFactory<>();
-            Map<String, Object> consumerProperties = kafkaProperties.buildConsumerProperties(null);
+            Map<String, Object> consumerProperties = kafkaProperties.buildConsumerProperties();
             consumerProperties.put(
                     ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
                     connectionDetails.getConsumer().getBootstrapServers());

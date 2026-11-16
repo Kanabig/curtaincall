@@ -65,15 +65,22 @@ public class SessionAvailabilityService {
             }
             long version = locked.version() + 1;
             repository.update(sessionId, soldOut, version);
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("sessionId", sessionId);
-            payload.put("soldOut", soldOut);
-            payload.put("version", version);
             outbox.append(
-                    OrderTopicsConfig.SESSION_TOPIC, String.valueOf(sessionId), "SessionAvailabilityChanged", payload);
+                    OrderTopicsConfig.SESSION_TOPIC,
+                    String.valueOf(sessionId),
+                    "SessionAvailabilityChanged",
+                    availabilityPayload(sessionId, soldOut, version));
             log.info("회차 매진 상태가 바뀌었다: sessionId={} soldOut={} version={}", sessionId, soldOut, version);
             return true;
         });
         return Boolean.TRUE.equals(done);
+    }
+
+    static Map<String, Object> availabilityPayload(long sessionId, boolean soldOut, long version) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("sessionId", sessionId);
+        payload.put("soldOut", soldOut);
+        payload.put("version", version);
+        return payload;
     }
 }

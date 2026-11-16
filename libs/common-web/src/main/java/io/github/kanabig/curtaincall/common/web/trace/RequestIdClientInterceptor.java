@@ -13,7 +13,7 @@ public class RequestIdClientInterceptor implements ClientHttpRequestInterceptor 
     public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution)
             throws IOException {
         String requestId = RequestIdContext.current();
-        if (requestId != null && !request.getHeaders().containsKey(RequestIdContext.HEADER)) {
+        if (requestId != null && !request.getHeaders().containsHeader(RequestIdContext.HEADER)) {
             request.getHeaders().set(RequestIdContext.HEADER, requestId);
         }
         return execution.execute(request, body);

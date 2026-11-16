@@ -3,7 +3,6 @@ package io.github.kanabig.curtaincall.payment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import java.time.Duration;
@@ -15,8 +14,9 @@ import java.util.concurrent.Executors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.http.HttpStatus;
+import tools.jackson.databind.JsonNode;
 
 /** NFR-9 PG 지연·장애에서 payment의 다른 처리 보호: 서킷 브레이커와 Bulkhead. */
 class PaymentResilienceTests extends PaymentIntegrationTest {

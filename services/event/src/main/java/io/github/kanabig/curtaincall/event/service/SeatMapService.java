@@ -1,6 +1,5 @@
 package io.github.kanabig.curtaincall.event.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
 import io.github.kanabig.curtaincall.event.dto.PriceTable;
 import io.github.kanabig.curtaincall.event.dto.SeatMapEntry;
@@ -27,6 +26,7 @@ import java.util.zip.GZIPOutputStream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * EVT-9, EVT-10. 회차 좌석 배치도를 만들어 직렬화한 응답을 캐시한다. 배치도는 회차가 판매되는 동안 바뀌지 않으므로(가격표는 오픈 10분 전까지만 바뀐다) 같은 회차를 다시 요청하면 DB를
