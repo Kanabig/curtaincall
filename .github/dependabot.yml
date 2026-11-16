@@ -61,5 +61,9 @@ updates:
       prefix: build
     labels: [build]
     ignore:
+      # playwright는 E2E 실행 이미지(frontend/e2e/run.sh의 이미지 태그)와 버전이 같아야 한다.
+      # 패키지만 올리면 브라우저를 찾지 못해 실행이 실패하므로 이미지와 함께 수동으로 올린다.
+      - dependency-name: playwright
+      - dependency-name: "@playwright/test"
       - dependency-name: "*"
         update-types: [version-update:semver-major]
