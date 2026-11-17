@@ -19,7 +19,7 @@ public record RateLimitProperties(
         @DefaultValue Bucket ip,
         @DefaultValue Bucket ipPoll,
         @DefaultValue Bucket user,
-        @DefaultValue("100ms") Duration timeout,
+        @DefaultValue("250ms") Duration timeout,
         @DefaultValue("2s") Duration circuitOpen,
         @DefaultValue("false") boolean trustForwardedFor) {
 

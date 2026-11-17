@@ -14,5 +14,5 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("curtaincall.entry-activity")
 public record EntryActivityProperties(
         @DefaultValue("30s") Duration recordInterval,
-        @DefaultValue("100ms") Duration timeout,
+        @DefaultValue("250ms") Duration timeout,
         @DefaultValue("2s") Duration circuitOpen) {}
