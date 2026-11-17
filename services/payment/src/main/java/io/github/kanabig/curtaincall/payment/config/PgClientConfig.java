@@ -67,7 +67,7 @@ public class PgClientConfig {
     }
 
     /**
-     * 승인과 조회·취소의 Bulkhead를 나눈다. 승인이 느려져 가득 차도 조회가 굶지 않아야 UNKNOWN을 풀 수 있다. 가득 차면 기다리지 않고 바로 거절한다(maxWaitDuration 0).
+     * 승인과 조회·취소의 Bulkhead를 나눈다. 승인이 느려져 가득 차도 조회가 굶지 않아야 UNKNOWN을 풀 수 있다. 승인은 가득 차면 approvalMaxWait까지 기다린 뒤 거절하고, 조회·취소는 기다리지 않고 바로 거절한다.
      */
     @Bean
     BulkheadRegistry pgBulkheadRegistry(MeterRegistry meterRegistry) {
@@ -79,21 +79,28 @@ public class PgClientConfig {
     @Bean
     Bulkhead pgApprovalBulkhead(
             BulkheadRegistry pgBulkheadRegistry, PaymentProperties properties, MeterRegistry meterRegistry) {
-        return bulkhead(pgBulkheadRegistry, "pg-approval", properties.pg().maxConcurrentApprovals(), meterRegistry);
+        return bulkhead(
+                pgBulkheadRegistry,
+                "pg-approval",
+                properties.pg().maxConcurrentApprovals(),
+                properties.pg().approvalMaxWait(),
+                meterRegistry);
     }
 
     @Bean
     Bulkhead pgQueryBulkhead(
             BulkheadRegistry pgBulkheadRegistry, PaymentProperties properties, MeterRegistry meterRegistry) {
-        return bulkhead(pgBulkheadRegistry, "pg-query", properties.pg().maxConcurrentQueries(), meterRegistry);
+        return bulkhead(
+                pgBulkheadRegistry, "pg-query", properties.pg().maxConcurrentQueries(), Duration.ZERO, meterRegistry);
     }
 
-    private static Bulkhead bulkhead(BulkheadRegistry registry, String name, int max, MeterRegistry meterRegistry) {
+    static Bulkhead bulkhead(
+            BulkheadRegistry registry, String name, int max, Duration maxWait, MeterRegistry meterRegistry) {
         Bulkhead bulkhead = registry.bulkhead(
                 name,
                 BulkheadConfig.custom()
                         .maxConcurrentCalls(max)
-                        .maxWaitDuration(Duration.ZERO)
+                        .maxWaitDuration(maxWait)
                         .build());
         Counter rejected = Counter.builder(MetricNames.PAYMENT_PG_BULKHEAD_REJECTED)
                 .tag("bulkhead", name)
