@@ -62,6 +62,7 @@ public final class PerformanceQueryDtos {
             String priceGuidance,
             String dateGuidance,
             JsonNode relates,
+            List<String> grades,
             List<SessionItem> sessions) {}
 
     public record SessionDetail(

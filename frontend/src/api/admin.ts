@@ -49,3 +49,20 @@ export function defaultPrices(sessions: { prices: { grade: string; price: number
 }
 
 export const FALLBACK_PRICES = 'VIP 150000\nR 110000\nS 80000\nA 50000'
+
+/** 등급별 입력값(문자열)을 가격표로 바꾼다. 비었거나 1 미만이면 null. */
+export function pricesFromGrades(grades: string[], values: Record<string, string>): { grade: string; price: number }[] | null {
+  const out: { grade: string; price: number }[] = []
+  for (const grade of grades) {
+    const v = (values[grade] ?? '').trim()
+    if (!/^\d+$/.test(v) || Number(v) < 1) return null
+    out.push({ grade, price: Number(v) })
+  }
+  return out
+}
+
+/** 공연의 첫 회차 가격을 등급별 기본 입력값으로 쓴다. 그 등급이 없으면 빈 칸. */
+export function gradeDefaults(grades: string[], sessions: { prices: { grade: string; price: number }[] }[]): Record<string, string> {
+  const first = sessions.find((s) => s.prices.length > 0)
+  return Object.fromEntries(grades.map((g) => [g, String(first?.prices.find((p) => p.grade === g)?.price ?? '')]))
+}

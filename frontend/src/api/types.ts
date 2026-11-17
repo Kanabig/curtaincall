@@ -51,6 +51,8 @@ export interface PerformanceDetail {
   age: string | null
   priceGuidance: string | null
   dateGuidance: string | null
+  /** 회차 등록 때 가격을 받아야 하는 등급. 안내문을 읽지 못한 공연은 빈 목록 */
+  grades: string[]
   sessions: SessionItem[]
 }
 
