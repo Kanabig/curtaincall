@@ -6,19 +6,38 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /** {@code payment.*} 설정. 기본값은 PG 회복력 기준(timeout, 재시도, Bulkhead)이다. */
-@ConfigurationProperties("payment")
+@ConfigurationProperties(prefix = "payment", ignoreUnknownFields = false)
 public record PaymentProperties(
         @DefaultValue Pg pg,
         @DefaultValue Inquiry inquiry,
-        @DefaultValue Cancel cancel) {
+        @DefaultValue Cancel cancel,
+        @DefaultValue CommandListener commandListener) {
+
+    /** 명령 리스너 자동 시작 여부. 값은 {@code @KafkaListener}의 autoStartup 플레이스홀더가 읽고, 여기서는 키를 선언해 오타 검사에 걸리지 않게 한다. */
+    public record CommandListener(@DefaultValue("true") boolean autoStart) {}
 
     public record Pg(
             @DefaultValue("http://localhost:8090") String baseUrl,
             @DefaultValue("1s") Duration connectTimeout,
             @DefaultValue("5s") Duration readTimeout,
-            @DefaultValue("20") int maxConcurrentApprovals,
+            @DefaultValue("50") int maxConcurrentApprovals,
+            @DefaultValue("1s") Duration approvalMaxWait,
             @DefaultValue("10") int maxConcurrentQueries,
-            @DefaultValue Breaker breaker) {}
+            @DefaultValue Breaker breaker) {
+
+        /**
+         * 승인 Bulkhead는 가득 차면 approvalMaxWait까지 기다린 뒤 거절한다. 기다리는 쪽은 가상 스레드라 컨슈머를 잡지 않는다. 조회·취소 Bulkhead는 기다리지 않고
+         * 바로 거절한다(설정 없음).
+         */
+        public Pg {
+            if (maxConcurrentApprovals < 1 || maxConcurrentQueries < 1) {
+                throw new IllegalArgumentException("payment.pg.max-concurrent-* 는 1 이상이어야 한다");
+            }
+            if (approvalMaxWait.isNegative()) {
+                throw new IllegalArgumentException("payment.pg.approval-max-wait는 0 이상이어야 한다");
+            }
+        }
+    }
 
     /** 최근 windowSize건 중 실패율이 임계치 이상이면 openDuration 동안 열린다. */
     public record Breaker(

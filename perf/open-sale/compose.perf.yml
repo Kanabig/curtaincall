@@ -12,3 +12,8 @@ services:
   queue:
     environment:
       SPRING_DATA_REDIS_TIMEOUT: ${QUEUE_REDIS_TIMEOUT:-500ms}
+  payment:
+    environment:
+      # 승인 Bulkhead 크기·대기 비교용. 값을 안 주면 운영 기본값과 같다
+      PAYMENT_PG_MAXCONCURRENTAPPROVALS: ${PAYMENT_PG_MAXCONCURRENTAPPROVALS:-50}
+      PAYMENT_PG_APPROVALMAXWAIT: ${PAYMENT_PG_APPROVALMAXWAIT:-1s}

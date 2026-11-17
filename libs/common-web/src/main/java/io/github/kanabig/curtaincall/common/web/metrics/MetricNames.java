@@ -60,6 +60,8 @@ public final class MetricNames {
     /** Bulkhead가 거절한 PG 호출 수. Counter. payment가 등록한다. */
     public static final String PAYMENT_PG_BULKHEAD_REJECTED = "payment.pg.bulkhead.rejected";
 
+    public static final String PAYMENT_PG_BULKHEAD_WAIT = "payment.pg.bulkhead.wait";
+
     /**
      * LLM 호출 수. Counter. 태그 result = success, timeout, error, rejected(CircuitBreaker), quota_exceeded, invalid(검증 실패). search-assist가
      * 등록한다.

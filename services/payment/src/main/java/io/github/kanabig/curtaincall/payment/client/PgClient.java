@@ -1,9 +1,13 @@
 package io.github.kanabig.curtaincall.payment.client;
 
+import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import java.time.Duration;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,25 +30,36 @@ public class PgClient {
     private final Bulkhead approvalBulkhead;
     private final Bulkhead queryBulkhead;
     private final CircuitBreaker approvalBreaker;
+    private final Timer approvalWaitTimer;
 
     public PgClient(
             RestClient pgRestClient,
             Bulkhead pgApprovalBulkhead,
             Bulkhead pgQueryBulkhead,
-            CircuitBreaker pgApprovalBreaker) {
+            CircuitBreaker pgApprovalBreaker,
+            MeterRegistry meterRegistry) {
         this.restClient = pgRestClient;
         this.approvalBulkhead = pgApprovalBulkhead;
         this.queryBulkhead = pgQueryBulkhead;
         this.approvalBreaker = pgApprovalBreaker;
+        this.approvalWaitTimer = Timer.builder(MetricNames.PAYMENT_PG_BULKHEAD_WAIT)
+                .tag("bulkhead", "pg-approval")
+                .description("승인 Bulkhead 슬롯을 얻기까지 기다린 시간(거절된 호출 포함)")
+                .publishPercentileHistogram()
+                .register(meterRegistry);
     }
 
     public ApprovalOutcome approve(String merchantOrderId, long amount, String cardToken) {
         try {
-            PgApproval response = Bulkhead.decorateSupplier(
-                            approvalBulkhead,
-                            CircuitBreaker.decorateSupplier(
-                                    approvalBreaker, () -> requestApproval(merchantOrderId, amount, cardToken)))
-                    .get();
+            acquireApprovalPermission();
+            PgApproval response;
+            try {
+                response = CircuitBreaker.decorateSupplier(
+                                approvalBreaker, () -> requestApproval(merchantOrderId, amount, cardToken))
+                        .get();
+            } finally {
+                approvalBulkhead.onComplete();
+            }
             return toOutcome(response);
         } catch (BulkheadFullException e) {
             return new ApprovalOutcome.NotSent(ApprovalOutcome.Reason.BULKHEAD_FULL);
@@ -58,6 +73,16 @@ public class PgClient {
             // 타임아웃, premature EOF, 5xx 모두 PG가 처리했는지 알 수 없다
             log.warn("PG 승인 결과를 받지 못했다: merchantOrderId={}, cause={}", merchantOrderId, e.toString());
             return new ApprovalOutcome.Unknown(e.getClass().getSimpleName());
+        }
+    }
+
+    /** 슬롯을 얻거나 maxWait 뒤 BulkheadFullException으로 거절될 때까지 걸린 시간을 기록한다. */
+    private void acquireApprovalPermission() {
+        long start = System.nanoTime();
+        try {
+            approvalBulkhead.acquirePermission();
+        } finally {
+            approvalWaitTimer.record(Duration.ofNanos(System.nanoTime() - start));
         }
     }
 

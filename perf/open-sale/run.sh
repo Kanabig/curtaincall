@@ -81,7 +81,7 @@ snapshot() { # <접미사>
 {
     echo "commit:     $(git rev-parse HEAD)  image_tag=$IMAGE_TAG"
     echo "mode=$MODE project=$PROJECT users=$USERS admissionPerSecond=$ADMISSION maxActiveUsers=$MAX_ACTIVE pollers=$POLLERS"
-    echo "seat_status_ttl=${CURTAINCALL_SEAT_STATUS_CACHE_TTL:-500ms} hold_attempts=${MAX_HOLD_ATTEMPTS:-10} spread_ms=${SPREAD_MS:-1000} pg_delay_ms=${PG_DELAY_MS:-0} ip_limit=${RATE_LIMIT_IP_PER_SECOND:-off} entry_only=${ENTRY_ONLY:-0} direct_queue=${DIRECT_QUEUE:-0}"
+    echo "seat_status_ttl=${CURTAINCALL_SEAT_STATUS_CACHE_TTL:-500ms} hold_attempts=${MAX_HOLD_ATTEMPTS:-10} spread_ms=${SPREAD_MS:-1000} pg_delay_ms=${PG_DELAY_MS:-0} pg_timeout_rate=${PG_TIMEOUT_RATE:-0} approval_bulkhead=${PAYMENT_PG_MAXCONCURRENTAPPROVALS:-50}/${PAYMENT_PG_APPROVALMAXWAIT:-1s} ip_limit=${RATE_LIMIT_IP_PER_SECOND:-off} entry_only=${ENTRY_ONLY:-0} direct_queue=${DIRECT_QUEUE:-0}"
     echo "session=$SESSION_ID seat_base=$SEAT_BASE open_at=$OPEN_AT_ISO"
     echo "host:       $(nproc) cpu, $(free -m | awk '/Mem:/{print $2" MB total, "$7" MB available"}'), $(uname -sr)"
     echo "load avg:   $(cut -d' ' -f1-3 /proc/loadavg)"
@@ -90,10 +90,10 @@ snapshot() { # <접미사>
     echo "top cpu processes:"; ps -eo pcpu,comm --sort=-pcpu | head -8 | sed 's/^/  /'
 } | tee "$OUT/env.txt"
 
-if [ -n "${PG_DELAY_MS:-}" ]; then
+if [ -n "${PG_DELAY_MS:-}" ] || [ -n "${PG_TIMEOUT_RATE:-}" ]; then
     # 가짜 PG 승인 지연 주입(payment Bulkhead 거절 비율을 보려는 실행)
     inside -X PUT http://mock-pg:8090/pg/admin/faults -H 'Content-Type: application/json' \
-        -d "{\"delayMs\":${PG_DELAY_MS},\"failureRate\":0,\"timeoutRate\":0,\"dropResponseRate\":0}" | tee "$OUT/pg-faults.txt"; echo
+        -d "{\"delayMs\":${PG_DELAY_MS:-0},\"failureRate\":0,\"timeoutRate\":${PG_TIMEOUT_RATE:-0},\"dropResponseRate\":0}" | tee "$OUT/pg-faults.txt"; echo
 fi
 snapshot before
 docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}' > "$OUT/stats-idle.txt"
@@ -115,7 +115,17 @@ LOADAVG=$!
     echo "$(date +%T) reservation outbox_unpublished_db=$(echo 'SELECT COUNT(*) FROM outbox WHERE published_at IS NULL' | mysql_root -N reservation_db | tr -d '[:space:]') gauge=$gauge dlt=$dlt"
   done > "$OUT/lag.txt" ) &
 LAGSAMPLER=$!
-trap 'kill $SAMPLER $LOADAVG $LAGSAMPLER 2>/dev/null || true' EXIT
+# payment의 승인 Bulkhead 여유, 서킷, 스레드, DB 커넥션을 2초마다 남긴다
+( while sleep 2; do
+    compose exec -T payment curl -fs http://localhost:8085/actuator/prometheus 2>/dev/null | awk -v t="$(date +%T)" '
+        /^resilience4j_bulkhead_available_concurrent_calls\{.*pg-approval/ {avail=$NF}
+        /^resilience4j_circuitbreaker_state\{.*pg-approval.*state="open"/ {open=$NF}
+        /^jvm_threads_live_threads/ {threads=$NF}
+        /^hikaricp_connections_active/ {db=$NF}
+        END {print t, "approval_available=" avail, "circuit_open=" open, "jvm_threads=" threads, "db_active=" db}'
+  done > "$OUT/payment-sampler.txt" ) &
+PAYSAMPLER=$!
+trap 'kill $SAMPLER $LOADAVG $LAGSAMPLER $PAYSAMPLER 2>/dev/null || true' EXIT
 
 innodb() { mysql_root -N -e "\"SELECT NAME, \\\`COUNT\\\` FROM information_schema.INNODB_METRICS WHERE NAME IN ('lock_deadlocks','lock_timeouts','trx_rseg_history_len') ORDER BY NAME\""; }
 innodb > "$OUT/innodb-before.txt" || true
