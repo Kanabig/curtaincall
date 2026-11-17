@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -22,6 +23,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * [GW-2] Redis가 응답하지 않는 동안(컨테이너 일시 정지)의 서킷 동작. 첫 실패 뒤에는 Redis를 부르지 않아 요청이 타임아웃을 기다리지 않고, 복구되면 한도가 다시
  * 적용된다.
  */
+@AutoConfigureWebTestClient
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {

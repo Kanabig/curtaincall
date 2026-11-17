@@ -2,7 +2,6 @@ package io.github.kanabig.curtaincall.event.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import io.github.kanabig.curtaincall.event.EventIntegrationTest;
 import io.github.kanabig.curtaincall.event.client.KopisCallException;
 import io.github.kanabig.curtaincall.event.client.KopisClient;
@@ -25,9 +24,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
@@ -37,8 +37,10 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import tools.jackson.databind.JsonNode;
 
 /** EVT-4, EVT-5 공연·회차 조회. */
+@AutoConfigureTestRestTemplate
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -252,6 +254,21 @@ class PerformanceQueryTests extends EventIntegrationTest {
         assertThat(rest.getForEntity("/api/v1/performances/9999", JsonNode.class)
                         .getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("상세 grades: 읽은 priceGuidance의 등급(비싼 순), 읽지 못하면 빈 목록")
+    void expectedGrades() {
+        long parsed = sale("G1", "등급 공연", "뮤지컬", "서울", "공연중", "2026-11-01", "2027-01-31");
+        jdbc.update("UPDATE performance SET price_guidance = 'R석 99,000원, S석 77,000원' WHERE mt20id = 'G1'");
+        long unparsed = sale("G2", "안내 불명 공연", "뮤지컬", "서울", "공연중", "2026-11-01", "2027-01-31");
+        jdbc.update("UPDATE performance SET price_guidance = '현장판매 14,900원, 사전예약 9,900원' WHERE mt20id = 'G2'");
+
+        JsonNode grades = get("/api/v1/performances/" + parsed).get("grades");
+        assertThat(grades).hasSize(2);
+        assertThat(grades.get(0).asText()).isEqualTo("R석");
+        assertThat(grades.get(1).asText()).isEqualTo("S석");
+        assertThat(get("/api/v1/performances/" + unparsed).get("grades")).isEmpty();
     }
 
     @Test

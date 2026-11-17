@@ -17,6 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
@@ -29,6 +30,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 /** [QUE-5] 점유·주문·결제 시작 API의 입장 토큰 검증. 스텁이 받은 헤더로 gateway가 무엇을 넘기는지 확인한다. */
+@AutoConfigureWebTestClient
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -60,6 +62,9 @@ class EntryTokenTests {
     @Autowired
     WebTestClient client;
 
+    @Autowired
+    io.micrometer.core.instrument.MeterRegistry meters;
+
     @BeforeEach
     void clear() {
         RECEIVED.clear();
@@ -73,6 +78,16 @@ class EntryTokenTests {
                 .isOk();
         Map<String, String> headers = RECEIVED.get("/api/v1/sessions/5/holds");
         assertThat(headers).containsEntry("x-entry-session-id", "5").doesNotContainKey("x-entry-token");
+    }
+
+    @Test
+    @DisplayName("Redis에 닿지 못하면 활성 소속을 확인하지 못해도 서명이 맞는 토큰은 통과하고 failopen 카운터가 남는다(NFR-11)")
+    void redisDownFailsOpen() {
+        post("/api/v1/sessions/5/holds", entry("7", "5", 600, ENTRY_SECRET), "7", null)
+                .expectStatus()
+                .isOk();
+        assertThat(meters.get("gateway.entry-activity.failopen").counter().count())
+                .isGreaterThan(0);
     }
 
     @Test

@@ -142,7 +142,12 @@ class AdmissionTests extends QueueIntegrationTest {
         admission.admitAll(t0);
         assertThat(isActive(1) && isActive(2)).isTrue();
 
-        // 만료 1초 전까지는 자리가 차 있다
+        // 만료 1초 전까지는 자리가 차 있다(둘 다 계속 활동 중이라 회수 대상이 아니다)
+        Instant beforeExpiry = t0.plus(properties.entryTtl()).minusSeconds(1);
+        redis.opsForZSet()
+                .add(key("activity"), "1", beforeExpiry.minusSeconds(10).toEpochMilli());
+        redis.opsForZSet()
+                .add(key("activity"), "2", beforeExpiry.minusSeconds(10).toEpochMilli());
         admission.admitAll(t0.plus(properties.entryTtl()).minusSeconds(1));
         assertThat(isActive(3)).isFalse();
 
@@ -247,12 +252,109 @@ class AdmissionTests extends QueueIntegrationTest {
                         Duration.ofSeconds(15),
                         3,
                         Duration.ofSeconds(10),
-                        properties.redisCircuitFailures()));
+                        properties.redisCircuitFailures(),
+                        properties.idleReclaimAfter()));
 
         // 2명씩 꺼내 지우므로 2, 4명째에 상한 3을 넘어 멈춘다. 나머지 6명은 다음 틱이 맡는다
         assertThat(limited.admitAll(t0)).isZero();
         assertThat(redis.opsForZSet().zCard(key("waiting"))).isEqualTo(6);
         assertThat(activeCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("[QUE-5] 활동이 없는 입장자는 회수되고 그 자리를 대기자가 채우며, 동시 활성은 상한을 넘지 않는다")
+    void reclaimsIdleActiveUsers() {
+        putConf(-1000, 10, 4);
+        enterUsers(1, 8);
+        Instant t0 = startOfSecond();
+        pollUntil(1, 8, t0.plusSeconds(600));
+        assertThat(admission.admitAll(t0)).isEqualTo(4);
+        assertThat(activeCount()).isEqualTo(4);
+
+        // 1번만 활동(gateway가 남기는 값과 같은 키·단위)을 이어 간다. 6분 뒤 나머지 셋이 회수되고 대기자 셋이 들어온다
+        Instant later = t0.plusSeconds(361);
+        redis.opsForZSet().add(key("activity"), "1", later.minusSeconds(10).toEpochMilli());
+        assertThat(admission.admitAll(later)).isEqualTo(3);
+        assertThat(activeCount()).isEqualTo(4);
+        assertThat(isActive(1)).isTrue();
+        assertThat(isActive(2) || isActive(3) || isActive(4)).isFalse();
+        assertThat(isActive(5) && isActive(6) && isActive(7)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[QUE-5] 회수 시간 안에 활동한 입장자(결제 중)는 회수하지 않는다")
+    void keepsRecentlyActiveUsers() {
+        putConf(-1000, 10, 2);
+        enterUsers(1, 4);
+        Instant t0 = startOfSecond();
+        pollUntil(1, 4, t0.plusSeconds(600));
+        admission.admitAll(t0);
+
+        Instant later = t0.plusSeconds(350);
+        assertThat(admission.admitAll(later)).isZero();
+        assertThat(isActive(1) && isActive(2)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[QUE-5] 기록 간격 안에서 한 점유는 점유 TTL이 끝나기 전까지 회수되지 않고, 그 뒤 회수 시간이 지나면 회수된다")
+    void holdInsideRecordIntervalIsNotReclaimedBeforeItExpires() {
+        putConf(-1000, 10, 1);
+        enterUsers(1, 2);
+        Instant t0 = startOfSecond();
+        pollUntil(1, 2, t0.plusSeconds(900));
+        admission.admitAll(t0);
+        // 마지막 활동 기록은 t0. 기록 간격(30초) 안인 t0+29초의 점유는 기록되지 않고, 이 점유는 t0+329초(점유 TTL 5분)에 끝난다
+        assertThat(admission.admitAll(t0.plusSeconds(329))).isZero();
+        assertThat(isActive(1)).isTrue();
+        assertThat(admission.admitAll(t0.plusSeconds(361))).isEqualTo(1);
+        assertThat(isActive(1)).isFalse();
+    }
+
+    @Test
+    @DisplayName("[QUE-5] 만료된 입장자가 만 명 쌓여 있어도 입장 처리가 실패하지 않고 활성 목록을 비운다")
+    void manyExpiredActiveUsers() {
+        putConf(-1000, 10, 5);
+        Instant t0 = startOfSecond();
+        for (int u = 1000; u < 11000; u++) {
+            redis.opsForZSet()
+                    .add(key("active"), String.valueOf(u), t0.minusSeconds(60).toEpochMilli());
+            redis.opsForZSet()
+                    .add(
+                            key("activity"),
+                            String.valueOf(u),
+                            t0.minusSeconds(900).toEpochMilli());
+        }
+        enterUsers(1, 3);
+        pollUntil(1, 3, t0.plusSeconds(10));
+
+        assertThat(admission.admitAll(t0)).isEqualTo(3);
+        assertThat(activeCount()).isEqualTo(3);
+        // 만료자의 activity도 같은 틱에 지워지고 입장한 3명의 기록만 남는다
+        assertThat(redis.opsForZSet().zCard(key("activity"))).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("[QUE-5] 회수 시간이 0이면 회수하지 않는다")
+    void reclaimDisabled() {
+        putConf(-1000, 10, 2);
+        enterUsers(1, 4);
+        Instant t0 = startOfSecond();
+        pollUntil(1, 4, t0.plusSeconds(600));
+        admission.admitAll(t0);
+        AdmissionService off = new AdmissionService(
+                repository,
+                new QueueProperties(
+                        properties.zone(),
+                        properties.entryTtl(),
+                        properties.staleAfter(),
+                        properties.admitStaleAfter(),
+                        properties.admitDropLimit(),
+                        properties.soldOutPollAfter(),
+                        properties.redisCircuitFailures(),
+                        Duration.ZERO));
+
+        assertThat(off.admitAll(t0.plusSeconds(400))).isZero();
+        assertThat(isActive(1) && isActive(2)).isTrue();
     }
 
     @Test

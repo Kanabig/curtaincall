@@ -1,0 +1,1 @@
+{"eventId":"00000000-0000-4000-8000-000000000001","eventType":"PaymentCancelled","occurredAt":"2026-12-01T20:03:11.120+09:00","aggregateId":"ord-1","payload":{"paymentId":"pay-1","orderId":"ord-1","amount":132000,"reason":"SEAT_LOST"}}

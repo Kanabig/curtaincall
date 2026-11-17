@@ -1,6 +1,5 @@
 package io.github.kanabig.curtaincall.notification.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import io.github.kanabig.curtaincall.notification.client.UserClient;
 import io.github.kanabig.curtaincall.notification.client.UserContact;
 import io.github.kanabig.curtaincall.notification.config.NotificationProperties;
@@ -14,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
 
 /**
  * [NTF-1] reservation.order 이벤트를 메일로 보낸다. 이벤트에는 userId만 있으므로 이메일은 user에서 조회한다.

@@ -1,8 +1,8 @@
 package io.github.kanabig.curtaincall.event.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.LocalDate;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
 
 /** 조회 API 응답. */
 public final class PerformanceQueryDtos {
@@ -62,6 +62,7 @@ public final class PerformanceQueryDtos {
             String priceGuidance,
             String dateGuidance,
             JsonNode relates,
+            List<String> grades,
             List<SessionItem> sessions) {}
 
     public record SessionDetail(

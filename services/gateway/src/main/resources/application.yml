@@ -1,10 +1,17 @@
 spring:
+  jackson:
+    deserialization:
+      fail-on-null-for-primitives: false
   application:
     name: gateway
   cloud:
     gateway:
       server:
         webflux:
+          # 하위 서비스가 멈췄을 때 요청과 gateway 연결이 오래 붙잡히지 않게 한다. 라우트 metadata로 덮어쓴다
+          httpclient:
+            connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:3000}
+            response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:5s}
           routes:
             - id: user
               uri: ${USER_SERVICE_URL:http://user:8081}
@@ -18,6 +25,9 @@ spring:
               uri: ${QUEUE_SERVICE_URL:http://queue:8083}
               predicates:
                 - Path=/api/v1/queue/**
+              metadata:
+                # 판매 오픈 때 1만 명이 동시에 진입하면 진입 응답 p99가 약 10초까지 늘어난 측정이 있다
+                response-timeout: ${GATEWAY_QUEUE_RESPONSE_TIMEOUT_MS:15000}
             - id: reservation
               uri: ${RESERVATION_SERVICE_URL:http://reservation:8084}
               predicates:
@@ -26,6 +36,9 @@ spring:
               uri: ${SEARCH_ASSIST_SERVICE_URL:http://search-assist:8087}
               predicates:
                 - Path=/api/v1/search/**
+              metadata:
+                # search-assist의 LLM 호출 제한(2s)보다 조금 길게
+                response-timeout: ${GATEWAY_SEARCH_RESPONSE_TIMEOUT_MS:3000}
   data:
     redis:
       # Redis가 느리거나 죽어도 요청이 오래 붙잡히지 않게 짧게 둔다(속도 제한은 fail-open)
@@ -37,6 +50,11 @@ logging:
   pattern:
     level: "%5p [${spring.application.name},%X{requestId:-}]"
 curtaincall:
+  entry-activity:
+    # 입장자의 마지막 활동을 Redis에 쓰는 사용자당 최소 간격. queue의 idle-reclaim-after(6m)보다 충분히 짧아야 한다
+    record-interval: ${ENTRY_ACTIVITY_RECORD_INTERVAL:30s}
+    timeout: 100ms
+    circuit-open: 5s
   rate-limit:
     # IP는 같은 공유기 뒤의 여러 사용자가 함께 쓰므로 계정보다 넉넉하게 둔다. 한 대에서 부하를 거는 측정 때는 환경변수로 올린다
     ip:

@@ -2,6 +2,26 @@ plugins {
     id 'curtaincall.service-conventions'
 }
 
+// Resilience4j는 Spring Cloud BOM과 무관하게 core 모듈만 직접 지정한다(payment와 같은 버전)
+def resilience4jVersion = '2.4.0'
+
 dependencies {
     implementation project(':libs:common-web')
+    implementation 'com.anthropic:anthropic-java:3.8.0'
+    implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4jVersion}"
+    implementation "io.github.resilience4j:resilience4j-micrometer:${resilience4jVersion}"
+}
+
+// 평가 세트 실행(SRC-4). Mock은 항상, LLM은 SEARCH_ASSIST_EVAL_PROVIDER(기본 gemini)의 키가 있을 때만. 결과 표는 build/reports/search-assist-eval
+tasks.register('searchAssistEval', Test) {
+    group = 'verification'
+    description = '검색 조건 변환 평가 세트를 돌리고 결과 표를 출력한다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*SearchAssistEvaluationTest' }
+    systemProperty 'searchAssist.evalLlm', 'true'
+    systemProperty 'searchAssist.evalReportDir', layout.buildDirectory.dir('reports/search-assist-eval').get().asFile.path
+    testLogging.showStandardStreams = true
+    outputs.upToDateWhen { false }
 }

@@ -27,8 +27,8 @@ services:
       PAYMENT_FLYWAY_PASSWORD: ${PAYMENT_FLYWAY_PASSWORD}
       NOTIFICATION_APP_PASSWORD: ${NOTIFICATION_APP_PASSWORD}
       NOTIFICATION_FLYWAY_PASSWORD: ${NOTIFICATION_FLYWAY_PASSWORD}
-      TZ: Asia/Seoul
-    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    # DEFAULT CURRENT_TIMESTAMP 열과 앱이 쓰는 시각이 같은 기준(UTC)이 되도록 서버 시간대를 UTC로 둔다
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00"]
     ports:
       - "${MYSQL_HOST_PORT:-3306}:3306"
     volumes:
@@ -98,7 +98,7 @@ services:
   gateway:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: gateway } }
-    image: curtaincall/gateway:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/gateway:${IMAGE_TAG:-local}
     ports:
       - "${GATEWAY_HOST_PORT:-8080}:8080"
     environment:
@@ -114,17 +114,17 @@ services:
 
   frontend:
     build: { context: ./frontend }
-    image: curtaincall/frontend:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/frontend:${IMAGE_TAG:-local}
     restart: unless-stopped
     ports:
-      - "${FRONTEND_HOST_PORT:-5173}:80"
+      - "${FRONTEND_HOST_PORT:-5173}:8080"
     depends_on:
       gateway: { condition: service_healthy }
 
   user:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: user } }
-    image: curtaincall/user:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/user:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/user_db
@@ -148,7 +148,7 @@ services:
   event:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: event } }
-    image: curtaincall/event:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/event:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/event_db
@@ -170,7 +170,7 @@ services:
   queue:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: queue } }
-    image: curtaincall/queue:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/queue:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       # 입장 토큰 서명 키. gateway가 같은 값으로 검증한다
@@ -186,7 +186,7 @@ services:
   reservation:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: reservation } }
-    image: curtaincall/reservation:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/reservation:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/reservation_db
@@ -212,7 +212,7 @@ services:
   payment:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: payment } }
-    image: curtaincall/payment:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/payment:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/payment_db
@@ -234,7 +234,7 @@ services:
   mock-pg:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: mock-pg } }
-    image: curtaincall/mock-pg:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/mock-pg:${IMAGE_TAG:-local}
     ports:
       - "${MOCK_PG_HOST_PORT:-8090}:8090"
     healthcheck:
@@ -244,7 +244,7 @@ services:
   notification:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: notification } }
-    image: curtaincall/notification:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/notification:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/notification_db
@@ -268,11 +268,15 @@ services:
   search-assist:
     <<: *service
     build: { context: ., dockerfile: docker/service.Dockerfile, args: { SERVICE: search-assist } }
-    image: curtaincall/search-assist:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-curtaincall}/search-assist:${IMAGE_TAG:-local}
     environment:
       <<: *service-env
-      # 비워 두면 Mock 모드로 동작한다
-      LLM_API_KEY: ${LLM_API_KEY:-}
+      # 선택한 제공자(기본 gemini)의 키가 비어 있으면 Mock 모드로 동작한다
+      SEARCH_ASSIST_LLM_PROVIDER: ${SEARCH_ASSIST_LLM_PROVIDER:-gemini}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      EXAONE_API_KEY: ${EXAONE_API_KEY:-}
     healthcheck:
       <<: *java-health
       test: ["CMD", "curl", "-fs", "http://localhost:8087/actuator/health"]

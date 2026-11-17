@@ -1,8 +1,5 @@
 package io.github.kanabig.curtaincall.event.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
 import io.github.kanabig.curtaincall.common.web.error.CommonErrorCode;
 import io.github.kanabig.curtaincall.event.config.KopisProperties;
@@ -24,6 +21,9 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /** [EVT-4, EVT-5] 공연·회차 조회. 읽기 전용이고 KOPIS 상태와 무관하게 DB의 마지막 동기화 결과를 돌려준다. */
 @Service
@@ -38,18 +38,21 @@ public class PerformanceQueryService {
     private final KopisProperties properties;
     private final Clock clock;
     private final ObjectMapper mapper;
+    private final PriceGuidanceParser priceParser;
 
     public PerformanceQueryService(
             PerformanceQueryRepository performances,
             SessionRepository sessions,
             KopisProperties properties,
             Clock clock,
-            ObjectMapper mapper) {
+            ObjectMapper mapper,
+            PriceGuidanceParser priceParser) {
         this.performances = performances;
         this.sessions = sessions;
         this.properties = properties;
         this.clock = clock;
         this.mapper = mapper;
+        this.priceParser = priceParser;
     }
 
     /** [ADM-1] 관리자용 목록. 조건은 state·keyword만 받고 나머지는 걸지 않는다. */
@@ -116,7 +119,14 @@ public class PerformanceQueryService {
                 row.priceGuidance(),
                 row.dateGuidance(),
                 parse(row.relates()),
+                expectedGrades(row.priceGuidance()),
                 items);
+    }
+
+    /** 회차 등록 때 가격을 받아야 하는 등급(SessionAdminService.checkGrades의 기대 등급). 읽지 못한 안내문이면 빈 목록이다. */
+    private List<String> expectedGrades(String priceGuidance) {
+        var table = priceParser.parse(priceGuidance);
+        return table.parsed() ? table.tiers().stream().map(t -> t.grade()).toList() : List.of();
     }
 
     public SessionDetail getSession(long id) {
@@ -146,7 +156,7 @@ public class PerformanceQueryService {
         }
         try {
             return mapper.readTree(json);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return null;
         }
     }

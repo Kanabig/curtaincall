@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
-import { FALLBACK_PRICES, InputError, defaultPrices, isEditLocked, parsePrices, pricesToText, toLocalKst, toOffsetKst } from '../api/admin'
+import { FALLBACK_PRICES, InputError, defaultPrices, gradeDefaults, isEditLocked, parsePrices, pricesFromGrades, pricesToText, toLocalKst, toOffsetKst } from '../api/admin'
 import { ApiError, errorMessage } from '../api/client'
 import type { PerformanceDetail, PerformanceItem, SessionBody, SessionItem } from '../api/types'
 import { useAuth } from '../auth'
@@ -138,6 +138,8 @@ function SessionSection() {
             key={perf.id}
             now={now}
             defaultPrices={defaultPrices(perf.sessions)}
+            grades={perf.grades}
+            gradeValues={gradeDefaults(perf.grades, perf.sessions)}
             submitLabel="회차 등록"
             onSubmit={async (body) => {
               await api.admin.createSession(perf.id, body)
@@ -197,12 +199,17 @@ function SessionForm({
   session,
   now,
   defaultPrices: defaultText,
+  grades = [],
+  gradeValues = {},
   submitLabel,
   onSubmit,
 }: {
   session?: SessionItem
   now: number
   defaultPrices?: string | null
+  /** 새 회차 등록에서만 쓴다. 비어 있으면 가격을 텍스트로 입력한다 */
+  grades?: string[]
+  gradeValues?: Record<string, string>
   submitLabel: string
   onSubmit: (body: SessionBody) => Promise<string>
 }) {
@@ -210,6 +217,8 @@ function SessionForm({
   const [startAt, setStartAt] = useState(session ? toLocalKst(session.startAt) : '')
   const [saleOpenAt, setSaleOpenAt] = useState(session ? toLocalKst(session.saleOpenAt) : '')
   const [prices, setPrices] = useState(session ? pricesToText(session.prices) : (defaultText ?? FALLBACK_PRICES))
+  const byGrade = !session && grades.length > 0
+  const [gradePrices, setGradePrices] = useState<Record<string, string>>(gradeValues)
   const [rate, setRate] = useState(session ? String(session.admissionPerSecond) : '100')
   const [maxActive, setMaxActive] = useState(session ? String(session.maxActiveUsers) : '1000')
   const { busy, run, note } = useAction()
@@ -217,8 +226,12 @@ function SessionForm({
   function submit(e: FormEvent) {
     e.preventDefault()
     void run(async () => {
-      const parsed = parsePrices(prices)
-      if (!parsed) throw new InputError('가격은 "등급 금액" 형식으로 한 줄씩, 등급은 중복 없이 입력해 주세요.')
+      const parsed = byGrade ? pricesFromGrades(grades, gradePrices) : parsePrices(prices)
+      if (!parsed) {
+        throw new InputError(
+          byGrade ? '모든 등급의 가격을 1원 이상의 숫자로 입력해 주세요.' : '가격은 "등급 금액" 형식으로 한 줄씩, 등급은 중복 없이 입력해 주세요.',
+        )
+      }
       const body: Partial<SessionBody> = {}
       if (!locked) {
         body.startAt = toOffsetKst(startAt)
@@ -236,7 +249,22 @@ function SessionForm({
       {locked && <p className="hint">판매 오픈 10분 전부터는 입장 속도와 활성 상한만 수정할 수 있습니다.</p>}
       <label>공연 일시(KST)<input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} disabled={locked} required /></label>
       <label>판매 오픈(KST)<input type="datetime-local" value={saleOpenAt} onChange={(e) => setSaleOpenAt(e.target.value)} disabled={locked} required /></label>
-      <label>등급별 가격<textarea rows={4} value={prices} onChange={(e) => setPrices(e.target.value)} disabled={locked} /></label>
+      {byGrade ? (
+        grades.map((g) => (
+          <label key={g}>
+            가격 {g}
+            <input
+              type="number"
+              min={1}
+              value={gradePrices[g] ?? ''}
+              onChange={(e) => setGradePrices({ ...gradePrices, [g]: e.target.value })}
+              required
+            />
+          </label>
+        ))
+      ) : (
+        <label>등급별 가격<textarea rows={4} value={prices} onChange={(e) => setPrices(e.target.value)} disabled={locked} /></label>
+      )}
       <label>초당 입장 수<input type="number" min={1} value={rate} onChange={(e) => setRate(e.target.value)} required /></label>
       <label>활성 사용자 상한<input type="number" min={1} value={maxActive} onChange={(e) => setMaxActive(e.target.value)} required /></label>
       <button disabled={busy}>{submitLabel}</button>

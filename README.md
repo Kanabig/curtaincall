@@ -32,6 +32,7 @@ docker compose up -d --build --wait
 - 프로젝트를 나눠 동시에 띄우려면 `docker compose -p <이름>`과 함께 `.env`의 호스트 포트를 서로 다르게 바꾼다.
 - 재시도를 넘겨 DLT로 간 메시지는 원인을 해소한 뒤 서비스의 관리 엔드포인트로 다시 넣는다(compose 내부망에서만 접근). `GET /actuator/dlt/{DLT 토픽}`으로 조회하고, `POST /actuator/dlt/{DLT 토픽}`에 `{"offsets":"0:3,1:0"}`(파티션:오프셋)을 보내면 그 메시지만, 본문 없이 보내면 DLT 전체를 원래 토픽으로 재발행한다. 소비 쪽 `processed_event`가 중복 처리를 막는다.
 - DB 계정은 서비스마다 앱 계정(`<서비스>_app`, DML)과 Flyway 계정(`<서비스>_flyway`, DDL + DML)으로 나뉘고 둘 다 자기 스키마 권한만 갖는다. 권한은 `docker/verify-schema-isolation.sh [프로젝트 이름]`으로 확인한다. 계정이나 초기화 스크립트를 바꾸면 `docker compose down -v` 후 다시 기동해야 반영된다(초기화는 빈 볼륨에서만 실행된다).
+- MySQL 서버와 서비스의 JDBC 세션 시간대는 UTC다. `DEFAULT CURRENT_TIMESTAMP` 열과 앱이 쓰는 시각 열이 같은 기준이다. 시간대가 KST이던 시절의 개발 데이터가 남아 있으면 `docker compose down -v`로 볼륨을 지우고 다시 기동한다.
 
 ## 기술적 의사결정
 

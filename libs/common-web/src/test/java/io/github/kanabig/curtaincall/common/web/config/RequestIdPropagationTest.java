@@ -8,7 +8,7 @@ import io.github.kanabig.curtaincall.common.web.trace.RequestIdContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
-import org.springframework.boot.autoconfigure.web.client.RestClientAutoConfiguration;
+import org.springframework.boot.restclient.autoconfigure.RestClientAutoConfiguration;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -45,7 +45,7 @@ class RequestIdPropagationTest {
             MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
             server.expect(requestTo("http://downstream/ping"))
                     .andExpect(request -> org.assertj.core.api.Assertions.assertThat(
-                                    request.getHeaders().containsKey("X-Request-Id"))
+                                    request.getHeaders().containsHeader("X-Request-Id"))
                             .isFalse())
                     .andRespond(withSuccess());
 

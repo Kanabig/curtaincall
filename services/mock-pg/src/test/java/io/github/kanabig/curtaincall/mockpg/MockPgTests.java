@@ -21,8 +21,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
@@ -30,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 /** PAY-1, PAY-2, PAY-4, PAY-5가 기대하는 PG 동작과 장애 모드. */
+@AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "mock-pg.timeout-hang-ms=1500")
 class MockPgTests {
 
@@ -175,6 +177,20 @@ class MockPgTests {
         assertThat(reset.getBody())
                 .containsEntry("delayMs", 0)
                 .containsEntry("failureRate", 0.0)
+                .containsEntry("timeoutRate", 0.0)
+                .containsEntry("dropResponseRate", 0.0);
+    }
+
+    @Test
+    @DisplayName("PUT 본문에서 빠진 숫자 필드는 400이 아니라 0으로 읽는다")
+    void missingPrimitiveFieldsDefaultToZero() {
+        ResponseEntity<Map<String, Object>> put = putFaults(Map.of("failureRate", 0.5));
+        rest.delete("/pg/admin/faults");
+
+        assertThat(put.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(put.getBody())
+                .containsEntry("delayMs", 0)
+                .containsEntry("failureRate", 0.5)
                 .containsEntry("timeoutRate", 0.0)
                 .containsEntry("dropResponseRate", 0.0);
     }
