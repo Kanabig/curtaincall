@@ -21,7 +21,11 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.zip.GZIPOutputStream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -39,12 +43,14 @@ public class SeatMapService {
 
     static final Duration TTL = Duration.ofMinutes(5);
     static final int MAX_ENTRIES = 16;
+    static final Duration LOAD_WAIT = Duration.ofSeconds(10);
 
     private final SessionRepository sessions;
     private final HallSeatRepository seats;
     private final ObjectMapper mapper;
     private final Clock clock;
     private final Map<Long, Cached> cache = new ConcurrentHashMap<>();
+    private final Map<Long, Loading> loadings = new ConcurrentHashMap<>();
 
     public SeatMapService(SessionRepository sessions, HallSeatRepository seats, ObjectMapper mapper, Clock clock) {
         this.sessions = sessions;
@@ -55,33 +61,65 @@ public class SeatMapService {
 
     /** 직렬화한 JSON 본문과 ETag. 회차가 없으면 SESSION_NOT_FOUND. */
     public Body get(long sessionId) {
-        Instant now = clock.instant();
         Cached hit = cache.get(sessionId);
-        if (hit != null && now.isBefore(hit.expiresAt())) {
+        if (hit != null && clock.instant().isBefore(hit.expiresAt())) {
             return hit.body();
         }
-        Body body = load(sessionId);
-        if (cache.size() >= MAX_ENTRIES) {
-            cache.entrySet().stream()
-                    .min(Comparator.comparing(e -> e.getValue().expiresAt()))
-                    .ifPresent(e -> cache.remove(e.getKey()));
+        Loading loading = new Loading();
+        Loading running = loadings.putIfAbsent(sessionId, loading);
+        if (running != null) {
+            return running.await(sessionId);
         }
-        cache.put(sessionId, new Cached(body, now.plus(TTL)));
-        return body;
+        try {
+            Body body = load(sessionId);
+            store(sessionId, loading, body);
+            loading.future.complete(body);
+            return body;
+        } catch (RuntimeException | Error e) {
+            loading.future.completeExceptionally(e);
+            throw e;
+        } finally {
+            loadings.remove(sessionId, loading);
+        }
+    }
+
+    /** 로딩 중에 evict가 끼어들었으면(invalidated) 옛 값이므로 캐시에 넣지 않는다. 대기자에게는 그대로 돌려준다. */
+    private void store(long sessionId, Loading loading, Body body) {
+        synchronized (loading) {
+            if (loading.invalidated) {
+                return;
+            }
+            if (!cache.containsKey(sessionId) && cache.size() >= MAX_ENTRIES) {
+                cache.entrySet().stream()
+                        .min(Comparator.comparing(e -> e.getValue().expiresAt()))
+                        .ifPresent(e -> cache.remove(e.getKey()));
+            }
+            cache.put(sessionId, new Cached(body, clock.instant().plus(TTL)));
+        }
     }
 
     /** 회차를 바꾼 트랜잭션이 커밋된 뒤에 비운다. 커밋 전에 비우면 그 사이 읽은 옛 값이 다시 캐시에 남는다. */
     public void evictAfterCommit(long sessionId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            cache.remove(sessionId);
+            evict(sessionId);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                cache.remove(sessionId);
+                evict(sessionId);
             }
         });
+    }
+
+    private void evict(long sessionId) {
+        Loading loading = loadings.remove(sessionId);
+        if (loading != null) {
+            synchronized (loading) {
+                loading.invalidated = true;
+            }
+        }
+        cache.remove(sessionId);
     }
 
     private Body load(long sessionId) {
@@ -140,6 +178,28 @@ public class SeatMapService {
 
     /** 본문을 평문과 gzip 두 가지로 들고 있다. 압축은 만들 때 한 번만 하고, 인코딩마다 ETag가 다르다. */
     public record Body(byte[] json, String etag, byte[] gzip, String gzipEtag) {}
+
+    /** 회차별로 진행 중인 로딩. 먼저 온 요청이 DB를 읽고, 나머지는 그 결과(또는 실패)를 받는다. */
+    private static final class Loading {
+        final CompletableFuture<Body> future = new CompletableFuture<>();
+        boolean invalidated;
+
+        Body await(long sessionId) {
+            try {
+                return future.get(LOAD_WAIT.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (ExecutionException e) {
+                if (e.getCause() instanceof RuntimeException re) {
+                    throw re;
+                }
+                throw new IllegalStateException("좌석 배치도 로딩 실패 sessionId=" + sessionId, e.getCause());
+            } catch (TimeoutException e) {
+                throw new IllegalStateException("좌석 배치도 로딩 대기 초과 sessionId=" + sessionId, e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("좌석 배치도 로딩 대기 중단 sessionId=" + sessionId, e);
+            }
+        }
+    }
 
     private record Cached(Body body, Instant expiresAt) {}
 }
