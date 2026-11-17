@@ -38,7 +38,8 @@ class RedisCircuitProberTests {
                     Duration.ofSeconds(15),
                     1000,
                     Duration.ofSeconds(5),
-                    3),
+                    3,
+                    Duration.ofMinutes(6)),
             mock(EntryTokenIssuer.class),
             meters,
             circuit);

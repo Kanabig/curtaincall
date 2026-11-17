@@ -58,5 +58,7 @@ curtaincall:
     stale-after: 60s
     admit-stale-after: 15s
     admit-drop-limit: 1000
+    # 점유 TTL 5분 + gateway 활동 기록 간격 30초보다 길어야 점유 중인 사용자가 회수되지 않는다
+    idle-reclaim-after: 6m
   jwt:
     # 비밀값이라 기본값을 두지 않는다. 환경변수 CURTAINCALL_JWT_ENTRY_SECRET으로 넣는다(gateway와 같은 값)

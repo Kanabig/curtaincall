@@ -40,13 +40,15 @@ public class AdmissionService {
                     nowMs,
                     properties.entryTtl().toMillis(),
                     properties.admitStaleAfter().toMillis(),
-                    properties.admitDropLimit());
-            if (result.ran() && (result.admitted() > 0 || result.dropped() > 0)) {
+                    properties.admitDropLimit(),
+                    properties.idleReclaimAfter().toMillis());
+            if (result.ran() && (result.admitted() > 0 || result.dropped() > 0 || result.reclaimed() > 0)) {
                 log.debug(
-                        "회차 {} 입장 {}명, 폴링 끊김 {}명 제거, 활성 {}명",
+                        "회차 {} 입장 {}명, 폴링 끊김 {}명 제거, 활동 없음 {}명 회수, 활성 {}명",
                         sessionId,
                         result.admitted(),
                         result.dropped(),
+                        result.reclaimed(),
                         result.active());
             }
             total += result.admitted();
