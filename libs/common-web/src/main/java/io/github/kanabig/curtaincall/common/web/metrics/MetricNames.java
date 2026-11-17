@@ -72,6 +72,12 @@ public final class MetricNames {
     /** 검증에 실패한 조건 수. Counter. 태그 field = region, genre, dateFrom, dateTo, maxPrice, keyword. search-assist가 등록한다. */
     public static final String SEARCH_ASSIST_VALIDATION_FAILURES = "search.assist.validation.failures";
 
+    /** 이미 회전된 refresh token이 다시 들어와 토큰 계열을 폐기한 횟수. Counter(태그 없음). user가 등록한다. */
+    public static final String USER_REFRESH_REUSE_DETECTED = "user.refresh.reuse.detected";
+
+    /** 회전 직후 유예 시간 안에 같은 토큰이 다시 와서 계열을 두고 그 요청만 거절한 횟수. Counter(태그 없음). user가 등록한다. */
+    public static final String USER_REFRESH_REUSE_GRACE = "user.refresh.reuse.grace";
+
     /** KOPIS 호출 수. Counter. 태그 result = success, failure. event가 등록한다. 하루 한도(100)와 비교한다. */
     public static final String KOPIS_CALLS = "kopis.calls";
 
