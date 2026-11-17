@@ -42,7 +42,8 @@ spring:
   data:
     redis:
       # Redis가 느리거나 죽어도 요청이 오래 붙잡히지 않게 짧게 둔다(속도 제한은 fail-open)
-      timeout: 100ms
+      # 명령 타임아웃. curtaincall.*.timeout(Reactor)과 같은 값으로 맞춘다. 연결 타임아웃은 재연결 대기를 늘리지 않게 짧게 둔다
+      timeout: 250ms
       connect-timeout: 100ms
 server:
   port: 8080
@@ -53,8 +54,8 @@ curtaincall:
   entry-activity:
     # 입장자의 마지막 활동을 Redis에 쓰는 사용자당 최소 간격. queue의 idle-reclaim-after(6m)보다 충분히 짧아야 한다
     record-interval: ${ENTRY_ACTIVITY_RECORD_INTERVAL:30s}
-    timeout: 100ms
-    circuit-open: 5s
+    timeout: 250ms
+    circuit-open: 2s
   rate-limit:
     # IP는 같은 공유기 뒤의 여러 사용자가 함께 쓰므로 계정보다 넉넉하게 둔다. 한 대에서 부하를 거는 측정 때는 환경변수로 올린다
     ip:
@@ -67,9 +68,9 @@ curtaincall:
     user:
       rate-per-second: ${RATE_LIMIT_USER_PER_SECOND:10}
       burst: ${RATE_LIMIT_USER_BURST:20}
-    timeout: 100ms
+    timeout: 250ms
     # 실패 뒤 이 시간 동안은 Redis를 부르지 않고 통과시킨다
-    circuit-open: 5s
+    circuit-open: 2s
     # gateway가 가장 앞단이면 false. X-Forwarded-For는 클라이언트가 임의로 보낼 수 있다
     trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:false}
   jwt:
