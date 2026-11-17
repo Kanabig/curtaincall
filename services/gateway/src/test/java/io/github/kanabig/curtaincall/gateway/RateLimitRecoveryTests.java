@@ -30,6 +30,9 @@ import org.springframework.test.web.reactive.server.WebTestClient;
             "curtaincall.jwt.access-secret=test-access-secret-0123456789abcdef-test",
             "curtaincall.jwt.entry-secret=test-entry-secret-0123456789abcdef-test",
             "management.server.port=0",
+            // Redis 정지 시 첫 요청이 Lettuce 타임아웃에 기대므로 운영 값(100ms)으로 되돌린다
+            "spring.data.redis.timeout=100ms",
+            "spring.data.redis.connect-timeout=100ms",
             "curtaincall.rate-limit.timeout=100ms",
             "curtaincall.rate-limit.circuit-open=1s",
             "curtaincall.rate-limit.ip.rate-per-second=0.01",
