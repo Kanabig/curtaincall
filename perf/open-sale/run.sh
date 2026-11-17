@@ -161,6 +161,14 @@ SELECT status, COALESCE(failure_code, '(미기록)') AS failure_code, COUNT(*) A
     WHERE session_id=${SESSION_ID} AND status IN ('FAILED', 'EXPIRED') GROUP BY status, failure_code ORDER BY n DESC;" | compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -t reservation_db 2>/dev/null' | tee "$OUT/final-state.txt"
 # 판정 뒤 검사 SQL을 다시 돌려 볼 수 있게 reservation 스키마와 데이터를 남긴다(결과 폴더, 커밋 안 함)
 compose exec -T mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction reservation_db 2>/dev/null' | gzip > "$OUT/reservation_db.sql.gz" || true
+# 서비스 로그를 남기고(결과 폴더, 커밋 안 함) ERROR 수와 승인 미전송 사유별 WARN 수를 한 줄로 적는다
+compose logs --no-color gateway queue reservation payment | gzip > "$OUT/service-logs.txt.gz" || true
+zcat "$OUT/service-logs.txt.gz" | awk '
+    / ERROR / {err++}
+    /PG에 승인을 보내지 않았다.*reason=CIRCUIT_OPEN/ {circuit++}
+    /PG에 승인을 보내지 않았다.*reason=BULKHEAD_FULL/ {bulkhead++}
+    END {printf "log_error=%d approval_not_sent_circuit_open=%d approval_not_sent_bulkhead_full=%d\n", err, circuit, bulkhead}' \
+    | tee "$OUT/log-summary.txt"
 echo "결과: $OUT"
 echo "정합성 위반 합: 좌석 재고 $SEAT_VIOLATIONS, 주문 $ORDER_VIOLATIONS" | tee "$OUT/violations.txt"
 [ "$SEAT_VIOLATIONS" = "0" ] && [ "$ORDER_VIOLATIONS" = "0" ] || { echo "정합성 위반 또는 검사 실패" >&2; exit 1; }
