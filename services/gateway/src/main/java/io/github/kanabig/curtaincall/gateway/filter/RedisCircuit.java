@@ -29,6 +29,7 @@ class RedisCircuit {
     private static final int CLOSED = 0;
     private static final int OPEN = 1;
     private static final int HALF_OPEN = 2;
+    private static final long PROBE_WARN_INTERVAL_NANOS = Duration.ofSeconds(10).toNanos();
 
     private final Duration openFor;
     private final LongSupplier clock;
@@ -41,6 +42,10 @@ class RedisCircuit {
     private final AtomicInteger state = new AtomicInteger(CLOSED);
     /** OPEN에서 이 시각(clock 기준)이 지나야 프로브를 보낸다. */
     private final AtomicLong probeAt = new AtomicLong();
+    /** 프로브 실패 WARN을 마지막으로 남긴 시각. 장애가 길어져도 로그가 10초에 한 줄만 쌓이게 한다. */
+    private final AtomicLong lastProbeWarnAt = new AtomicLong();
+
+    private volatile boolean probeWarned;
 
     RedisCircuit(String name, Duration openFor, MeterRegistry meters, String openLog, String closeLog) {
         this(name, openFor, meters, System::nanoTime, openLog, closeLog);
@@ -124,7 +129,7 @@ class RedisCircuit {
     private void failed(boolean probe, String cause) {
         if (probe) {
             probeAt.set(clock.getAsLong() + openFor.toNanos());
-            if (state.compareAndSet(HALF_OPEN, OPEN)) {
+            if (state.compareAndSet(HALF_OPEN, OPEN) && shouldWarnProbe()) {
                 log.warn("{} 프로브 실패, {} 더 통과시킨다: {}", openLog, openFor, cause);
             }
             return;
@@ -136,6 +141,18 @@ class RedisCircuit {
                 opened.increment();
                 log.warn("{}, {} 동안 Redis를 부르지 않고 통과시킨다: {}", openLog, openFor, cause);
             }
+        }
+    }
+
+    private boolean shouldWarnProbe() {
+        long now = clock.getAsLong();
+        synchronized (lastProbeWarnAt) {
+            if (probeWarned && now - lastProbeWarnAt.get() < PROBE_WARN_INTERVAL_NANOS) {
+                return false;
+            }
+            probeWarned = true;
+            lastProbeWarnAt.set(now);
+            return true;
         }
     }
 }

@@ -15,4 +15,4 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record EntryActivityProperties(
         @DefaultValue("30s") Duration recordInterval,
         @DefaultValue("100ms") Duration timeout,
-        @DefaultValue("5s") Duration circuitOpen) {}
+        @DefaultValue("2s") Duration circuitOpen) {}
