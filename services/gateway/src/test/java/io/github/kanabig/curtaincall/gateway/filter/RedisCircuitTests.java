@@ -135,4 +135,17 @@ class RedisCircuitTests {
         assertThat(call(Mono.empty()).block()).isEqualTo("FALLBACK");
         assertThat(circuit.isOpen()).isTrue();
     }
+
+    @Test
+    @DisplayName("구독하지 않은 호출은 프로브 자리를 차지하지 않는다")
+    void unsubscribedCallDoesNotTakeProbe() {
+        call(Mono.error(new IllegalStateException("timeout"))).block();
+        advance(Duration.ofSeconds(5));
+
+        call(Mono.just("OK")); // 구독하지 않음
+        advance(Duration.ofSeconds(60));
+
+        assertThat(call(Mono.just("OK")).block()).isEqualTo("OK");
+        assertThat(circuit.isOpen()).isFalse();
+    }
 }
