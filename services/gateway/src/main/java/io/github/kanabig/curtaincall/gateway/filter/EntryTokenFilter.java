@@ -1,6 +1,7 @@
 package io.github.kanabig.curtaincall.gateway.filter;
 
 import io.github.kanabig.curtaincall.gateway.config.JwtProperties;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -54,8 +55,9 @@ public class EntryTokenFilter implements GlobalFilter, Ordered {
     private final ReactiveJwtDecoder decoder;
     private final ProblemWriter problems;
     private final EntryActivity activity;
+    private final MeterRegistry meters;
 
-    public EntryTokenFilter(JwtProperties properties, ProblemWriter problems, EntryActivity activity) {
+    public EntryTokenFilter(JwtProperties properties, ProblemWriter problems, EntryActivity activity, MeterRegistry meters) {
         SecretKey key = new SecretKeySpec(properties.entrySecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         NimbusReactiveJwtDecoder nimbus = NimbusReactiveJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS256)
@@ -67,6 +69,7 @@ public class EntryTokenFilter implements GlobalFilter, Ordered {
         this.decoder = nimbus;
         this.problems = problems;
         this.activity = activity;
+        this.meters = meters;
     }
 
     @Override
@@ -100,6 +103,7 @@ public class EntryTokenFilter implements GlobalFilter, Ordered {
         return activity.touch(sid, userId).flatMap(active -> {
             if (!active) {
                 // queue가 활동 없음으로 활성 목록에서 뺀 사용자. 입장 만료와 같은 응답
+                meters.counter("gateway.entry-activity.rejected").increment();
                 return invalid(exchange, "유효하지 않거나 만료된 입장 토큰");
             }
             ServerWebExchange admitted = exchange.mutate()

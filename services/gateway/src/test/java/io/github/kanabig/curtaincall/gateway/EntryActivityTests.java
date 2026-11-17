@@ -63,6 +63,9 @@ class EntryActivityTests {
     @Autowired
     StringRedisTemplate redis;
 
+    @Autowired
+    io.micrometer.core.instrument.MeterRegistry meters;
+
     @BeforeEach
     void clean() {
         redis.delete(java.util.List.of("q:5:active", "q:5:activity"));
@@ -103,6 +106,8 @@ class EntryActivityTests {
         hold("7").expectStatus().isForbidden().expectBody().jsonPath("$.code").isEqualTo("ENTRY_TOKEN_INVALID");
         assertThat(STUB.received.get()).isZero();
         assertThat(redis.opsForZSet().score("q:5:activity", "7")).isNull();
+        assertThat(meters.get("gateway.entry-activity.rejected").counter().count())
+                .isGreaterThan(0);
     }
 
     @Test

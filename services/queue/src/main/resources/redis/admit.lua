@@ -23,7 +23,12 @@ local conf = redis.call('HMGET', KEYS[1], 'status', 'saleOpenAt', 'admissionPerS
 if conf[1] ~= 'ON_SALE' or now < tonumber(conf[2]) then
   return {-1}
 end
-redis.call('ZREMRANGEBYSCORE', KEYS[4], '-inf', now)
+local expired = redis.call('ZRANGEBYSCORE', KEYS[4], '-inf', now)
+if #expired > 0 then
+  -- 만료로 빠지는 사용자는 활동 기록도 같이 지운다(idleMs가 0이어도 activity가 쌓이지 않게)
+  redis.call('ZREM', KEYS[4], unpack(expired))
+  redis.call('ZREM', KEYS[5], unpack(expired))
+end
 local reclaimed = 0
 local idleMs = tonumber(ARGV[6])
 if idleMs and idleMs > 0 then
