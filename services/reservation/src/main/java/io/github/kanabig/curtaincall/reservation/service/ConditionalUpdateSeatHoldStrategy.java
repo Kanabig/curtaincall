@@ -41,15 +41,16 @@ public class ConditionalUpdateSeatHoldStrategy implements SeatHoldStrategy {
     @Override
     public SeatHold hold(long sessionId, long userId, List<Long> seatIds) {
         // 사전 확인: 이미 유효 점유·판매된 좌석이 있으면 한도 행을 쓰지 않고 바로 거절한다. 최적화일 뿐이고 최종 판정은 아래 조건부 UPDATE가 한다
-        if (!repository.findUnavailable(sessionId, seatIds, clock.instant()).isEmpty()) {
-            throw conflict(sessionId, seatIds);
+        List<Long> taken = repository.findUnavailable(sessionId, seatIds, clock.instant());
+        if (!taken.isEmpty()) {
+            throw conflict(sessionId, seatIds, taken);
         }
         repository.ensureQuotaRow(userId, sessionId);
         try {
             return tx.execute(status -> doHold(sessionId, userId, seatIds));
         } catch (SeatConflict e) {
             // 롤백이 끝난 뒤에 어느 좌석이 막았는지 읽는다
-            throw conflict(sessionId, seatIds);
+            throw conflict(sessionId, seatIds, null);
         }
     }
 
@@ -72,12 +73,15 @@ public class ConditionalUpdateSeatHoldStrategy implements SeatHoldStrategy {
         return new SeatHold(holdId, seatIds, expiresAt);
     }
 
-    private BusinessException conflict(long sessionId, List<Long> seatIds) {
+    /** @param knownUnavailable 사전 확인에서 이미 읽은 점유 불가 좌석. 없으면(null) 다시 읽는다 */
+    private BusinessException conflict(long sessionId, List<Long> seatIds, List<Long> knownUnavailable) {
         List<Long> missing = repository.findMissing(sessionId, seatIds);
         if (!missing.isEmpty()) {
             return new BusinessException(CommonErrorCode.INVALID_REQUEST, "회차에 없는 좌석").with("seatIds", missing);
         }
-        List<Long> unavailable = repository.findUnavailable(sessionId, seatIds, clock.instant());
+        List<Long> unavailable = knownUnavailable != null
+                ? knownUnavailable
+                : repository.findUnavailable(sessionId, seatIds, clock.instant());
         return new BusinessException(
                         ReservationErrorCode.SEAT_ALREADY_HELD,
                         "좌석 %d개 중 %d개를 다른 사용자가 점유 중".formatted(seatIds.size(), unavailable.size()))
