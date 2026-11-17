@@ -30,10 +30,8 @@ class RedisCircuit {
     private static final int OPEN = 1;
     private static final int HALF_OPEN = 2;
 
-    private final String name;
     private final Duration openFor;
     private final LongSupplier clock;
-    private final MeterRegistry meters;
     private final String openLog;
     private final String closeLog;
     private final Counter opened;
@@ -50,9 +48,7 @@ class RedisCircuit {
 
     RedisCircuit(
             String name, Duration openFor, MeterRegistry meters, LongSupplier clock, String openLog, String closeLog) {
-        this.name = name;
         this.openFor = openFor;
-        this.meters = meters;
         this.clock = clock;
         this.openLog = openLog;
         this.closeLog = closeLog;
@@ -91,13 +87,13 @@ class RedisCircuit {
                     .timeout(timeout)
                     .switchIfEmpty(Mono.error(new IllegalStateException("빈 응답")))
                     .doOnNext(r -> {
-                        record(start, probe, true);
+                        record(start, true);
                         if (probe) {
                             close();
                         }
                     })
                     .onErrorResume(ex -> {
-                        record(start, probe, false);
+                        record(start, false);
                         onFailOpen.run();
                         failed(probe, String.valueOf(ex));
                         return Mono.just(fallback);
@@ -115,7 +111,7 @@ class RedisCircuit {
         return state.get() != CLOSED;
     }
 
-    private void record(long start, boolean probe, boolean success) {
+    private void record(long start, boolean success) {
         (success ? successTimer : failureTimer).record(Duration.ofNanos(clock.getAsLong() - start));
     }
 
