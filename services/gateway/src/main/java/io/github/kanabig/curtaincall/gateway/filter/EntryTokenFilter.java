@@ -57,7 +57,8 @@ public class EntryTokenFilter implements GlobalFilter, Ordered {
     private final EntryActivity activity;
     private final MeterRegistry meters;
 
-    public EntryTokenFilter(JwtProperties properties, ProblemWriter problems, EntryActivity activity, MeterRegistry meters) {
+    public EntryTokenFilter(
+            JwtProperties properties, ProblemWriter problems, EntryActivity activity, MeterRegistry meters) {
         SecretKey key = new SecretKeySpec(properties.entrySecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         NimbusReactiveJwtDecoder nimbus = NimbusReactiveJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS256)

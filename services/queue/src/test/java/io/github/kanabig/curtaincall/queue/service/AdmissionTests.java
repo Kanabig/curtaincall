@@ -316,8 +316,13 @@ class AdmissionTests extends QueueIntegrationTest {
         putConf(-1000, 10, 5);
         Instant t0 = startOfSecond();
         for (int u = 1000; u < 11000; u++) {
-            redis.opsForZSet().add(key("active"), String.valueOf(u), t0.minusSeconds(60).toEpochMilli());
-            redis.opsForZSet().add(key("activity"), String.valueOf(u), t0.minusSeconds(900).toEpochMilli());
+            redis.opsForZSet()
+                    .add(key("active"), String.valueOf(u), t0.minusSeconds(60).toEpochMilli());
+            redis.opsForZSet()
+                    .add(
+                            key("activity"),
+                            String.valueOf(u),
+                            t0.minusSeconds(900).toEpochMilli());
         }
         enterUsers(1, 3);
         pollUntil(1, 3, t0.plusSeconds(10));
