@@ -62,6 +62,9 @@ class EntryTokenTests {
     @Autowired
     WebTestClient client;
 
+    @Autowired
+    io.micrometer.core.instrument.MeterRegistry meters;
+
     @BeforeEach
     void clear() {
         RECEIVED.clear();
@@ -75,6 +78,16 @@ class EntryTokenTests {
                 .isOk();
         Map<String, String> headers = RECEIVED.get("/api/v1/sessions/5/holds");
         assertThat(headers).containsEntry("x-entry-session-id", "5").doesNotContainKey("x-entry-token");
+    }
+
+    @Test
+    @DisplayName("Redis에 닿지 못하면 활성 소속을 확인하지 못해도 서명이 맞는 토큰은 통과하고 failopen 카운터가 남는다(NFR-11)")
+    void redisDownFailsOpen() {
+        post("/api/v1/sessions/5/holds", entry("7", "5", 600, ENTRY_SECRET), "7", null)
+                .expectStatus()
+                .isOk();
+        assertThat(meters.get("gateway.entry-activity.failopen").counter().count())
+                .isGreaterThan(0);
     }
 
     @Test

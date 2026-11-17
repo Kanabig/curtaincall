@@ -7,8 +7,9 @@ package io.github.kanabig.curtaincall.queue.repository;
  * @param admitted 이번에 입장시킨 수
  * @param active 처리 뒤 활성 사용자 수
  * @param dropped 폴링이 끊겨 입장시키지 않고 대기열에서 지운 수
+ * @param reclaimed 활동이 없어 활성 목록에서 뺀 수
  */
-public record AdmitResult(boolean ran, long admitted, long active, long dropped) {
+public record AdmitResult(boolean ran, long admitted, long active, long dropped, long reclaimed) {
 
-    static final AdmitResult SKIPPED = new AdmitResult(false, 0, 0, 0);
+    static final AdmitResult SKIPPED = new AdmitResult(false, 0, 0, 0, 0);
 }

@@ -40,6 +40,11 @@ logging:
   pattern:
     level: "%5p [${spring.application.name},%X{requestId:-}]"
 curtaincall:
+  entry-activity:
+    # 입장자의 마지막 활동을 Redis에 쓰는 사용자당 최소 간격. queue의 idle-reclaim-after(3m)보다 충분히 짧아야 한다
+    record-interval: ${ENTRY_ACTIVITY_RECORD_INTERVAL:30s}
+    timeout: 100ms
+    circuit-open: 5s
   rate-limit:
     # IP는 같은 공유기 뒤의 여러 사용자가 함께 쓰므로 계정보다 넉넉하게 둔다. 한 대에서 부하를 거는 측정 때는 환경변수로 올린다
     ip:

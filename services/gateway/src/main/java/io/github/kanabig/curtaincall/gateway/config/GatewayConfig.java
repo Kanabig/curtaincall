@@ -26,7 +26,7 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import reactor.core.publisher.Hooks;
 
 @Configuration
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, EntryActivityProperties.class})
 public class GatewayConfig {
 
     static {

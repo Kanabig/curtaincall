@@ -58,5 +58,6 @@ curtaincall:
     stale-after: 60s
     admit-stale-after: 15s
     admit-drop-limit: 1000
+    idle-reclaim-after: 3m
   jwt:
     # 비밀값이라 기본값을 두지 않는다. 환경변수 CURTAINCALL_JWT_ENTRY_SECRET으로 넣는다(gateway와 같은 값)

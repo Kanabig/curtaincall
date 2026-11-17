@@ -15,6 +15,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param soldOutPollAfter 매진 중 대기자에게 주는 폴링 간격(±20% 지터는 따로). 최대 간격(+20%)이 admitStaleAfter보다 충분히 작아야 매진이 풀린 직후 대기자가 이탈로 지워지지 않는다
  * @param admitDropLimit 한 번의 입장 처리에서 폴링이 끊긴 대기자를 지우는 최대 수. 닿으면 그 틱은 멈춘다
  * @param redisCircuitFailures Redis 호출이 연속으로 이만큼 실패하면 서킷을 연다(NFR-11). 성공하면 0으로 돌아가므로 과부하로 생긴 드문 타임아웃 한 번에 열리지 않는다
+ * @param idleReclaimAfter 입장한 사용자의 예매 API 활동이 이만큼 없으면 활성 목록에서 빼고 자리를 채운다(#145). 0이면 회수하지 않는다. 점유 TTL(5분)보다 짧게 두되 gateway의 활동 기록 간격보다는 충분히 길어야 한다
  */
 @ConfigurationProperties("curtaincall.queue")
 public record QueueProperties(
@@ -24,4 +25,5 @@ public record QueueProperties(
         @DefaultValue("15s") Duration admitStaleAfter,
         @DefaultValue("1000") int admitDropLimit,
         @DefaultValue("5s") Duration soldOutPollAfter,
-        @DefaultValue("3") int redisCircuitFailures) {}
+        @DefaultValue("3") int redisCircuitFailures,
+        @DefaultValue("3m") Duration idleReclaimAfter) {}

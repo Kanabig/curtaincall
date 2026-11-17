@@ -23,6 +23,11 @@ final class QueueKeys {
         return "q:" + sid + ":active";
     }
 
+    /** 활성 사용자의 마지막 활동 시각(ms). gateway가 예매 API 요청 때 갱신한다. 키 이름은 gateway의 EntryActivity와 맞춘다. */
+    static String activity(long sid) {
+        return "q:" + sid + ":activity";
+    }
+
     /** 같은 초에 입장 처리를 한 번만 하도록 잡는 키의 접두. 스크립트가 뒤에 epochSecond를 붙인다. */
     static String tickPrefix(long sid) {
         return "q:" + sid + ":tick:";

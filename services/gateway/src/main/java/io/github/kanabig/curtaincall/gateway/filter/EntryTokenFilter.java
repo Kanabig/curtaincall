@@ -35,7 +35,7 @@ import reactor.core.publisher.Mono;
 
 /**
  * [QUE-5] 점유, 주문, 결제 시작 API의 입장 토큰 검증. 서명·만료를 확인하고 토큰의 sub가 access token의 사용자(X-User-Id)와 같은지 본 뒤 sid를
- * X-Entry-Session-Id로 넘긴다. 요청한 회차와 sid를 맞춰 보는 것은 reservation 몫이다(주문·결제 요청에는 회차가 경로에 없다). 검증은 토큰만 보고 하므로 Redis가 내려가도
+ * X-Entry-Session-Id로 넘긴다. 요청한 회차와 sid를 맞춰 보는 것은 reservation 몫이다(주문·결제 요청에는 회차가 경로에 없다). 서명 검증 뒤 활성 목록 소속을 확인하고 마지막 활동을 남긴다(EntryActivity). Redis가 내려가면 서명만 보고 통과시켜
  * 이미 받은 토큰은 계속 통한다(NFR-11).
  *
  * <p>AuthFilter가 X-User-Id를 넣고 사용자 속도 제한이 지난 다음에 돈다. X-Entry-Token은 어느 경로에서든 하위 서비스로 넘기지 않는다.
@@ -53,8 +53,9 @@ public class EntryTokenFilter implements GlobalFilter, Ordered {
 
     private final ReactiveJwtDecoder decoder;
     private final ProblemWriter problems;
+    private final EntryActivity activity;
 
-    public EntryTokenFilter(JwtProperties properties, ProblemWriter problems) {
+    public EntryTokenFilter(JwtProperties properties, ProblemWriter problems, EntryActivity activity) {
         SecretKey key = new SecretKeySpec(properties.entrySecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         NimbusReactiveJwtDecoder nimbus = NimbusReactiveJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS256)
@@ -65,6 +66,7 @@ public class EntryTokenFilter implements GlobalFilter, Ordered {
                 EntryTokenFilter::hasSubAndSid)));
         this.decoder = nimbus;
         this.problems = problems;
+        this.activity = activity;
     }
 
     @Override
@@ -94,11 +96,17 @@ public class EntryTokenFilter implements GlobalFilter, Ordered {
         if (userId == null || !userId.equals(jwt.getSubject())) {
             return invalid(exchange, "다른 사용자의 입장 토큰");
         }
-        ServerWebExchange admitted = exchange.mutate()
-                .request(request -> request.headers(headers ->
-                        headers.set(AuthFilter.ENTRY_SESSION_ID, String.valueOf(jwt.getClaimAsString("sid")))))
-                .build();
-        return chain.filter(admitted);
+        String sid = jwt.getClaimAsString("sid");
+        return activity.touch(sid, userId).flatMap(active -> {
+            if (!active) {
+                // queue가 활동 없음으로 활성 목록에서 뺀 사용자. 입장 만료와 같은 응답
+                return invalid(exchange, "유효하지 않거나 만료된 입장 토큰");
+            }
+            ServerWebExchange admitted = exchange.mutate()
+                    .request(request -> request.headers(headers -> headers.set(AuthFilter.ENTRY_SESSION_ID, sid)))
+                    .build();
+            return chain.filter(admitted);
+        });
     }
 
     private Mono<Void> invalid(ServerWebExchange exchange, String detail) {
