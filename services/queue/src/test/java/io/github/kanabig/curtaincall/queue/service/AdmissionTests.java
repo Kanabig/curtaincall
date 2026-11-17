@@ -311,6 +311,24 @@ class AdmissionTests extends QueueIntegrationTest {
     }
 
     @Test
+    @DisplayName("[QUE-5] 만료된 입장자가 만 명 쌓여 있어도 입장 처리가 실패하지 않고 활성 목록을 비운다")
+    void manyExpiredActiveUsers() {
+        putConf(-1000, 10, 5);
+        Instant t0 = startOfSecond();
+        for (int u = 1000; u < 11000; u++) {
+            redis.opsForZSet().add(key("active"), String.valueOf(u), t0.minusSeconds(60).toEpochMilli());
+            redis.opsForZSet().add(key("activity"), String.valueOf(u), t0.minusSeconds(900).toEpochMilli());
+        }
+        enterUsers(1, 3);
+        pollUntil(1, 3, t0.plusSeconds(10));
+
+        assertThat(admission.admitAll(t0)).isEqualTo(3);
+        assertThat(activeCount()).isEqualTo(3);
+        // 만료자의 activity도 같은 틱에 지워지고 입장한 3명의 기록만 남는다
+        assertThat(redis.opsForZSet().zCard(key("activity"))).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("[QUE-5] 회수 시간이 0이면 회수하지 않는다")
     void reclaimDisabled() {
         putConf(-1000, 10, 2);

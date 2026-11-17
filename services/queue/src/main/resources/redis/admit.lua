@@ -23,12 +23,23 @@ local conf = redis.call('HMGET', KEYS[1], 'status', 'saleOpenAt', 'admissionPerS
 if conf[1] ~= 'ON_SALE' or now < tonumber(conf[2]) then
   return {-1}
 end
-local expired = redis.call('ZRANGEBYSCORE', KEYS[4], '-inf', now)
-if #expired > 0 then
-  -- 만료로 빠지는 사용자는 활동 기록도 같이 지운다(idleMs가 0이어도 activity가 쌓이지 않게)
-  redis.call('ZREM', KEYS[4], unpack(expired))
-  redis.call('ZREM', KEYS[5], unpack(expired))
+-- unpack은 원소가 수천 개를 넘으면 실패하므로 목록은 항상 나눠서 넘긴다
+local function zremChunked(key, members)
+  for i = 1, #members, 500 do
+    redis.call('ZREM', key, unpack(members, i, math.min(i + 499, #members)))
+  end
 end
+-- 만료로 빠지는 사용자는 활동 기록도 지운다(idleMs가 0이어도 activity가 쌓이지 않게). 1000명씩 끊어 읽으며 active를 지우기 전에 전부 처리한다.
+local offset = 0
+while true do
+  local page = redis.call('ZRANGEBYSCORE', KEYS[4], '-inf', now, 'LIMIT', offset, 1000)
+  if #page == 0 then
+    break
+  end
+  zremChunked(KEYS[5], page)
+  offset = offset + #page
+end
+redis.call('ZREMRANGEBYSCORE', KEYS[4], '-inf', now)
 local reclaimed = 0
 local idleMs = tonumber(ARGV[6])
 if idleMs and idleMs > 0 then
@@ -36,9 +47,7 @@ if idleMs and idleMs > 0 then
   for _, user in ipairs(idle) do
     reclaimed = reclaimed + redis.call('ZREM', KEYS[4], user)
   end
-  if #idle > 0 then
-    redis.call('ZREM', KEYS[5], unpack(idle))
-  end
+  zremChunked(KEYS[5], idle)
 end
 local active = redis.call('ZCARD', KEYS[4])
 -- 매진이면 입장시키지 않는다. 만료 정리는 위에서 했고 대기열은 그대로 둬서 매진이 풀리면 원래 순서로 재개한다(QUE-8)
