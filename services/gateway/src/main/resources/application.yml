@@ -41,7 +41,7 @@ logging:
     level: "%5p [${spring.application.name},%X{requestId:-}]"
 curtaincall:
   entry-activity:
-    # 입장자의 마지막 활동을 Redis에 쓰는 사용자당 최소 간격. queue의 idle-reclaim-after(3m)보다 충분히 짧아야 한다
+    # 입장자의 마지막 활동을 Redis에 쓰는 사용자당 최소 간격. queue의 idle-reclaim-after(6m)보다 충분히 짧아야 한다
     record-interval: ${ENTRY_ACTIVITY_RECORD_INTERVAL:30s}
     timeout: 100ms
     circuit-open: 5s

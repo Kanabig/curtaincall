@@ -271,8 +271,8 @@ class AdmissionTests extends QueueIntegrationTest {
         assertThat(admission.admitAll(t0)).isEqualTo(4);
         assertThat(activeCount()).isEqualTo(4);
 
-        // 1번만 활동(gateway가 남기는 값과 같은 키·단위)을 이어 간다. 3분 뒤 나머지 셋이 회수되고 대기자 셋이 들어온다
-        Instant later = t0.plusSeconds(181);
+        // 1번만 활동(gateway가 남기는 값과 같은 키·단위)을 이어 간다. 6분 뒤 나머지 셋이 회수되고 대기자 셋이 들어온다
+        Instant later = t0.plusSeconds(361);
         redis.opsForZSet().add(key("activity"), "1", later.minusSeconds(10).toEpochMilli());
         assertThat(admission.admitAll(later)).isEqualTo(3);
         assertThat(activeCount()).isEqualTo(4);
@@ -290,9 +290,24 @@ class AdmissionTests extends QueueIntegrationTest {
         pollUntil(1, 4, t0.plusSeconds(600));
         admission.admitAll(t0);
 
-        Instant later = t0.plusSeconds(170);
+        Instant later = t0.plusSeconds(350);
         assertThat(admission.admitAll(later)).isZero();
         assertThat(isActive(1) && isActive(2)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[QUE-5] 기록 간격 안에서 한 점유는 점유 TTL이 끝나기 전까지 회수되지 않고, 그 뒤 회수 시간이 지나면 회수된다")
+    void holdInsideRecordIntervalIsNotReclaimedBeforeItExpires() {
+        putConf(-1000, 10, 1);
+        enterUsers(1, 2);
+        Instant t0 = startOfSecond();
+        pollUntil(1, 2, t0.plusSeconds(900));
+        admission.admitAll(t0);
+        // 마지막 활동 기록은 t0. 기록 간격(30초) 안인 t0+29초의 점유는 기록되지 않고, 이 점유는 t0+329초(점유 TTL 5분)에 끝난다
+        assertThat(admission.admitAll(t0.plusSeconds(329))).isZero();
+        assertThat(isActive(1)).isTrue();
+        assertThat(admission.admitAll(t0.plusSeconds(361))).isEqualTo(1);
+        assertThat(isActive(1)).isFalse();
     }
 
     @Test
