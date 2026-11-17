@@ -18,6 +18,8 @@ import io.github.kanabig.curtaincall.event.repository.SessionRepository;
 import io.github.kanabig.curtaincall.event.service.SeatMapService.Body;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +29,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -155,15 +158,41 @@ class SeatMapServiceTests {
     @Test
     @DisplayName("이미 캐시된 회차를 다시 읽을 때는 가득 차 있어도 다른 항목을 내보내지 않는다")
     void noEvictionForExistingKey() {
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-11-17T00:00:00Z"));
+        Clock clock = new Clock() {
+            @Override
+            public ZoneId getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public Instant instant() {
+                return now.get();
+            }
+        };
+        service = new SeatMapService(sessions, seats, JsonMapper.builder().build(), clock);
         when(sessions.find(anyLong())).thenReturn(Optional.of(session()));
         when(seats.findSeatRows("H-01")).thenReturn(rows());
-        for (long id = 1; id <= SeatMapService.MAX_ENTRIES; id++) {
+
+        service.get(1);
+        now.set(now.get().plusSeconds(60));
+        for (long id = 2; id <= SeatMapService.MAX_ENTRIES; id++) {
             service.get(id);
         }
         verify(sessions, times(SeatMapService.MAX_ENTRIES)).find(anyLong());
-        for (long id = 1; id <= SeatMapService.MAX_ENTRIES; id++) {
+
+        // 1번만 TTL을 넘겨 만료시키고 다시 읽는다. 캐시가 가득 차 있어도 1번 키를 갱신할 뿐 다른 항목을 내보내면 안 된다
+        now.set(now.get().plus(SeatMapService.TTL).minusSeconds(30));
+        service.get(1);
+        verify(sessions, times(SeatMapService.MAX_ENTRIES + 1)).find(anyLong());
+        for (long id = 2; id <= SeatMapService.MAX_ENTRIES; id++) {
             service.get(id);
         }
-        verify(sessions, times(SeatMapService.MAX_ENTRIES)).find(anyLong());
+        verify(sessions, times(SeatMapService.MAX_ENTRIES + 1)).find(anyLong());
     }
 }
