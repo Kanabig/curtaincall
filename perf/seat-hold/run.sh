@@ -20,6 +20,10 @@ mysql_root() { compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD
 metrics() {
     compose exec -T mysql sh -c "mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -N -e \"SELECT NAME, \\\`COUNT\\\` FROM information_schema.INNODB_METRICS WHERE NAME IN ('lock_deadlocks','lock_timeouts') ORDER BY NAME\" 2>/dev/null"
 }
+# 한도 행(user_session_quota) 쓰기 구문 수와 실제 삽입 행 수: Com_insert는 ON DUPLICATE KEY 구문도 센다
+write_counters() {
+    compose exec -T mysql sh -c "mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -N -e \"SHOW GLOBAL STATUS WHERE Variable_name IN ('Com_insert','Innodb_rows_inserted','Innodb_rows_updated')\" 2>/dev/null"
+}
 
 CURTAINCALL_HOLD_STRATEGY="$STRATEGY" compose up -d --force-recreate --wait reservation
 mysql_root < perf/seat-hold/seed.sql
@@ -47,6 +51,7 @@ mysql_root < perf/seat-hold/seed.sql
 } | tee "$OUT/env.txt"
 
 metrics > "$OUT/innodb-before.txt"
+write_counters > "$OUT/writes-before.txt"
 docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}' > "$OUT/stats-idle.txt"
 ( while sleep 5; do docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}'; echo '--'; done > "$OUT/stats-load.txt" ) &
 SAMPLER=$!
@@ -57,7 +62,9 @@ docker run --rm --user "$(id -u):$(id -g)" --network "${PROJECT}_default" -v "$P
 
 kill $SAMPLER 2>/dev/null || true
 metrics > "$OUT/innodb-after.txt"
+write_counters > "$OUT/writes-after.txt"
 echo "--- InnoDB (전/후)"; paste "$OUT/innodb-before.txt" "$OUT/innodb-after.txt"
+echo "--- 쓰기 카운터 (전/후)"; paste "$OUT/writes-before.txt" "$OUT/writes-after.txt"
 echo "--- 종료 후 정합성 (위반 수)"; compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -t reservation_db 2>/dev/null' < perf/seat-hold/verify.sql | tee "$OUT/verify.txt"
 HELD=$(echo "SELECT COUNT(*) FROM seat_inventory WHERE status = 'HELD'" | mysql_root | tr -d '[:space:]')
 K6_SEATS=$(sed -n 's/.*hold_ok .*seats \([0-9]*\).*/\1/p' "$OUT/k6.txt" | head -1)
