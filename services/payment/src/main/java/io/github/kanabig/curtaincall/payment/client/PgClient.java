@@ -5,6 +5,7 @@ import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.core.exception.AcquirePermissionCancelledException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
@@ -61,7 +62,8 @@ public class PgClient {
                 approvalBulkhead.onComplete();
             }
             return toOutcome(response);
-        } catch (BulkheadFullException e) {
+        } catch (BulkheadFullException | AcquirePermissionCancelledException e) {
+            // 슬롯을 기다리다 인터럽트돼도 PG에는 보내지 않았다. 인터럽트 플래그는 라이브러리가 복구한다
             return new ApprovalOutcome.NotSent(ApprovalOutcome.Reason.BULKHEAD_FULL);
         } catch (CallNotPermittedException e) {
             return new ApprovalOutcome.NotSent(ApprovalOutcome.Reason.CIRCUIT_OPEN);

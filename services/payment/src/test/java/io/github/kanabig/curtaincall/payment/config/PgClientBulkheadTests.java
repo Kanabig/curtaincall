@@ -14,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -133,5 +134,25 @@ class PgClientBulkheadTests {
         assertThat(second.get(5, TimeUnit.SECONDS))
                 .isEqualTo(new ApprovalOutcome.NotSent(ApprovalOutcome.Reason.CIRCUIT_OPEN));
         assertThat(sent.get()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("슬롯을 기다리다 인터럽트되면 PG에 보내지 않고 BULKHEAD_FULL로 끝난다")
+    void interruptedWhileWaitingIsNotSent() throws Exception {
+        PgClient client = client(Duration.ofSeconds(5));
+        CompletableFuture<ApprovalOutcome> first = approveAsync(client);
+        assertThat(firstSent.await(5, TimeUnit.SECONDS)).isTrue();
+        AtomicReference<ApprovalOutcome> result = new AtomicReference<>();
+        Thread waiter = new Thread(() -> result.set(client.approve("o2", 1, "tok")));
+        waiter.start();
+        Thread.sleep(300);
+
+        waiter.interrupt();
+        waiter.join(5000);
+
+        assertThat(result.get()).isEqualTo(new ApprovalOutcome.NotSent(ApprovalOutcome.Reason.BULKHEAD_FULL));
+        assertThat(sent.get()).isEqualTo(1);
+        release.countDown();
+        first.get(5, TimeUnit.SECONDS);
     }
 }
