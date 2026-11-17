@@ -94,6 +94,21 @@ describe('request: 401 → refresh', () => {
     expect(tokenStore.get()).toEqual({ accessToken: 'tab2-access', refreshToken: 'tab2-refresh' })
   })
 
+  it('refresh가 401이면 잠시 기다려 다시 확인하고, 그 사이 다른 탭이 저장한 토큰으로 재시도한다', async () => {
+    handler = (url, n) => {
+      if (url === '/api/v1/auth/refresh') {
+        setTimeout(() => tokenStore.set({ accessToken: 'tab2-access', refreshToken: 'tab2-refresh' }), 100)
+        return json(401, { code: 'INVALID_REFRESH_TOKEN' })
+      }
+      return n === 1 ? json(401, { code: 'UNAUTHORIZED' }) : json(200, { ok: true })
+    }
+
+    await expect(request('/users/me', { auth: true })).resolves.toEqual({ ok: true })
+
+    expect(calls[2].auth).toBe('Bearer tab2-access')
+    expect(tokenStore.get()).toEqual({ accessToken: 'tab2-access', refreshToken: 'tab2-refresh' })
+  })
+
   it('auth가 아닌 요청은 401이어도 refresh하지 않는다', async () => {
     handler = () => json(401, { code: 'INVALID_CREDENTIALS' })
     await expect(request('/auth/login', { method: 'POST', body: {} })).rejects.toBeInstanceOf(ApiError)

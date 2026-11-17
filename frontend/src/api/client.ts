@@ -111,7 +111,9 @@ interface Options {
 
 // 동시에 여러 요청이 401을 받아도 refresh는 한 번만 보낸다(refresh token은 한 번 쓰면 폐기된다).
 // 토큰은 탭이 공유하는 localStorage에 있어서 다른 탭이 먼저 회전했을 수 있다. 보내기 전에 저장값을 다시 읽어
-// 이미 바뀌었으면 refresh를 보내지 않고 저장된 토큰으로 재시도하고, 실패해도 그 사이 저장값이 바뀌었으면 지우지 않는다.
+// 이미 바뀌었으면 refresh를 보내지 않고 저장된 토큰으로 재시도한다. 실패하면 이긴 탭이 새 토큰을 저장할 시간을
+// 두고(서버는 회전 직후 유예 안의 재사용을 먼저 401로 돌려줄 수 있다) 저장값을 다시 확인해, 바뀌었으면 지우지 않는다.
+const RECHECK_DELAY_MS = 500
 let refreshing: Promise<boolean> | null = null
 
 function refreshTokens(sent: Tokens | null): Promise<boolean> {
@@ -125,6 +127,7 @@ function refreshTokens(sent: Tokens | null): Promise<boolean> {
       body: JSON.stringify({ refreshToken: current.refreshToken }),
     })
     if (!res.ok) {
+      await new Promise((resolve) => setTimeout(resolve, RECHECK_DELAY_MS))
       const latest = tokenStore.get()
       if (latest && latest.refreshToken !== current.refreshToken) return true
       tokenStore.set(null)
