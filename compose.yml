@@ -27,8 +27,8 @@ services:
       PAYMENT_FLYWAY_PASSWORD: ${PAYMENT_FLYWAY_PASSWORD}
       NOTIFICATION_APP_PASSWORD: ${NOTIFICATION_APP_PASSWORD}
       NOTIFICATION_FLYWAY_PASSWORD: ${NOTIFICATION_FLYWAY_PASSWORD}
-      TZ: Asia/Seoul
-    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    # DEFAULT CURRENT_TIMESTAMP 열과 앱이 쓰는 시각이 같은 기준(UTC)이 되도록 서버 시간대를 UTC로 둔다
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00"]
     ports:
       - "${MYSQL_HOST_PORT:-3306}:3306"
     volumes:

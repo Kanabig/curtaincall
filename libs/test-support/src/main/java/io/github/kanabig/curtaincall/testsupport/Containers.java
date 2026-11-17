@@ -37,6 +37,8 @@ public final class Containers {
     private static final class SharedMySql extends MySQLContainer {
         SharedMySql(String image) {
             super(image);
+            // compose.yml과 같은 서버 시간대
+            withCommand("--default-time-zone=+00:00");
         }
 
         @Override
