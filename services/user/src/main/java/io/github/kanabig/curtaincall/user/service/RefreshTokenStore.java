@@ -33,6 +33,7 @@ public class RefreshTokenStore {
     static final String USED_PREFIX = "user:refresh:used:";
     static final String FAMILY_PREFIX = "user:refresh:family:";
 
+    // 계열 키·현재 토큰 키를 ARGV 접두사로 만들어 접근하므로 단일 Redis 전제다(Redis Cluster에서는 동작하지 않는다).
     /** KEYS: 제시된 토큰, 흔적, 새 토큰. ARGV: TTL 초, 새 계열 ID(계열이 없는 토큰용), 계열 키 접두사, 새 토큰 해시, 토큰 키 접두사, 유예 밀리초. 시각은 Redis TIME. */
     private static final String ROTATE_SCRIPT = """
             local value = redis.call('GETDEL', KEYS[1])

@@ -202,6 +202,10 @@ class AuthIntegrationTests {
 
         List<ResponseEntity<JsonNode>> results = runConcurrently(6, () -> refresh(token));
 
+        assertThat(results.stream().filter(r -> r.getStatusCode() == HttpStatus.OK))
+                .hasSize(1);
+        assertThat(results.stream().filter(r -> r.getStatusCode() == HttpStatus.UNAUTHORIZED))
+                .hasSize(5);
         String winnerToken = results.stream()
                 .filter(r -> r.getStatusCode() == HttpStatus.OK)
                 .findFirst()
