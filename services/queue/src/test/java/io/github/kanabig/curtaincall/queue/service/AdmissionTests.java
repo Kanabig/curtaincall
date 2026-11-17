@@ -6,6 +6,7 @@ import io.github.kanabig.curtaincall.queue.QueueIntegrationTest;
 import io.github.kanabig.curtaincall.queue.config.QueueProperties;
 import io.github.kanabig.curtaincall.queue.dto.QueueStatusResponse;
 import io.github.kanabig.curtaincall.queue.repository.QueueRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -106,7 +107,7 @@ class AdmissionTests extends QueueIntegrationTest {
         // 인스턴스마다 AdmissionService가 따로 돈다고 보고, 같은 초를 스레드 16개가 동시에 처리한다
         List<AdmissionService> instances = new ArrayList<>();
         for (int i = 0; i < 16; i++) {
-            instances.add(new AdmissionService(repository, properties));
+            instances.add(new AdmissionService(repository, properties, new SimpleMeterRegistry()));
         }
         Instant t0 = startOfSecond();
         for (int second = 0; second < 5; second++) {
@@ -253,7 +254,8 @@ class AdmissionTests extends QueueIntegrationTest {
                         3,
                         Duration.ofSeconds(10),
                         properties.redisCircuitFailures(),
-                        properties.idleReclaimAfter()));
+                        properties.idleReclaimAfter()),
+                new SimpleMeterRegistry());
 
         // 2명씩 꺼내 지우므로 2, 4명째에 상한 3을 넘어 멈춘다. 나머지 6명은 다음 틱이 맡는다
         assertThat(limited.admitAll(t0)).isZero();
@@ -279,6 +281,40 @@ class AdmissionTests extends QueueIntegrationTest {
         assertThat(isActive(1)).isTrue();
         assertThat(isActive(2) || isActive(3) || isActive(4)).isFalse();
         assertThat(isActive(5) && isActive(6) && isActive(7)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[QUE-5] 회수 시간 30초 설정에서 회수 건수가 카운터에 남고 다음 입장 수와 일치한다")
+    void reclaimedCountMatchesNextAdmission() {
+        putConf(-1000, 10, 4);
+        enterUsers(1, 8);
+        Instant t0 = startOfSecond();
+        pollUntil(1, 8, t0.plusSeconds(600));
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        AdmissionService shortReclaim = new AdmissionService(
+                repository,
+                new QueueProperties(
+                        properties.zone(),
+                        properties.entryTtl(),
+                        properties.staleAfter(),
+                        properties.admitStaleAfter(),
+                        properties.admitDropLimit(),
+                        properties.soldOutPollAfter(),
+                        properties.redisCircuitFailures(),
+                        Duration.ofSeconds(30)),
+                meters);
+        assertThat(shortReclaim.admitAll(t0)).isEqualTo(4);
+        assertThat(meters.get("queue.admission.reclaimed").counter().count()).isZero();
+
+        // 1번만 활동을 이어 가면 31초 뒤 나머지 셋이 회수되고, 같은 틱에 대기자 셋이 들어온다
+        Instant later = t0.plusSeconds(31);
+        redis.opsForZSet().add(key("activity"), "1", later.minusSeconds(5).toEpochMilli());
+        assertThat(shortReclaim.admitAll(later)).isEqualTo(3);
+        assertThat(meters.get("queue.admission.reclaimed").counter().count()).isEqualTo(3.0);
+
+        // 회수할 것이 없는 다음 틱에는 카운터가 늘지 않는다
+        shortReclaim.admitAll(later.plusSeconds(1));
+        assertThat(meters.get("queue.admission.reclaimed").counter().count()).isEqualTo(3.0);
     }
 
     @Test
@@ -351,7 +387,8 @@ class AdmissionTests extends QueueIntegrationTest {
                         properties.admitDropLimit(),
                         properties.soldOutPollAfter(),
                         properties.redisCircuitFailures(),
-                        Duration.ZERO));
+                        Duration.ZERO),
+                new SimpleMeterRegistry());
 
         assertThat(off.admitAll(t0.plusSeconds(400))).isZero();
         assertThat(isActive(1) && isActive(2)).isTrue();
