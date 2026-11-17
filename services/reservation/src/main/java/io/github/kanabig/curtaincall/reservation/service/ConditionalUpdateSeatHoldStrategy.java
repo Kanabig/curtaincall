@@ -40,6 +40,10 @@ public class ConditionalUpdateSeatHoldStrategy implements SeatHoldStrategy {
 
     @Override
     public SeatHold hold(long sessionId, long userId, List<Long> seatIds) {
+        // 사전 확인: 이미 유효 점유·판매된 좌석이 있으면 한도 행을 쓰지 않고 바로 거절한다. 최적화일 뿐이고 최종 판정은 아래 조건부 UPDATE가 한다
+        if (!repository.findUnavailable(sessionId, seatIds, clock.instant()).isEmpty()) {
+            throw conflict(sessionId, seatIds);
+        }
         repository.ensureQuotaRow(userId, sessionId);
         try {
             return tx.execute(status -> doHold(sessionId, userId, seatIds));
