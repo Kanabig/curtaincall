@@ -6,6 +6,9 @@ payment:
     connect-timeout: 500ms
     # 운영 값(5s)의 1/10. 지연 주입은 이 값의 6배 이상으로 둬서 같은 비율을 유지한다
     read-timeout: 500ms
+    # Bulkhead 거절 테스트가 슬롯 수와 즉시 거절에 기대므로 기본값(50, 1s) 대신 고정한다
+    max-concurrent-approvals: 20
+    approval-max-wait: 0s
   inquiry:
     initial-delay: 100ms
     max-interval: 300ms

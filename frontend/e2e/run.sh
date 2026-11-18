@@ -5,7 +5,7 @@
 # 환경 변수: FRONTEND_URL(기본 http://localhost:5173), ADMIN_EMAIL, ADMIN_PASSWORD, RUNS(측정 반복, 기본 10)
 set -euo pipefail
 cd "$(dirname "$0")"
-IMAGE="mcr.microsoft.com/playwright:v1.55.0-noble"
+IMAGE="mcr.microsoft.com/playwright:v1.55.1-noble"
 if [ "${1:-}" = bench ]; then CMD='npm ci --no-audit --no-fund --silent && node render-bench.mjs'; else CMD='npm ci --no-audit --no-fund --silent && npx playwright test "$@"'; fi
 docker run --rm --network host --ipc=host --user "$(id -u):$(id -g)" -e HOME=/tmp \
     -e BASE_URL="${FRONTEND_URL:-http://localhost:5173}" -e RUNS="${RUNS:-10}" -e GIT_SHA="$(git rev-parse --short HEAD)" \

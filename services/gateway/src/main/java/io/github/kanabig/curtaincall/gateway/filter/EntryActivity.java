@@ -3,10 +3,6 @@ package io.github.kanabig.curtaincall.gateway.filter;
 import io.github.kanabig.curtaincall.gateway.config.EntryActivityProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -23,52 +19,41 @@ import reactor.core.publisher.Mono;
 @Component
 public class EntryActivity {
 
-    private static final Logger log = LoggerFactory.getLogger(EntryActivity.class);
-
     @SuppressWarnings("rawtypes")
     private static final DefaultRedisScript<Long> SCRIPT = script();
 
     private final ReactiveStringRedisTemplate redis;
     private final EntryActivityProperties properties;
     private final MeterRegistry meters;
-    private final AtomicLong skipUntil = new AtomicLong(System.nanoTime() - 1);
-    private final AtomicBoolean open = new AtomicBoolean();
+    private final RedisCircuit circuit;
 
     public EntryActivity(ReactiveStringRedisTemplate redis, EntryActivityProperties properties, MeterRegistry meters) {
         this.redis = redis;
         this.properties = properties;
         this.meters = meters;
+        this.circuit = new RedisCircuit(
+                "entry-activity",
+                properties.circuitOpen(),
+                meters,
+                "입장 활동 Redis 호출 실패",
+                "입장 활동 Redis 호출이 복구되어 활성 소속을 다시 확인한다");
     }
 
     /** @return 활성 목록에 있으면(또는 확인할 수 없으면) true, queue가 이미 뺀 사용자면 false */
     public Mono<Boolean> touch(String sessionId, String userId) {
-        if (open.get() && System.nanoTime() - skipUntil.get() < 0) {
-            meters.counter("gateway.entry-activity.failopen").increment();
-            return Mono.just(true);
-        }
-        return redis.execute(
-                        SCRIPT,
-                        List.of("q:" + sessionId + ":active", "q:" + sessionId + ":activity"),
-                        List.of(
-                                userId,
-                                Long.toString(properties.recordInterval().toMillis())))
-                .next()
-                .timeout(properties.timeout())
-                .switchIfEmpty(Mono.error(new IllegalStateException("빈 응답")))
-                .map(result -> {
-                    if (open.compareAndSet(true, false)) {
-                        log.info("입장 활동 Redis 호출이 복구되어 활성 소속을 다시 확인한다");
-                    }
-                    return result == 1L;
-                })
-                .onErrorResume(ex -> {
-                    meters.counter("gateway.entry-activity.failopen").increment();
-                    skipUntil.set(System.nanoTime() + properties.circuitOpen().toNanos());
-                    if (!open.getAndSet(true)) {
-                        log.warn("입장 활동 Redis 호출 실패, {} 동안 토큰 서명만 확인한다: {}", properties.circuitOpen(), ex.toString());
-                    }
-                    return Mono.just(true);
-                });
+        return circuit.call(
+                () -> redis.execute(
+                                SCRIPT,
+                                List.of("q:" + sessionId + ":active", "q:" + sessionId + ":activity"),
+                                List.of(
+                                        userId,
+                                        Long.toString(
+                                                properties.recordInterval().toMillis())))
+                        .next()
+                        .map(result -> result == 1L),
+                properties.timeout(),
+                true,
+                () -> meters.counter("gateway.entry-activity.failopen").increment());
     }
 
     @SuppressWarnings("rawtypes")

@@ -3,6 +3,8 @@ package io.github.kanabig.curtaincall.queue.service;
 import io.github.kanabig.curtaincall.queue.config.QueueProperties;
 import io.github.kanabig.curtaincall.queue.repository.AdmitResult;
 import io.github.kanabig.curtaincall.queue.repository.QueueRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,10 +21,14 @@ public class AdmissionService {
 
     private final QueueRepository repository;
     private final QueueProperties properties;
+    private final Counter reclaimed;
 
-    public AdmissionService(QueueRepository repository, QueueProperties properties) {
+    public AdmissionService(QueueRepository repository, QueueProperties properties, MeterRegistry meters) {
         this.repository = repository;
         this.properties = properties;
+        this.reclaimed = Counter.builder("queue.admission.reclaimed")
+                .description("활동이 없어 활성 목록에서 회수한 입장자 수")
+                .register(meters);
     }
 
     /** 운영 경로. 시각은 Redis TIME이다. */
@@ -50,6 +56,10 @@ public class AdmissionService {
                         result.dropped(),
                         result.reclaimed(),
                         result.active());
+            }
+            if (result.reclaimed() > 0) {
+                reclaimed.increment(result.reclaimed());
+                log.info("회차 {} 활동 없는 입장자 {}명 회수", sessionId, result.reclaimed());
             }
             total += result.admitted();
         }
