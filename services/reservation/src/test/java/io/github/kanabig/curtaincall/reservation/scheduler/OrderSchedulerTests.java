@@ -1,7 +1,6 @@
 package io.github.kanabig.curtaincall.reservation.scheduler;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,9 +66,12 @@ class OrderSchedulerTests {
     }
 
     @Test
-    void nonLockExceptionPropagates() {
+    void nonLockExceptionIsCountedAsOtherAndExpireStillRuns() {
         when(saga.resendDue()).thenThrow(new DataAccessResourceFailureException("db down"));
 
-        assertThatThrownBy(scheduler::run).isInstanceOf(DataAccessResourceFailureException.class);
+        scheduler.run();
+
+        assertThat(failures("resend", "other")).isEqualTo(1);
+        verify(orders).expireOverdue();
     }
 }

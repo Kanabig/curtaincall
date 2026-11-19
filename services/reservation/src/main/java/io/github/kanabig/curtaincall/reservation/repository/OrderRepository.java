@@ -7,6 +7,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -136,8 +138,8 @@ public class OrderRepository {
         if (ids.isEmpty()) {
             return 0;
         }
-        String marks = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
-        List<Object> args = new java.util.ArrayList<>(
+        String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
+        List<Object> args = new ArrayList<>(
                 List.of(OrderStatus.EXPIRED.name(), FailureCodes.HOLD_EXPIRED, Timestamp.from(now)));
         args.addAll(ids);
         args.add(OrderStatus.PENDING_PAYMENT.name());

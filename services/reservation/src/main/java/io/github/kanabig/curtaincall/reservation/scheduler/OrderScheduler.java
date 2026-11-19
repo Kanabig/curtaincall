@@ -4,6 +4,7 @@ import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.github.kanabig.curtaincall.reservation.service.OrderSagaService;
 import io.github.kanabig.curtaincall.reservation.service.OrderService;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.sql.SQLException;
 import java.util.function.IntSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +65,10 @@ public class OrderScheduler {
             String cause = cause(e);
             count(task, cause);
             log.warn("주문 스케줄 작업이 잠금 경합으로 실패했다. 다음 주기에 다시 한다: task={}, cause={}", task, cause, e);
+        } catch (RuntimeException e) {
+            // 다른 작업이 같은 주기에 건너뛰어지지 않게 막고, 원인은 ERROR로 남긴다
+            count(task, "other");
+            log.error("주문 스케줄 작업이 실패했다. 다음 주기에 다시 한다: task={}", task, e);
         }
     }
 
@@ -74,7 +79,7 @@ public class OrderScheduler {
         if (e instanceof CannotAcquireLockException) {
             // MySQL 1213(교착)도 CannotAcquireLock으로 올 수 있어 SQLState·벤더 코드로 나눈다
             for (Throwable t = e; t != null; t = t.getCause()) {
-                if (t instanceof java.sql.SQLException sql) {
+                if (t instanceof SQLException sql) {
                     return sql.getErrorCode() == 1213 ? "deadlock" : "lock_timeout";
                 }
             }
