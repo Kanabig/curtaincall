@@ -139,8 +139,8 @@ public class OrderRepository {
             return 0;
         }
         String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
-        List<Object> args = new ArrayList<>(
-                List.of(OrderStatus.EXPIRED.name(), FailureCodes.HOLD_EXPIRED, Timestamp.from(now)));
+        List<Object> args =
+                new ArrayList<>(List.of(OrderStatus.EXPIRED.name(), FailureCodes.HOLD_EXPIRED, Timestamp.from(now)));
         args.addAll(ids);
         args.add(OrderStatus.PENDING_PAYMENT.name());
         return jdbc.update(
