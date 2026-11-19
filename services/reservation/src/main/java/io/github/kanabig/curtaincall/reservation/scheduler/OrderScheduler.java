@@ -25,6 +25,8 @@ public class OrderScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(OrderScheduler.class);
 
+    private static final int MAX_EXPIRE_BATCHES = 20;
+
     private final OrderSagaService sagaService;
     private final OrderService orderService;
     private final MeterRegistry meterRegistry;
@@ -39,7 +41,20 @@ public class OrderScheduler {
     void run() {
         // 한 작업이 잠금 경합으로 실패해도 다른 작업은 돌고, 실패한 작업은 다음 주기에 다시 한다
         attempt("resend", sagaService::resendDue);
-        attempt("expire", orderService::expireOverdue);
+        attempt("expire", this::expireAll);
+    }
+
+    /** 배치 상한만큼 정리했으면 남은 것이 있을 수 있어 이어서 부른다. 한 주기가 길어지지 않게 횟수를 제한한다. */
+    private int expireAll() {
+        int total = 0;
+        for (int i = 0; i < MAX_EXPIRE_BATCHES; i++) {
+            int expired = orderService.expireOverdue();
+            total += expired;
+            if (expired < OrderService.EXPIRE_BATCH) {
+                break;
+            }
+        }
+        return total;
     }
 
     private void attempt(String task, IntSupplier work) {
