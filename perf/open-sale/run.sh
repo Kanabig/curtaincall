@@ -141,6 +141,8 @@ docker run --rm --user "$(id -u):$(id -g)" --network "${PROJECT}_default" \
 kill $SAMPLER $LOADAVG $LAGSAMPLER 2>/dev/null || true
 snapshot after
 innodb > "$OUT/innodb-after.txt" || true
+# 교착 상대 SQL은 다음 교착이 나면 덮이므로 부하 직후에 남긴다
+mysql_root -e "'SHOW ENGINE INNODB STATUS\\G'" > "$OUT/innodb-status.txt" || true
 compose logs --no-color --since 30m queue gateway reservation payment 2>&1 | grep -E "WARN|ERROR" | sort | uniq -c | sort -rn | head -30 > "$OUT/log-warn-error.txt" || true
 
 echo "--- 종료 후 정합성 (위반 수)"
@@ -169,6 +171,8 @@ zcat "$OUT/service-logs.txt.gz" | awk '
     /PG에 승인을 보내지 않았다.*reason=BULKHEAD_FULL/ {bulkhead++}
     END {printf "log_error=%d approval_not_sent_circuit_open=%d approval_not_sent_bulkhead_full=%d\n", err, circuit, bulkhead}' \
     | tee "$OUT/log-summary.txt"
+# ERROR 줄과 앞뒤 문맥(스택트레이스 포함)을 따로 남긴다. 이 줄 수가 0이 아니면 원인은 service-logs에서 찾는다
+zcat "$OUT/service-logs.txt.gz" | grep -E -B5 -A30 ' ERROR ' > "$OUT/error-context.txt" || true
 echo "결과: $OUT"
 echo "정합성 위반 합: 좌석 재고 $SEAT_VIOLATIONS, 주문 $ORDER_VIOLATIONS" | tee "$OUT/violations.txt"
 [ "$SEAT_VIOLATIONS" = "0" ] && [ "$ORDER_VIOLATIONS" = "0" ] || { echo "정합성 위반 또는 검사 실패" >&2; exit 1; }

@@ -1,8 +1,16 @@
 package io.github.kanabig.curtaincall.reservation.scheduler;
 
+import io.github.kanabig.curtaincall.common.web.metrics.MetricNames;
 import io.github.kanabig.curtaincall.reservation.service.OrderSagaService;
 import io.github.kanabig.curtaincall.reservation.service.OrderService;
+import io.micrometer.core.instrument.MeterRegistry;
+import java.util.function.IntSupplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,17 +23,54 @@ import org.springframework.stereotype.Component;
         matchIfMissing = true)
 public class OrderScheduler {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderScheduler.class);
+
     private final OrderSagaService sagaService;
     private final OrderService orderService;
+    private final MeterRegistry meterRegistry;
 
-    public OrderScheduler(OrderSagaService sagaService, OrderService orderService) {
+    public OrderScheduler(OrderSagaService sagaService, OrderService orderService, MeterRegistry meterRegistry) {
         this.sagaService = sagaService;
         this.orderService = orderService;
+        this.meterRegistry = meterRegistry;
     }
 
     @Scheduled(fixedDelayString = "${curtaincall.order.scheduler.interval:5s}")
     void run() {
-        sagaService.resendDue();
-        orderService.expireOverdue();
+        // 한 작업이 잠금 경합으로 실패해도 다른 작업은 돌고, 실패한 작업은 다음 주기에 다시 한다
+        attempt("resend", sagaService::resendDue);
+        attempt("expire", orderService::expireOverdue);
+    }
+
+    private void attempt(String task, IntSupplier work) {
+        try {
+            work.getAsInt();
+        } catch (PessimisticLockingFailureException e) {
+            String cause = cause(e);
+            count(task, cause);
+            log.warn("주문 스케줄 작업이 잠금 경합으로 실패했다. 다음 주기에 다시 한다: task={}, cause={}", task, cause, e);
+        }
+    }
+
+    private static String cause(PessimisticLockingFailureException e) {
+        if (e instanceof DeadlockLoserDataAccessException) {
+            return "deadlock";
+        }
+        if (e instanceof CannotAcquireLockException) {
+            // MySQL 1213(교착)도 CannotAcquireLock으로 올 수 있어 SQLState·벤더 코드로 나눈다
+            for (Throwable t = e; t != null; t = t.getCause()) {
+                if (t instanceof java.sql.SQLException sql) {
+                    return sql.getErrorCode() == 1213 ? "deadlock" : "lock_timeout";
+                }
+            }
+            return "lock_timeout";
+        }
+        return "other";
+    }
+
+    private void count(String task, String cause) {
+        meterRegistry
+                .counter(MetricNames.ORDER_SCHEDULER_FAILURE, "task", task, "cause", cause)
+                .increment();
     }
 }
