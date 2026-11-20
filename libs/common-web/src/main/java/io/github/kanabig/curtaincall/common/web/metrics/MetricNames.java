@@ -54,6 +54,9 @@ public final class MetricNames {
     /** 실패·만료로 끝난 주문에 승인 응답이 온 횟수. Counter(태그 없음). 0이 아니면 수동 확인 대상. reservation이 등록한다. */
     public static final String ORDER_APPROVED_AFTER_TERMINAL = "order.payment.approved_after_terminal";
 
+    /** 주문 스케줄 작업이 예외로 한 주기를 건너뛴 횟수. Counter. 태그 task = resend, expire, 태그 cause = deadlock, lock_timeout, other. reservation이 등록한다. */
+    public static final String ORDER_SCHEDULER_FAILURE = "order.scheduler.failure";
+
     /** 결과를 모른 채 남아 있는 결제 수(현재 UNKNOWN 상태인 건). Gauge. payment가 등록한다. */
     public static final String PAYMENT_UNKNOWN = "payment.unknown";
 

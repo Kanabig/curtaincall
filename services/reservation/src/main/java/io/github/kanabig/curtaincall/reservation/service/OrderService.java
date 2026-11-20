@@ -78,10 +78,13 @@ public class OrderService {
         return OrderDetailResponse.from(order);
     }
 
-    /** 점유가 만료된 채 결제를 시작하지 않은 주문을 EXPIRED로 정리한다. 좌석은 건드리지 않는다. */
+    /** 한 번에 정리하는 만료 주문 수의 상한. 이보다 많으면 호출하는 쪽이 이어서 부른다. */
+    public static final int EXPIRE_BATCH = 500;
+
+    /** 점유가 만료된 채 결제를 시작하지 않은 주문을 최대 {@link #EXPIRE_BATCH}건 EXPIRED로 정리한다. 좌석은 건드리지 않는다. */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public int expireOverdue() {
-        return orders.expirePending(clock.instant());
+        return orders.expirePending(clock.instant(), EXPIRE_BATCH);
     }
 
     private OrderResponse create(long userId, Long entrySessionId, String holdId) {
