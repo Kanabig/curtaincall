@@ -7,6 +7,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -119,15 +121,32 @@ public class OrderRepository {
                 limit);
     }
 
-    /** 점유가 만료된 채 결제를 시작하지 않은 주문을 만료로 바꾼다. */
-    public int expirePending(Instant now) {
-        return jdbc.update(
-                "UPDATE orders SET status = ?, failure_code = ?, updated_at = ? WHERE status = ? AND hold_expires_at < ?",
-                OrderStatus.EXPIRED.name(),
-                FailureCodes.HOLD_EXPIRED,
-                Timestamp.from(now),
+    /**
+     * 점유가 만료된 채 결제를 시작하지 않은 주문을 잠그고 만료로 바꾼다. 최대 {@code limit}건.
+     *
+     * <p>범위 UPDATE는 보조 인덱스 항목을 먼저 잠그고 주문 행으로 가는데, 결제 시작은 주문 행을 먼저 잠그고 같은 보조 인덱스 항목을 바꾸므로 잠금 순서가
+     * 반대라 교착이 난다. 다른 트랜잭션이 잡은 행은 건너뛰고 다음 주기에 다시 본다.
+     */
+    public int expirePending(Instant now, int limit) {
+        List<String> ids = jdbc.queryForList(
+                "SELECT order_id FROM orders WHERE status = ? AND hold_expires_at < ?"
+                        + " ORDER BY hold_expires_at, order_id LIMIT ? FOR UPDATE SKIP LOCKED",
+                String.class,
                 OrderStatus.PENDING_PAYMENT.name(),
-                Timestamp.from(now));
+                Timestamp.from(now),
+                limit);
+        if (ids.isEmpty()) {
+            return 0;
+        }
+        String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
+        List<Object> args =
+                new ArrayList<>(List.of(OrderStatus.EXPIRED.name(), FailureCodes.HOLD_EXPIRED, Timestamp.from(now)));
+        args.addAll(ids);
+        args.add(OrderStatus.PENDING_PAYMENT.name());
+        return jdbc.update(
+                "UPDATE orders SET status = ?, failure_code = ?, updated_at = ? WHERE order_id IN (" + marks
+                        + ") AND status = ?",
+                args.toArray());
     }
 
     public int countByStatus(OrderStatus status) {
