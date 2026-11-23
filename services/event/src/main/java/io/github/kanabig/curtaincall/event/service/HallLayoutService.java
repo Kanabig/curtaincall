@@ -35,16 +35,10 @@ public class HallLayoutService {
             return Result.created(Outcome.EXISTING, seats.findSeats(mt13id));
         }
         HallScale scale = seats.findScale(mt13id).orElse(null);
-        if (scale == null) {
-            return Result.failed(Outcome.UNKNOWN_HALL);
-        }
-        if (scale.seatScale() == null || scale.seatScale() < 1) {
-            log.warn("공연장 객석 수가 없어 배치를 만들지 않는다 mt13id={} seatScale={}", mt13id, scale.seatScale());
-            return Result.failed(Outcome.NO_SEAT_SCALE);
-        }
-        if (scale.seatScale() > SeatLayoutGenerator.MAX_SEATS) {
-            log.warn("공연장 객석 수가 상한을 넘어 배치를 만들지 않는다 mt13id={} seatScale={}", mt13id, scale.seatScale());
-            return Result.failed(Outcome.SEAT_SCALE_TOO_LARGE);
+        Outcome verdict = judge(false, scale);
+        if (verdict != Outcome.CREATED) {
+            log.warn("공연장 좌석 배치를 만들지 않는다 mt13id={} outcome={} scale={}", mt13id, verdict, scale);
+            return Result.failed(verdict);
         }
         List<SeatSpec> generated = generator.generate(scale.seatScale(), scale.disabledSeatScale());
         if (!seats.insertLayout(mt13id, generated.size(), clock.instant())) {
@@ -53,6 +47,26 @@ public class HallLayoutService {
         }
         seats.insertSeats(mt13id, generated);
         return Result.created(Outcome.CREATED, generated);
+    }
+
+    /**
+     * 배치를 만들지 않고 판정만 한다. 등록 후보 조회(ADM-1)가 쓴다. 판정 기준은 {@link #ensureLayout}과 같다. 배치가 있으면 EXISTING, 없으면 만들 수 있을 때 CREATED(실제로는 만들지 않는다)를
+     * 돌려준다. scale은 공연장 행이 없으면 null이다.
+     */
+    public static Outcome judge(boolean hasLayout, HallScale scale) {
+        if (hasLayout) {
+            return Outcome.EXISTING;
+        }
+        if (scale == null) {
+            return Outcome.UNKNOWN_HALL;
+        }
+        if (scale.seatScale() == null || scale.seatScale() < 1) {
+            return Outcome.NO_SEAT_SCALE;
+        }
+        if (scale.seatScale() > SeatLayoutGenerator.MAX_SEATS) {
+            return Outcome.SEAT_SCALE_TOO_LARGE;
+        }
+        return Outcome.CREATED;
     }
 
     public enum Outcome {

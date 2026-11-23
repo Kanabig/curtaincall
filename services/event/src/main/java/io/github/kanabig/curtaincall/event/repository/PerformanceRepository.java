@@ -139,5 +139,64 @@ public class PerformanceRepository {
                 .findFirst();
     }
 
+    /** 등록 후보 한 페이지. 공연장·배치·등록 여부를 한 번에 붙여 읽는다(DB만). keyword는 이미 정리된 값이다. */
+    public List<CandidateRow> findCandidates(String keyword, int page, int size) {
+        List<Object> args = new ArrayList<>();
+        String where = candidateWhere(keyword, args);
+        args.add(size);
+        args.add((long) page * size);
+        return jdbc.query(
+                "SELECT p.mt20id, p.name, p.facility_name, p.genre, p.state, p.start_date, p.end_date, p.detail_status,"
+                        + " p.mt13id, h.mt13id AS hall_id, h.seat_scale, hl.mt13id AS layout_id, sp.id AS sale_id"
+                        + " FROM performance p LEFT JOIN hall h ON h.mt13id = p.mt13id"
+                        + " LEFT JOIN hall_layout hl ON hl.mt13id = p.mt13id"
+                        + " LEFT JOIN sale_performance sp ON sp.mt20id = p.mt20id"
+                        + where + " ORDER BY p.start_date, p.mt20id LIMIT ? OFFSET ?",
+                (rs, i) -> new CandidateRow(
+                        rs.getString("mt20id"),
+                        rs.getString("name"),
+                        rs.getString("facility_name"),
+                        rs.getString("genre"),
+                        rs.getString("state"),
+                        rs.getDate("start_date").toLocalDate(),
+                        rs.getDate("end_date").toLocalDate(),
+                        "DONE".equals(rs.getString("detail_status")),
+                        rs.getString("mt13id"),
+                        rs.getString("hall_id") != null,
+                        (Integer) rs.getObject("seat_scale"),
+                        rs.getString("layout_id") != null,
+                        (Long) rs.getObject("sale_id")),
+                args.toArray());
+    }
+
+    public long countCandidates(String keyword) {
+        List<Object> args = new ArrayList<>();
+        String where = candidateWhere(keyword, args);
+        return jdbc.queryForObject("SELECT COUNT(*) FROM performance p" + where, Long.class, args.toArray());
+    }
+
+    private static String candidateWhere(String keyword, List<Object> args) {
+        if (keyword == null) {
+            return "";
+        }
+        args.add("%" + PerformanceQueryRepository.escapeLike(keyword) + "%");
+        return " WHERE p.name LIKE ? ESCAPE '\\\\'";
+    }
+
+    public record CandidateRow(
+            String kopisId,
+            String name,
+            String facilityName,
+            String genre,
+            String state,
+            LocalDate startDate,
+            LocalDate endDate,
+            boolean detailDone,
+            String mt13id,
+            boolean hallKnown,
+            Integer seatScale,
+            boolean hasLayout,
+            Long salePerformanceId) {}
+
     public record Registrable(String name, String mt13id, boolean detailDone) {}
 }

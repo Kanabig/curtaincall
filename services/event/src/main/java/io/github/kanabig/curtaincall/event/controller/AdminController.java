@@ -3,6 +3,7 @@ package io.github.kanabig.curtaincall.event.controller;
 import io.github.kanabig.curtaincall.event.config.KopisProperties;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformancePage;
 import io.github.kanabig.curtaincall.event.dto.PerformanceState;
+import io.github.kanabig.curtaincall.event.dto.RegistrationCandidates.CandidatePage;
 import io.github.kanabig.curtaincall.event.dto.SessionPayload;
 import io.github.kanabig.curtaincall.event.dto.SessionRequests.CreateRequest;
 import io.github.kanabig.curtaincall.event.dto.SessionRequests.RegisterPerformanceRequest;
@@ -58,6 +59,15 @@ public class AdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "" + PerformanceQueryService.DEFAULT_SIZE) int size) {
         return queries.listForAdmin(state, keyword, page, size);
+    }
+
+    /** 등록 후보. 동기화된 공연 전체를 등록 가능 여부·사유와 함께 준다. DB만 읽는다. */
+    @GetMapping("/api/v1/admin/performances/candidates")
+    public CandidatePage candidates(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "" + PerformanceQueryService.DEFAULT_SIZE) int size) {
+        return performances.candidates(keyword, page, size);
     }
 
     /** 새로 등록하면 201, 이미 등록된 공연이면 200. */
