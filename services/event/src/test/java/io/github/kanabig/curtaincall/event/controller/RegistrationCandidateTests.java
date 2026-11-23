@@ -21,7 +21,7 @@ import org.springframework.http.ResponseEntity;
 import tools.jackson.databind.JsonNode;
 
 /**
- * ADM-1, EVT-6 / ADR-0012: 등록 후보 조회와 판매 불가 사유. fixture는 실제 KOPIS 응답이다.
+ * ADM-1, EVT-6: 등록 후보 조회와 판매 불가 사유. fixture는 실제 KOPIS 응답이다.
  *
  * <ul>
  *   <li>PF305720(FC002228-01): 객석 수가 있어 판매 가능

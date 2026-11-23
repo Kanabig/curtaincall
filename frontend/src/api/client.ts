@@ -31,7 +31,6 @@ const MESSAGES: Record<string, string> = {
   FORBIDDEN: '관리자만 사용할 수 있습니다.',
   PERFORMANCE_NOT_FOUND: '공연을 찾을 수 없습니다.',
   PERFORMANCE_NOT_SYNCED: '상세 동기화가 끝나지 않은 공연입니다.',
-  HALL_LAYOUT_UNAVAILABLE: '좌석 배치를 만들 수 없는 공연장입니다.',
   HALL_UNKNOWN: '공연장 정보를 알 수 없는 공연입니다.',
   HALL_NO_SEAT_SCALE: '공연장 객석 수가 없어 판매할 수 없는 공연입니다.',
   HALL_SEAT_SCALE_TOO_LARGE: '공연장 객석 수가 상한을 넘어 판매할 수 없는 공연입니다.',
