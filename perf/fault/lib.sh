@@ -48,7 +48,7 @@ admin_login() {
 }
 
 # 판매 오픈이 $1초 뒤인 회차를 만들고 ID를 출력한다. fixture 공연(PF305720, 가격 등급 1층석)을 쓴다.
-# PF305718·PF305735는 공연장 배치를 만들 수 없어(HALL_LAYOUT_UNAVAILABLE) 쓰지 않는다. 등록이 거절되면 KOPIS 동기화를 한 번 돌리고 다시 시도한다.
+# PF305718·PF305735는 객석 수가 없는 공연장이라 등록할 수 없어(HALL_NO_SEAT_SCALE 등) 쓰지 않는다. 등록이 거절되면 KOPIS 동기화를 한 번 돌리고 다시 시도한다.
 # 실패하면 아무것도 출력하지 않는다(호출한 쪽의 check가 잡는다).
 make_session() {
     local open_in="${1:-20}" admin perf start open sid body
