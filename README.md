@@ -36,6 +36,7 @@ docker compose up -d --build --wait
 - 메일은 외부로 나가지 않고 Mailpit(http://localhost:8025)에 쌓인다.
 - 서비스 지표는 Grafana(http://localhost:3000, admin / `.env`의 `GRAFANA_ADMIN_PASSWORD`)의 "서비스 공통 지표" 대시보드에서 본다.
 - KOPIS·LLM API 키 없이 뜬다. 키가 없으면 공연 정보는 fixture, 검색 보조는 Mock으로 동작한다.
+- 화면 E2E는 `E2E` 워크플로가 키 없는 기본값으로 돌린다. 로컬 실행은 `frontend/README.md`를 본다.
 - 빌드 없이 띄우려면 `.env`에 `IMAGE_REGISTRY=ghcr.io/kanabig/curtaincall`, `IMAGE_TAG=latest`를 넣고 `docker compose up -d --no-build --wait`.
 
 ## 데이터 출처

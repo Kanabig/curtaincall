@@ -4,9 +4,9 @@ React + Vite + TypeScript. 개발 서버는 `npm run dev`(`/api`를 gateway로 �
 
 ## 브라우저 E2E와 렌더링 측정
 
-`e2e/`에 Playwright 시험이 있다. 의존성은 `e2e/package.json`에 따로 두고 앱 빌드와 섞지 않는다. 호스트에 브라우저를 깔지 않고 Playwright 이미지(`@playwright/test`와 같은 1.55)로 돌린다. CI에는 넣지 않았다.
+`e2e/`에 Playwright 시험이 있다. 의존성은 `e2e/package.json`에 따로 두고 앱 빌드와 섞지 않는다. 호스트에 브라우저를 깔지 않고 Playwright 이미지(`@playwright/test`와 같은 1.55)로 돌린다. CI에서는 `E2E` 워크플로(dev push, main 대상 PR, 수동 실행)가 키 없는 `.env.example` 기본값으로 compose를 띄워 돌린다. 실패하면 Playwright 리포트와 compose 로그가 artifact로 남는다.
 
-compose를 띄운 뒤(기본 `.env` 사용, 다른 프로젝트와 같이 쓰면 `FRONTEND_HOST_PORT`를 나눈다) 실행한다.
+로컬 실행은 `KOPIS_API_KEY`와 `ANTHROPIC_API_KEY`가 빈 환경(fixture, Mock 모드)이 전제다. KOPIS 키를 넣은 compose에서는 fixture 공연(PF305720)이 없어 실패한다. compose를 띄운 뒤(다른 프로젝트와 같이 쓰면 `FRONTEND_HOST_PORT`를 나눈다) 실행한다.
 
 ```
 docker compose up -d --build --wait

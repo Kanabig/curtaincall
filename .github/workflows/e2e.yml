@@ -1,0 +1,83 @@
+name: E2E
+
+# 필수 체크가 아니다. 화면 흐름을 compose 위에서 확인한다.
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      # KOPIS·LLM 키가 없는 기본값 그대로 띄운다(fixture, Mock 모드)
+      - run: cp .env.example .env
+
+      # 서비스 이미지를 직접 빌드한다. GHCR의 latest는 main 기준이라 dev·PR 변경을 반영하지 못한다
+      - name: Build images
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: compose.yml
+          load: true
+          targets: gateway,frontend,user,event,queue,reservation,payment,mock-pg,notification,search-assist
+          set: |
+            gateway.cache-from=type=gha,scope=e2e-gateway
+            gateway.cache-to=type=gha,scope=e2e-gateway,mode=max
+            frontend.cache-from=type=gha,scope=e2e-frontend
+            frontend.cache-to=type=gha,scope=e2e-frontend,mode=max
+            user.cache-from=type=gha,scope=e2e-user
+            user.cache-to=type=gha,scope=e2e-user,mode=max
+            event.cache-from=type=gha,scope=e2e-event
+            event.cache-to=type=gha,scope=e2e-event,mode=max
+            queue.cache-from=type=gha,scope=e2e-queue
+            queue.cache-to=type=gha,scope=e2e-queue,mode=max
+            reservation.cache-from=type=gha,scope=e2e-reservation
+            reservation.cache-to=type=gha,scope=e2e-reservation,mode=max
+            payment.cache-from=type=gha,scope=e2e-payment
+            payment.cache-to=type=gha,scope=e2e-payment,mode=max
+            mock-pg.cache-from=type=gha,scope=e2e-mock-pg
+            mock-pg.cache-to=type=gha,scope=e2e-mock-pg,mode=max
+            notification.cache-from=type=gha,scope=e2e-notification
+            notification.cache-to=type=gha,scope=e2e-notification,mode=max
+            search-assist.cache-from=type=gha,scope=e2e-search-assist
+            search-assist.cache-to=type=gha,scope=e2e-search-assist,mode=max
+
+      - name: Up
+        run: docker compose up -d --no-build --wait --wait-timeout 300 mysql redis kafka mailpit gateway frontend user event queue reservation payment mock-pg notification search-assist
+
+      - name: E2E
+        run: frontend/e2e/run.sh
+        env:
+          CI: 'true'
+
+      - name: Compose logs
+        if: ${{ failure() }}
+        run: |
+          docker compose ps -a > compose-ps.txt || true
+          docker compose logs --no-color --timestamps > compose-logs.txt || true
+
+      - name: Upload failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failure
+          path: |
+            frontend/e2e/playwright-report/
+            frontend/e2e/test-results/
+            compose-ps.txt
+            compose-logs.txt
+          retention-days: 7
