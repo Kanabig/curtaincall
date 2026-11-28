@@ -2,7 +2,7 @@
 -- KEYS: conf, waiting, seen, seq, active   ARGV: userId
 -- 반환: {1, rank, admissionPerSecond, created} 대기 | {3, tokenExpiresAtMs} 입장 완료
 --       {5, rank, admissionPerSecond, created} 매진 중 대기(순번 유지)
---       {-1} 회차 없음 | {-2, saleOpenAtMs} 오픈 전 | {-3} 판매 중이 아님
+--       {-1} 회차 없음 | {-2, saleOpenAtMs} 오픈 전 | {-3} 판매 중이 아님 | {-4} 매진이라 새 진입 거절
 local conf = redis.call('HMGET', KEYS[1], 'status', 'saleOpenAt', 'admissionPerSecond', 'soldOut')
 if conf[1] == false or conf[1] == 'DELETED' then
   return {-1}
@@ -24,6 +24,10 @@ end
 local rank = redis.call('ZRANK', KEYS[2], user)
 local created = 0
 if not rank then
+  -- 매진 중에는 대기열에 없던 사용자를 받지 않는다. 아무것도 쓰지 않고 끝낸다(QUE-8)
+  if conf[4] == '1' then
+    return {-4}
+  end
   local n = redis.call('INCR', KEYS[4])
   redis.call('ZADD', KEYS[2], n, user)
   rank = redis.call('ZRANK', KEYS[2], user)

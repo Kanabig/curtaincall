@@ -21,7 +21,7 @@ import crypto from 'k6/crypto';
 import encoding from 'k6/encoding';
 import exec from 'k6/execution';
 import { sleep } from 'k6';
-import { Counter, Trend } from 'k6/metrics';
+import { Counter, Trend, Rate } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://gateway:8080';
 const SID = Number(__ENV.SESSION_ID || 1);
@@ -69,6 +69,7 @@ const T = {
 const wait = new Trend('queue_wait_ms', true); // 진입 요청 완료부터 입장까지
 const confirmTime = new Trend('confirm_ms', true); // 결제 시작부터 CONFIRMED까지
 const startLag = new Trend('start_lag_ms'); // VU가 오픈 시각보다 얼마나 늦게 시작했나(부하 생성기 지연 확인)
+const enterError = new Rate('enter_error');
 const C = {
   enterOk: new Counter('enter_ok'),
   enterFail: new Counter('enter_fail'),
@@ -78,6 +79,7 @@ const C = {
   pollFail: new Counter('poll_fail'),
   soldOutSeen: new Counter('sold_out_seen'),
   soldOutLeft: new Counter('sold_out_left'),
+  soldOutRejected: new Counter('sold_out_rejected'),
   expired: new Counter('expired_reenter'),
   holdOk: new Counter('hold_ok'),
   holdSeats: new Counter('hold_seats'),
@@ -150,7 +152,7 @@ export const options = (() => {
     },
     thresholds: {
       'http_req_duration{name:queue_enter}': ['p(95)<200'],
-      'http_req_failed{name:queue_enter}': ['rate<0.01'],
+      enter_error: ['rate<0.01'], // 매진 거절(SESSION_SOLD_OUT)이 아닌 진입 실패
       'http_req_duration{name:hold}': ['p(95)<300'],
       'http_req_duration{name:queue_poll}': ['max>=0'],
       'http_req_duration{name:seat_status}': ['max>=0'],
@@ -356,6 +358,13 @@ function awaitConfirm(auth, orderId, seats) {
   C.confirmTimeout.add(1);
 }
 
+// 매진 중 새 진입은 409 SESSION_SOLD_OUT이 정상 응답이다(QUE-8)
+function soldOutRejected(res) {
+  if (res.status !== 409 || json(res).code !== 'SESSION_SOLD_OUT') return false;
+  C.soldOutRejected.add(1);
+  return true;
+}
+
 // ---------- flow
 
 export function flow() {
@@ -372,7 +381,10 @@ export function flow() {
   let enteredAt = 0;
   let body = null;
   for (let attempt = 0; attempt < 5; attempt++) {
-    const res = call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_enter', [200, 201], T.enter);
+    const res = call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_enter', [200, 201, 409], T.enter);
+    const rejected = soldOutRejected(res);
+    enterError.add(!rejected && res.status !== 200 && res.status !== 201);
+    if (rejected) return;
     if (res.status === 200 || res.status === 201) {
       C.enterOk.add(1);
       enteredAt = Date.now();
@@ -395,7 +407,8 @@ export function flow() {
     if (body.status === 'EXPIRED') {
       C.expired.add(1);
       // 재진입은 부하가 가라앉은 뒤라 첫 진입 p95에 섞지 않는다
-      const res = call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_reenter', [200, 201], T.reenter);
+      const res = call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_reenter', [200, 201, 409], T.reenter);
+      if (soldOutRejected(res)) return;
       body = json(res);
       continue;
     }
@@ -468,7 +481,7 @@ export function poller() {
   if (exec.vu.iterationInInstance === 0) {
     const untilOpen = OPEN_AT_MS - Date.now();
     sleep(Math.max(0, untilOpen) / 1000 + Math.random() * 3);
-    call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_enter_poller', [200, 201], null);
+    soldOutRejected(call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_enter_poller', [200, 201, 409], null));
   }
   const res = call('GET', `/api/v1/queue/sessions/${SID}/entries/me`, null, auth, 'queue_poll', [200], T.poll);
   C.pollCount.add(1);
@@ -508,7 +521,7 @@ function textSummary(data) {
   }
   lines.push(
     '--- 진입',
-    `enter_ok=${c('enter_ok')} enter_fail=${c('enter_fail')} polls=${c('poll_count')} admitted=${c('admitted')} expired_reenter=${c('expired_reenter')} sold_out_seen=${c('sold_out_seen')} sold_out_left=${c('sold_out_left')} wait_timeout=${c('wait_timeout')} poll_fail=${c('poll_fail')}`,
+    `enter_ok=${c('enter_ok')} enter_fail=${c('enter_fail')} polls=${c('poll_count')} admitted=${c('admitted')} expired_reenter=${c('expired_reenter')} sold_out_seen=${c('sold_out_seen')} sold_out_left=${c('sold_out_left')} sold_out_rejected=${c('sold_out_rejected')} wait_timeout=${c('wait_timeout')} poll_fail=${c('poll_fail')}`,
     `queue_wait_ms  ${t('queue_wait_ms')}`,
     `start_lag_ms   ${t('start_lag_ms')}`,
     '--- 예매',

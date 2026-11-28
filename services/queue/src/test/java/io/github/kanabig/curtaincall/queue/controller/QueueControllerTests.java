@@ -137,6 +137,22 @@ class QueueControllerTests extends QueueIntegrationTest {
     }
 
     @Test
+    @DisplayName("[QUE-8] 매진 중 새 진입은 409 SESSION_SOLD_OUT, 대기 중인 사용자의 재진입은 200 SOLD_OUT")
+    void soldOutEntry() throws Exception {
+        putConf(-1000, 50);
+        mvc.perform(post(entries()).header("X-User-Id", 1)).andExpect(status().isCreated());
+        redis.opsForHash().put("q:" + sessionId + ":conf", "soldOut", "1");
+
+        mvc.perform(post(entries()).header("X-User-Id", 2))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SESSION_SOLD_OUT"));
+        mvc.perform(post(entries()).header("X-User-Id", 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SOLD_OUT"))
+                .andExpect(jsonPath("$.position").value(1));
+    }
+
+    @Test
     @DisplayName("[NFR-11] Redis 호출이 실패하면 진입과 조회는 503 QUEUE_UNAVAILABLE")
     void redisDown() throws Exception {
         doThrow(new RedisConnectionFailureException("down")).when(repository).enter(anyLong(), anyLong());

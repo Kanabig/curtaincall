@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
 import io.github.kanabig.curtaincall.queue.QueueIntegrationTest;
 import io.github.kanabig.curtaincall.queue.dto.QueueStatusResponse;
+import io.github.kanabig.curtaincall.queue.error.QueueErrorCode;
 import io.github.kanabig.curtaincall.queue.repository.SessionConf;
 import io.github.kanabig.curtaincall.queue.repository.SessionConf.Type;
 import java.time.Instant;
@@ -81,20 +82,56 @@ class SoldOutTests extends QueueIntegrationTest {
     }
 
     @Test
-    @DisplayName("[QUE-8] 매진 중 새로 들어와도 같은 SOLD_OUT 응답과 마지막 순번을 받는다")
-    void newEntryWhileSoldOut() {
+    @DisplayName("[QUE-8] 매진 중 대기열에 없던 사용자의 진입은 거절하고 아무것도 남기지 않는다")
+    void newEntryRejectedWhileSoldOut() {
         putConf(-1000, 3);
         enterUsers(1, 4);
         confService.applyAvailability(sessionId, true, 1);
 
+        assertSoldOutRejected(99);
+
+        assertThat(redis.opsForZSet().score(key("waiting"), "99")).isNull();
+        assertThat(redis.opsForZSet().score(key("seen"), "99")).isNull();
+        assertThat(redis.opsForValue().get(key("seq"))).isEqualTo("4");
+    }
+
+    @Test
+    @DisplayName("[QUE-2, QUE-8] 매진 중 기존 대기자의 재진입은 순번을 유지하고, 입장한 사람은 입장 상태를 받는다")
+    void existingUsersCanReenterWhileSoldOut() {
+        putConf(-1000, 1);
+        enterUsers(1, 4);
+        admission.admitAll(startOfSecond());
+        confService.applyAvailability(sessionId, true, 1);
+
+        QueueService.Entered again = queue.enter(sessionId, 3);
+
+        assertThat(again.created()).isFalse();
+        assertThat(again.response().status()).isEqualTo("SOLD_OUT");
+        assertThat(again.response().position()).isEqualTo(2);
+        assertThat(queue.enter(sessionId, 1).response().status()).isEqualTo("ADMITTED");
+    }
+
+    @Test
+    @DisplayName("[QUE-8] 매진이 풀리면 새 진입을 다시 받고 기존 대기자 뒤에 선다")
+    void newEntryAcceptedAfterRelease() {
+        putConf(-1000, 3);
+        enterUsers(1, 4);
+        confService.applyAvailability(sessionId, true, 1);
+        assertSoldOutRejected(99);
+
+        confService.applyAvailability(sessionId, false, 2);
         QueueService.Entered entered = queue.enter(sessionId, 99);
 
         assertThat(entered.created()).isTrue();
-        assertThat(entered.response().status()).isEqualTo("SOLD_OUT");
+        assertThat(entered.response().status()).isEqualTo("WAITING");
         assertThat(entered.response().position()).isEqualTo(5);
-        QueueService.Entered again = queue.enter(sessionId, 99);
-        assertThat(again.created()).isFalse();
-        assertThat(again.response().position()).isEqualTo(5);
+    }
+
+    private void assertSoldOutRejected(long userId) {
+        assertThatThrownBy(() -> queue.enter(sessionId, userId))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(QueueErrorCode.SESSION_SOLD_OUT));
     }
 
     @Test
@@ -167,9 +204,7 @@ class SoldOutTests extends QueueIntegrationTest {
         confService.applyAvailability(sessionId, true, 1);
         confService.apply(new SessionConf(sessionId, Type.UPSERT, 1000, System.currentTimeMillis() - 1000, 3, 300));
 
-        QueueService.Entered entered = queue.enter(sessionId, 1);
-
-        assertThat(entered.response().status()).isEqualTo("SOLD_OUT");
+        assertSoldOutRejected(1);
         assertThat(redis.opsForHash().get(key("conf"), "soldOutVer")).isEqualTo("1");
     }
 

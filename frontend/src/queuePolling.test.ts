@@ -6,6 +6,7 @@ describe('isTerminalQueueError', () => {
   it.each([
     [404, 'SESSION_NOT_FOUND'],
     [409, 'SESSION_NOT_ON_SALE'],
+    [409, 'SESSION_SOLD_OUT'],
     [403, 'FORBIDDEN'],
     [400, 'INVALID_REQUEST'],
   ])('%i %s 는 폴링을 멈춘다', (status, code) => {

@@ -1,7 +1,7 @@
 import { ApiError } from './api/client'
 
 // 같은 요청을 다시 보내도 결과가 바뀌지 않는 코드. 이 코드에서만 폴링을 멈춘다.
-const TERMINAL_CODES = new Set(['SESSION_NOT_FOUND', 'SESSION_NOT_ON_SALE', 'FORBIDDEN', 'BAD_REQUEST', 'INVALID_REQUEST'])
+const TERMINAL_CODES = new Set(['SESSION_NOT_FOUND', 'SESSION_NOT_ON_SALE', 'SESSION_SOLD_OUT', 'FORBIDDEN', 'BAD_REQUEST', 'INVALID_REQUEST'])
 
 export const DEFAULT_RETRY_MS = 3000
 
