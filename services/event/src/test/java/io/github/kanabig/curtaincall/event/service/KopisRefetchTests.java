@@ -123,6 +123,24 @@ class KopisRefetchTests extends EventIntegrationTest {
                 .isOne();
     }
 
+    @Test
+    @DisplayName("다시 받기 호출이 계속 실패하는 공연은 건너뛰어 다음 공연을 받고, 3번까지만 시도한다")
+    void failingRefetchDoesNotBlockOthers() {
+        SERVER.failingDetailId = "PF305718";
+
+        for (int i = 0; i < 8; i++) {
+            syncService.sync("TEST");
+        }
+
+        assertThat(detailRequests().subList(0, 2)).containsExactly("PF305718", "PF305735");
+        assertThat(detailRequests().stream().filter("PF305718"::equals)).hasSize(3);
+        assertThat(detailRequests()).contains("PF305720");
+        assertThat(count("performance WHERE mt20id = 'PF305735' AND extras_fetched = TRUE"))
+                .isOne();
+        assertThat(count("performance WHERE mt20id = 'PF305718' AND detail_status = 'DONE'"))
+                .isOne();
+    }
+
     private List<String> detailRequests() {
         return SERVER.requests().stream()
                 .map(uri -> uri.getPath())

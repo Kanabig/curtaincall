@@ -122,12 +122,13 @@ public class PerformanceRepository {
         String registered = "EXISTS (SELECT 1 FROM sale_performance sp WHERE sp.mt20id = p.mt20id)";
         return jdbc
                 .query(
-                        "SELECT p.mt20id, p.detail_attempts FROM performance p WHERE (p.detail_status = 'PENDING'"
+                        "SELECT p.mt20id, p.detail_attempts, p.detail_status FROM performance p WHERE (p.detail_status = 'PENDING'"
                                 + " OR (p.detail_status = 'DONE' AND p.extras_fetched = FALSE AND " + registered + "))"
                                 + " AND p.detail_attempts < ?" + notIn.replace("mt20id", "p.mt20id")
                                 + " AND p.end_date >= ? ORDER BY " + registered
                                 + " DESC, GREATEST(p.start_date, ?), p.mt20id LIMIT 1",
-                        (rs, n) -> new PendingPerformance(rs.getString(1), rs.getInt(2)),
+                        (rs, n) ->
+                                new PendingPerformance(rs.getString(1), rs.getInt(2), "DONE".equals(rs.getString(3))),
                         args.toArray())
                 .stream()
                 .findFirst();

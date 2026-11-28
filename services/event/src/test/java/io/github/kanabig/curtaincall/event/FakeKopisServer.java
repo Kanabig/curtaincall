@@ -28,6 +28,8 @@ public final class FakeKopisServer {
     public volatile String overrideBody;
     /** 이 공연 ID의 상세는 깨진 XML로 답한다. */
     public volatile String brokenDetailId;
+    /** 이 공연 ID의 상세는 500으로 답한다. */
+    public volatile String failingDetailId;
     /** 이 시설 ID의 상세는 깨진 XML로 답한다. */
     public volatile String brokenFacilityId;
     /** afterdate가 붙은 목록에도 이 본문을 돌려준다(바뀐 공연이 있는 상황). */
@@ -60,6 +62,7 @@ public final class FakeKopisServer {
         overrideBody = null;
         brokenDetailId = null;
         brokenFacilityId = null;
+        failingDetailId = null;
         afterdateListBody = null;
     }
 
@@ -85,7 +88,8 @@ public final class FakeKopisServer {
             String body = respond(uri);
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "text/xml;charset=UTF-8");
-            exchange.sendResponseHeaders(status, bytes.length);
+            boolean failing = uri.getPath().equals("/pblprfr/" + failingDetailId);
+            exchange.sendResponseHeaders(failing ? 500 : status, bytes.length);
             exchange.getResponseBody().write(bytes);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
