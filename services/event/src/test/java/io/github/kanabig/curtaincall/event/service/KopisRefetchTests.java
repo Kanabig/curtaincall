@@ -6,6 +6,7 @@ import io.github.kanabig.curtaincall.event.EventIntegrationTest;
 import io.github.kanabig.curtaincall.event.FakeKopisServer;
 import io.github.kanabig.curtaincall.event.FixtureClockConfig;
 import io.github.kanabig.curtaincall.event.entity.SyncRun;
+import io.github.kanabig.curtaincall.event.entity.SyncStatus;
 import io.github.kanabig.curtaincall.event.repository.KopisCallLogRepository;
 import java.sql.Timestamp;
 import java.time.Clock;
@@ -26,7 +27,7 @@ import org.springframework.test.context.DynamicPropertySource;
         properties = {
             "curtaincall.kopis.mode=live",
             "curtaincall.kopis.api-key=test-key",
-            "curtaincall.kopis.sync-max-calls=5",
+            "curtaincall.kopis.sync-max-calls=6",
             "curtaincall.kopis.scheduler.enabled=false"
         })
 @Import(FixtureClockConfig.class)
@@ -80,7 +81,7 @@ class KopisRefetchTests extends EventIntegrationTest {
         int total = 0;
         for (int i = 0; i < 6; i++) {
             SyncRun run = syncService.sync("TEST");
-            assertThat(run.calls()).isLessThanOrEqualTo(5);
+            assertThat(run.calls()).isLessThanOrEqualTo(6);
             total += run.calls();
             // 다시 받는 동안에도 등록 공연은 DONE이다
             assertThat(count("performance WHERE detail_status = 'DONE' AND mt20id IN ('PF305718', 'PF305735')"))
@@ -132,13 +133,27 @@ class KopisRefetchTests extends EventIntegrationTest {
             syncService.sync("TEST");
         }
 
-        assertThat(detailRequests().subList(0, 2)).containsExactly("PF305718", "PF305735");
         assertThat(detailRequests().stream().filter("PF305718"::equals)).hasSize(3);
-        assertThat(detailRequests()).contains("PF305720");
+        assertThat(detailRequests()).contains("PF305735", "PF305720");
         assertThat(count("performance WHERE mt20id = 'PF305735' AND extras_fetched = TRUE"))
                 .isOne();
         assertThat(count("performance WHERE mt20id = 'PF305718' AND detail_status = 'DONE'"))
                 .isOne();
+    }
+
+    @Test
+    @DisplayName("다시 받기 호출이 3번 연달아 실패하면 장애로 보고 실행을 끝낸다")
+    void consecutiveRefetchFailuresEndRun() {
+        legacy("PF305720", "FC002228");
+        // 호출을 공연상세에만 쓰도록 시설은 이미 받은 것으로 둔다
+        jdbc.update("UPDATE venue SET extras_fetched = TRUE");
+        SERVER.failAllDetails = true;
+
+        SyncRun run = syncService.sync("TEST");
+
+        // 호출 상한으로 멈췄다면 PARTIAL이다
+        assertThat(run.status()).isEqualTo(SyncStatus.FAILED);
+        assertThat(detailRequests()).hasSize(3);
     }
 
     private List<String> detailRequests() {
