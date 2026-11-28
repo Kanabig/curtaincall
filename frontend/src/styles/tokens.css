@@ -1,9 +1,12 @@
 :root {
   --accent: #c2410c;
   --accent-dark: #9a3412;
+  --accent-soft: #fff7ed;
+  --accent-soft-fg: #7c2d12;
   --ink: #1c1917;
   --ink-2: #44403c;
   --muted: #57534e;
+  --muted-2: #78716c; /* 흐린 글자. bg 위에서는 4.5:1이 안 되므로 surface에서만 */
   --line: #e7e5e4;
   --line-2: #d6d3d1;
   --bg: #f7f6f3;

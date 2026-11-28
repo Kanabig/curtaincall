@@ -27,6 +27,8 @@ describe('글자색과 배경색의 대비', () => {
     ['muted', 'bg'],
     ['muted', 'surface'],
     ['muted', 'line'],
+    ['muted-2', 'surface'],
+    ['accent-soft-fg', 'accent-soft'],
     ['accent', 'bg'],
     ['accent', 'surface'],
     ['surface', 'accent'],
