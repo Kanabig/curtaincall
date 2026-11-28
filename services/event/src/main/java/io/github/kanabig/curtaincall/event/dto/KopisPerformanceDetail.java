@@ -23,7 +23,15 @@ public record KopisPerformanceDetail(
         String priceGuidance,
         String dateGuidance,
         LocalDateTime updatedAt,
-        List<Relate> relates) {
+        List<Relate> relates,
+        String cast,
+        String producer,
+        List<String> introImages,
+        Flags flags) {
+
+    /** Y/N 항목. 응답에 없으면 null이다. */
+    public record Flags(
+            Boolean child, Boolean visit, Boolean license, Boolean creative, Boolean daehakro, Boolean festival) {}
 
     public record Relate(String name, String url) {}
 }

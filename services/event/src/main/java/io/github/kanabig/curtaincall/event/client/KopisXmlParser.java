@@ -13,6 +13,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -84,7 +85,17 @@ public class KopisXmlParser {
                 text(db, "pcseguidance"),
                 text(db, "dtguidance"),
                 dateTime(text(db, "updatedate")),
-                relates(db));
+                relates(db),
+                text(db, "prfcast"),
+                text(db, "entrpsnm"),
+                introImages(db),
+                new KopisPerformanceDetail.Flags(
+                        yesNo(db, "child"),
+                        yesNo(db, "visit"),
+                        yesNo(db, "musicallicense"),
+                        yesNo(db, "musicalcreate"),
+                        yesNo(db, "daehakro"),
+                        yesNo(db, "festival")));
     }
 
     public KopisFacility parseFacility(String xml) {
@@ -116,7 +127,21 @@ public class KopisXmlParser {
                 text(db, "adres"),
                 decimal(text(db, "la")),
                 decimal(text(db, "lo")),
-                halls);
+                halls,
+                text(db, "telno"),
+                webUrl(text(db, "relateurl")),
+                yesNo(db, "parkinglot"),
+                new KopisFacility.Accessibility(
+                        yesNo(db, "elevbarrier"),
+                        yesNo(db, "parkbarrier"),
+                        yesNo(db, "restbarrier"),
+                        yesNo(db, "runwbarrier")),
+                new KopisFacility.Amenities(
+                        yesNo(db, "cafe"),
+                        yesNo(db, "restaurant"),
+                        yesNo(db, "store"),
+                        yesNo(db, "nolibang"),
+                        yesNo(db, "suyu")));
     }
 
     private List<KopisPerformanceDetail.Relate> relates(Element db) {
@@ -132,6 +157,38 @@ public class KopisXmlParser {
             }
         }
         return result;
+    }
+
+    private static List<String> introImages(Element db) {
+        List<String> result = new ArrayList<>();
+        Element styurls = child(db, "styurls");
+        if (styurls == null) {
+            return result;
+        }
+        for (Element styurl : children(styurls, "styurl")) {
+            String url = webUrl(styurl.getTextContent().trim());
+            if (url != null) {
+                result.add(url);
+            }
+        }
+        return result;
+    }
+
+    /** 화면에서 링크·이미지 주소로 쓰므로 http(s)가 아니면 버린다. */
+    private static String webUrl(String value) {
+        if (value == null) {
+            return null;
+        }
+        String lower = value.toLowerCase(Locale.ROOT);
+        return lower.startsWith("http://") || lower.startsWith("https://") ? value : null;
+    }
+
+    private static Boolean yesNo(Element parent, String name) {
+        String value = text(parent, name);
+        if ("Y".equals(value)) {
+            return true;
+        }
+        return "N".equals(value) ? false : null;
     }
 
     private List<Element> dbs(String xml) {

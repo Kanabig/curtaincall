@@ -9,15 +9,18 @@ public final class PerformanceQueryDtos {
 
     private PerformanceQueryDtos() {}
 
-    /** 목록 조건. null인 항목은 걸지 않는다. */
+    /** 목록 조건. null이거나 빈 항목은 걸지 않는다. 목록 값은 항목 안에서 OR, 항목끼리는 AND다. */
     public record Filter(
-            String region,
+            List<String> regions,
             String genre,
             LocalDate from,
             LocalDate to,
             PerformanceState state,
+            List<SaleStateFilter> saleStates,
+            List<Category> categories,
             Integer maxPrice,
-            String keyword) {}
+            String keyword,
+            PerformanceSort sort) {}
 
     public record PerformanceItem(
             long id,
@@ -29,7 +32,8 @@ public final class PerformanceQueryDtos {
             LocalDate endDate,
             String facilityName,
             String poster,
-            Integer minPrice) {}
+            Integer minPrice,
+            List<Category> categories) {}
 
     public record PerformancePage(List<PerformanceItem> content, int page, int size, long totalElements) {}
 
@@ -63,7 +67,20 @@ public final class PerformanceQueryDtos {
             String dateGuidance,
             JsonNode relates,
             List<String> grades,
-            List<SessionItem> sessions) {}
+            List<SessionItem> sessions,
+            String cast,
+            String producer,
+            List<String> introImages,
+            List<Category> categories,
+            VenueInfo venue) {}
+
+    /** 공연장 시설. 값이 확인되지 않으면 null이다. */
+    public record VenueInfo(
+            String phone,
+            String website,
+            Boolean parkingLot,
+            KopisFacility.Accessibility accessibility,
+            KopisFacility.Amenities amenities) {}
 
     public record SessionDetail(
             long id,

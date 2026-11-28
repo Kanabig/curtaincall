@@ -261,7 +261,7 @@ public class KopisSyncService {
                 countParseFailure(progress, 1);
                 continue;
             }
-            performances.applyDetail(detail, relatesJson(detail), clock.instant());
+            performances.applyDetail(detail, json(detail.relates()), json(detail.introImages()), clock.instant());
             progress.detailsFetched++;
             if (detail.mt10id() != null) {
                 fetchFacility(budget, progress, detail.mt10id(), triedVenues);
@@ -308,9 +308,9 @@ public class KopisSyncService {
         parseFailures.increment(count);
     }
 
-    private String relatesJson(KopisPerformanceDetail detail) {
+    private String json(Object value) {
         try {
-            return objectMapper.writeValueAsString(detail.relates());
+            return objectMapper.writeValueAsString(value);
         } catch (JacksonException e) {
             return null;
         }

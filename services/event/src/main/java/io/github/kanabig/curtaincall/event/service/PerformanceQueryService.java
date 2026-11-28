@@ -3,6 +3,7 @@ package io.github.kanabig.curtaincall.event.service;
 import io.github.kanabig.curtaincall.common.web.error.BusinessException;
 import io.github.kanabig.curtaincall.common.web.error.CommonErrorCode;
 import io.github.kanabig.curtaincall.event.config.KopisProperties;
+import io.github.kanabig.curtaincall.event.dto.Category;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.Filter;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformanceDetail;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformancePage;
@@ -20,6 +21,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -57,7 +59,7 @@ public class PerformanceQueryService {
 
     /** [ADM-1] 관리자용 목록. 조건은 state·keyword만 받고 나머지는 걸지 않는다. */
     public PerformancePage listForAdmin(PerformanceState state, String keyword, int page, int size) {
-        return list(new Filter(null, null, null, null, state, null, keyword), page, size);
+        return list(new Filter(null, null, null, null, state, null, null, null, keyword, null), page, size);
     }
 
     public PerformancePage list(Filter filter, int page, int size) {
@@ -80,8 +82,32 @@ public class PerformanceQueryService {
         if (keyword != null && keyword.length() > MAX_KEYWORD) {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST, "keyword는 %d자 이하".formatted(MAX_KEYWORD));
         }
+        if (f.categories() != null && f.categories().contains(Category.FESTIVAL)) {
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST, "FESTIVAL은 조건으로 쓸 수 없다");
+        }
         return new Filter(
-                blankToNull(f.region()), blankToNull(f.genre()), f.from(), f.to(), f.state(), f.maxPrice(), keyword);
+                distinct(
+                        f.regions() == null
+                                ? null
+                                : f.regions().stream()
+                                        .map(PerformanceQueryService::blankToNull)
+                                        .toList()),
+                blankToNull(f.genre()),
+                f.from(),
+                f.to(),
+                f.state(),
+                distinct(f.saleStates()),
+                distinct(f.categories()),
+                f.maxPrice(),
+                keyword,
+                f.sort());
+    }
+
+    /** 빈 값을 빼고 중복을 없앤다. */
+    private static <T> List<T> distinct(List<T> values) {
+        return values == null
+                ? List.of()
+                : values.stream().filter(Objects::nonNull).distinct().toList();
     }
 
     private static String blankToNull(String s) {
@@ -120,7 +146,12 @@ public class PerformanceQueryService {
                 row.dateGuidance(),
                 parse(row.relates()),
                 expectedGrades(row.priceGuidance()),
-                items);
+                items,
+                row.cast(),
+                row.producer(),
+                strings(row.introImages()),
+                row.categories(),
+                row.venue());
     }
 
     /** 회차 등록 때 가격을 받아야 하는 등급(SessionAdminService.checkGrades의 기대 등급). 읽지 못한 안내문이면 빈 목록이다. */
@@ -148,6 +179,13 @@ public class PerformanceQueryService {
 
     private String format(Instant instant) {
         return DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(OffsetDateTime.ofInstant(instant, properties.zone()));
+    }
+
+    private List<String> strings(String json) {
+        JsonNode node = parse(json);
+        return node == null
+                ? List.of()
+                : node.valueStream().map(JsonNode::asString).toList();
     }
 
     private JsonNode parse(String json) {

@@ -55,13 +55,15 @@ public class PerformanceRepository {
                 });
     }
 
-    /** 상세 응답을 반영하고 DONE으로 만든다. relates는 JSON 문자열이다. */
-    public void applyDetail(KopisPerformanceDetail detail, String relatesJson, Instant now) {
+    /** 상세 응답을 반영하고 DONE으로 만든다. relates와 introImages는 JSON 문자열이다. */
+    public void applyDetail(KopisPerformanceDetail detail, String relatesJson, String introImagesJson, Instant now) {
         Timestamp ts = Timestamp.from(now);
         jdbc.update(
                 "UPDATE performance SET name = ?, mt10id = ?, mt13id = ?, facility_name = ?, start_date = ?, end_date = ?,"
                         + " genre = ?, area = ?, state = ?, open_run = ?, poster = ?, runtime = ?, age = ?,"
                         + " price_guidance = ?, date_guidance = ?, relates = ?, kopis_updated_at = ?,"
+                        + " cast_names = ?, producer = ?, intro_images = ?, is_child = ?, is_visit = ?, is_license = ?,"
+                        + " is_creative = ?, is_daehakro = ?, is_festival = ?, extras_fetched = TRUE,"
                         + " detail_status = 'DONE', detail_attempts = 0, detail_fetched_at = ?, updated_at = ?"
                         + " WHERE mt20id = ?",
                 detail.name(),
@@ -81,6 +83,15 @@ public class PerformanceRepository {
                 detail.dateGuidance(),
                 relatesJson,
                 detail.updatedAt() == null ? null : Timestamp.valueOf(detail.updatedAt()),
+                detail.cast(),
+                detail.producer(),
+                introImagesJson,
+                detail.flags().child(),
+                detail.flags().visit(),
+                detail.flags().license(),
+                detail.flags().creative(),
+                detail.flags().daehakro(),
+                detail.flags().festival(),
                 ts,
                 ts,
                 detail.mt20id());
@@ -90,13 +101,15 @@ public class PerformanceRepository {
     public void recordDetailFailure(String mt20id, int maxAttempts) {
         jdbc.update(
                 "UPDATE performance SET detail_attempts = detail_attempts + 1,"
-                        + " detail_status = IF(detail_attempts + 1 >= ?, 'FAILED', detail_status) WHERE mt20id = ?",
+                        + " detail_status = IF(detail_status = 'PENDING' AND detail_attempts + 1 >= ?, 'FAILED', detail_status)"
+                        + " WHERE mt20id = ?",
                 maxAttempts,
                 mt20id);
     }
 
     /**
-     * 다음에 상세를 받을 공연. 이미 시작했거나 오늘 시작하는 공연은 같은 순위로 두고, 그다음은 시작일이 가까운 순서다. endedAfter보다 일찍 끝난 공연은 건너뛴다. skip은 이번 실행에서 이미 시도해 실패한 공연이다.
+     * 다음에 상세를 받을 공연. 대기(PENDING) 공연과, 추가 항목 없이 받아 둔 판매 등록 공연이 대상이다. 판매 등록된 공연이 먼저고, 그 안에서 이미 시작했거나 오늘 시작하는
+     * 공연은 같은 순위로 두고 그다음은 시작일이 가까운 순서다. endedAfter보다 일찍 끝난 공연은 건너뛴다. skip은 이번 실행에서 이미 시도해 실패한 공연이다.
      */
     public Optional<PendingPerformance> nextPending(
             LocalDate today, LocalDate endedAfter, int maxAttempts, List<String> skip) {
@@ -106,11 +119,14 @@ public class PerformanceRepository {
         args.addAll(skip);
         args.add(Date.valueOf(endedAfter));
         args.add(Date.valueOf(today));
+        String registered = "EXISTS (SELECT 1 FROM sale_performance sp WHERE sp.mt20id = p.mt20id)";
         return jdbc
                 .query(
-                        "SELECT mt20id, detail_attempts FROM performance WHERE detail_status = 'PENDING'"
-                                + " AND detail_attempts < ?" + notIn
-                                + " AND end_date >= ? ORDER BY GREATEST(start_date, ?), mt20id LIMIT 1",
+                        "SELECT p.mt20id, p.detail_attempts FROM performance p WHERE (p.detail_status = 'PENDING'"
+                                + " OR (p.detail_status = 'DONE' AND p.extras_fetched = FALSE AND " + registered + "))"
+                                + " AND p.detail_attempts < ?" + notIn.replace("mt20id", "p.mt20id")
+                                + " AND p.end_date >= ? ORDER BY " + registered
+                                + " DESC, GREATEST(p.start_date, ?), p.mt20id LIMIT 1",
                         (rs, n) -> new PendingPerformance(rs.getString(1), rs.getInt(2)),
                         args.toArray())
                 .stream()
