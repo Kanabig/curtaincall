@@ -1,5 +1,5 @@
-import { Link, Route, Routes } from 'react-router-dom'
-import { useAuth } from './auth'
+import { Route, Routes } from 'react-router-dom'
+import { BottomNav, TopNav } from './components/Nav'
 import AdminPage from './pages/AdminPage'
 import CheckoutPage from './pages/CheckoutPage'
 import LoginPage from './pages/LoginPage'
@@ -13,27 +13,9 @@ import SeatPage from './pages/SeatPage'
 import SignUpPage from './pages/SignUpPage'
 
 export default function App() {
-  const { user, logout } = useAuth()
   return (
     <>
-      <header className="top">
-        <Link to="/" className="brand">curtaincall</Link>
-        <nav>
-          {user ? (
-            <>
-              {user.role === 'ADMIN' && <Link to="/admin">관리</Link>}
-              <Link to="/reservations">예매 내역</Link>
-              <span>{user.name}</span>
-              <button onClick={() => void logout()}>로그아웃</button>
-            </>
-          ) : (
-            <>
-              <Link to="/login">로그인</Link>
-              <Link to="/signup">가입</Link>
-            </>
-          )}
-        </nav>
-      </header>
+      <TopNav />
       <main>
         <Routes>
           <Route path="/" element={<PerformanceListPage />} />
@@ -51,6 +33,7 @@ export default function App() {
         </Routes>
       </main>
       <footer>공연 정보 출처: 공연예술통합전산망(KOPIS)</footer>
+      <BottomNav />
     </>
   )
 }

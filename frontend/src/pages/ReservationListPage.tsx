@@ -4,6 +4,7 @@ import { api } from '../api'
 import { errorMessage } from '../api/client'
 import type { ReservationPage } from '../api/types'
 import { useAuth } from '../auth'
+import { EmptyState } from '../components/ui'
 import { formatDateTime, won } from '../format'
 import { RESERVATION_STATUS_TEXT } from '../orderFlow'
 
@@ -31,7 +32,7 @@ export default function ReservationListPage() {
       <h1>예매 내역</h1>
       {error && <p role="alert" className="error">{error}</p>}
       {!data && !error && <p>불러오는 중</p>}
-      {data && data.items.length === 0 && <p>예매 내역이 없습니다.</p>}
+      {data && data.items.length === 0 && <EmptyState title="예매 내역이 없습니다." />}
       {data && data.items.length > 0 && (
         <ul>
           {data.items.map((r) => (

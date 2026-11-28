@@ -4,6 +4,7 @@ import { api } from '../api'
 import { errorMessage } from '../api/client'
 import type { ReservationDetail } from '../api/types'
 import { useAuth } from '../auth'
+import { Button } from '../components/ui'
 import { formatDateTime, won } from '../format'
 import { RESERVATION_STATUS_TEXT, cancelDeadline, idempotency, shouldPollReservation } from '../orderFlow'
 
@@ -88,7 +89,7 @@ export default function ReservationPage() {
               <p className="hint">
                 {formatDateTime(deadline.toISOString())}까지 전액 환불 취소가 가능합니다(공연 전날 23:59).
               </p>
-              <button disabled={busy || pastDeadline} onClick={() => void cancel()}>예매 취소</button>
+              <Button variant="danger" disabled={busy || pastDeadline} onClick={() => void cancel()}>예매 취소</Button>
               {pastDeadline && <p className="error">취소 기한이 지났습니다.</p>}
             </>
           )}

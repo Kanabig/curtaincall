@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { errorMessage } from '../api/client'
 import { useAuth } from '../auth'
+import { Button, Field } from '../components/ui'
 
 export default function SignUpPage() {
   const { login } = useAuth()
@@ -29,13 +30,13 @@ export default function SignUpPage() {
   }
 
   return (
-    <form className="card" onSubmit={(e) => void submit(e)}>
+    <form className="card form-card" onSubmit={(e) => void submit(e)}>
       <h1>가입</h1>
-      <label>이메일<input type="email" value={form.email} onChange={set('email')} maxLength={254} required /></label>
-      <label>비밀번호 (8~72자)<input type="password" value={form.password} onChange={set('password')} minLength={8} maxLength={72} required /></label>
-      <label>이름<input value={form.name} onChange={set('name')} maxLength={50} required /></label>
+      <Field label="이메일" type="email" value={form.email} onChange={set('email')} maxLength={254} required />
+      <Field label="비밀번호 (8~72자)" type="password" value={form.password} onChange={set('password')} minLength={8} maxLength={72} required />
+      <Field label="이름" value={form.name} onChange={set('name')} maxLength={50} required />
       {error && <p role="alert" className="error">{error}</p>}
-      <button disabled={busy}>가입</button>
+      <Button variant="primary" disabled={busy}>가입</Button>
     </form>
   )
 }

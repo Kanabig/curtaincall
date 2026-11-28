@@ -4,6 +4,7 @@ import { api } from '../api'
 import { ApiError, errorMessage } from '../api/client'
 import type { Hold, SeatStatus } from '../api/types'
 import SeatCanvas, { gradeColor } from '../components/SeatCanvas'
+import { Button } from '../components/ui'
 import { entryTokens } from '../entryToken'
 import { won } from '../format'
 import { holdStore } from '../holdStore'
@@ -204,7 +205,7 @@ export default function SeatPage() {
             <span>점유한 좌석 {hold.seatIds.length}석 · 남은 시간 <strong>{formatCountdown(remainingSeconds(Date.parse(hold.expiresAt), now))}</strong></span>
             <span>
               <button disabled={busy} onClick={() => void release()}>점유 해제</button>{' '}
-              <button disabled={busy} onClick={() => navigate(`/sessions/${sessionId}/checkout`)}>결제하기</button>
+              <Button variant="primary" disabled={busy} onClick={() => navigate(`/sessions/${sessionId}/checkout`)}>결제하기</Button>
             </span>
           </>
         ) : (
@@ -213,7 +214,7 @@ export default function SeatPage() {
               선택 {selected.length}/{MAX_SEATS}석 {selected.length > 0 && `· ${won(total)}`}
               {selected.length > 0 && ` (${selected.map((id) => seatLabel(layout.index.get(id))).join(', ')})`}
             </span>
-            <button disabled={busy || selected.length === 0} onClick={() => void reserve()}>좌석 점유</button>
+            <Button variant="primary" disabled={busy || selected.length === 0} onClick={() => void reserve()}>좌석 점유</Button>
           </>
         )}
       </div>

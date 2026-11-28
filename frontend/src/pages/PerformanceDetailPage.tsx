@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { ApiError, errorMessage } from '../api/client'
 import type { PerformanceDetail } from '../api/types'
-import { SALE_LABEL, STATE_LABEL, formatDateTime, won } from '../format'
+import { Badge } from '../components/ui'
+import { SALE_LABEL, SALE_TONE, STATE_LABEL, formatDateTime, won } from '../format'
 
 export default function PerformanceDetailPage() {
   const { id = '' } = useParams()
@@ -49,13 +50,13 @@ export default function PerformanceDetailPage() {
       {data.sessions.length === 0 && <p>판매 중인 회차가 없습니다.</p>}
       <ul className="sessions">
         {data.sessions.map((s) => (
-          <li key={s.id}>
+          <li key={s.id} className="card">
             <div>
               <strong>{formatDateTime(s.startAt)}</strong>
-              <span className={`sale ${s.saleState}`}>{SALE_LABEL[s.saleState]}</span>
+              <Badge tone={SALE_TONE[s.saleState]}>{SALE_LABEL[s.saleState]}</Badge>
               {s.saleState === 'SCHEDULED' && <span>오픈 {formatDateTime(s.saleOpenAt)}</span>}
               {(s.saleState === 'ON_SALE' || s.saleState === 'SCHEDULED') && (
-                <Link to={`/sessions/${s.id}/queue`}>{s.saleState === 'ON_SALE' ? '예매하기' : '대기열 입장'}</Link>
+                <Link to={`/sessions/${s.id}/queue`} className="btn btn-primary">{s.saleState === 'ON_SALE' ? '예매하기' : '대기열 입장'}</Link>
               )}
             </div>
             <table>
