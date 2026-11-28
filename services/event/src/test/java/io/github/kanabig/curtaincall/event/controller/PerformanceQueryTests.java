@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kanabig.curtaincall.event.EventIntegrationTest;
 import io.github.kanabig.curtaincall.event.client.KopisCallException;
 import io.github.kanabig.curtaincall.event.client.KopisClient;
+import io.github.kanabig.curtaincall.event.dto.Category;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.Filter;
+import io.github.kanabig.curtaincall.event.dto.PerformanceSort;
 import io.github.kanabig.curtaincall.event.dto.PerformanceState;
+import io.github.kanabig.curtaincall.event.dto.SaleStateFilter;
 import io.github.kanabig.curtaincall.event.repository.PerformanceQueryRepository;
 import io.github.kanabig.curtaincall.event.repository.PerformanceQueryRepository.Built;
 import io.github.kanabig.curtaincall.event.service.KopisSyncService;
@@ -117,6 +120,18 @@ class PerformanceQueryTests extends EventIntegrationTest {
         return id;
     }
 
+    static Filter filter(
+            String region,
+            String genre,
+            LocalDate from,
+            LocalDate to,
+            PerformanceState state,
+            Integer maxPrice,
+            String keyword) {
+        return new Filter(
+                region == null ? null : List.of(region), genre, from, to, state, null, null, maxPrice, keyword, null);
+    }
+
     JsonNode get(String path, Object... vars) {
         ResponseEntity<JsonNode> r = rest.getForEntity(path, JsonNode.class, vars);
         assertThat(r.getStatusCode()).as(path).isEqualTo(HttpStatus.OK);
@@ -158,6 +173,58 @@ class PerformanceQueryTests extends EventIntegrationTest {
         JsonNode first = get("/api/v1/performances").get("content");
         assertThat(first.get(0).get("state").asText()).isEqualTo("ONGOING");
         assertThat(first.get(2).get("state").asText()).isEqualTo("UPCOMING");
+    }
+
+    @Test
+    @DisplayName("지역·판매 상태·하위 분류는 같은 항목 OR, 항목 간 AND")
+    void multiValueFilters() {
+        // 현재 2026-12-01T09:00+09:00(KST)
+        long open = sale("A", "판매 중", "뮤지컬", "서울", "공연중", "2026-11-01", "2027-01-31");
+        long soon = sale("B", "판매 예정", "뮤지컬", "부산", "공연예정", "2026-12-02", "2027-03-31");
+        long both = sale("C", "판매 중이고 예정도 있음", "뮤지컬", "대구", "공연예정", "2026-12-03", "2027-01-20");
+        long stopped = sale("D", "중지·지난 회차만", "뮤지컬", "서울", "공연중", "2026-12-04", "2027-01-20");
+        session(open, "2026-12-20 19:00:00", "2026-11-30 10:00:00", false, Map.of("S", 1000));
+        session(soon, "2026-12-20 19:00:00", "2026-12-05 10:00:00", false, Map.of("S", 1000));
+        session(both, "2026-12-20 19:00:00", "2026-11-30 10:00:00", false, Map.of("S", 1000));
+        session(both, "2026-12-21 19:00:00", "2026-12-05 10:00:00", false, Map.of("S", 1000));
+        session(stopped, "2026-12-20 19:00:00", "2026-11-30 10:00:00", true, Map.of("S", 1000));
+        session(stopped, "2026-11-20 19:00:00", "2026-11-01 10:00:00", false, Map.of("S", 1000));
+        jdbc.update("UPDATE performance SET is_child = TRUE WHERE mt20id IN ('A', 'B')");
+        jdbc.update("UPDATE performance SET is_visit = TRUE, is_child = FALSE WHERE mt20id = 'C'");
+        jdbc.update("UPDATE performance SET is_daehakro = TRUE WHERE mt20id = 'D'");
+
+        assertThat(names(get("/api/v1/performances?region=서울&region=부산")))
+                .containsExactly("판매 중", "판매 예정", "중지·지난 회차만");
+        assertThat(names(get("/api/v1/performances?saleState=ON_SALE"))).containsExactly("판매 중", "판매 중이고 예정도 있음");
+        assertThat(names(get("/api/v1/performances?saleState=SCHEDULED"))).containsExactly("판매 예정");
+        assertThat(names(get("/api/v1/performances?saleState=ON_SALE,SCHEDULED")))
+                .containsExactly("판매 중", "판매 예정", "판매 중이고 예정도 있음");
+        assertThat(names(get("/api/v1/performances?category=VISIT&category=DAEHAKRO")))
+                .containsExactly("판매 중이고 예정도 있음", "중지·지난 회차만");
+        assertThat(names(get("/api/v1/performances?region=서울,대구&saleState=ON_SALE&category=CHILD,VISIT")))
+                .containsExactly("판매 중", "판매 중이고 예정도 있음");
+        assertThat(names(get("/api/v1/performances?region=부산,대구&saleState=ON_SALE&category=CHILD")))
+                .isEmpty();
+        assertThat(get("/api/v1/performances?saleState=ON_SALE&size=1")
+                        .get("totalElements")
+                        .asLong())
+                .isEqualTo(2);
+        // 빈 값은 조건이 없는 것과 같다
+        assertThat(names(get("/api/v1/performances?region=&saleState=&category=&sort=")))
+                .hasSize(4);
+    }
+
+    @Test
+    @DisplayName("정렬: 임박순(기본)·종료 임박순·최신 등록순, 같은 값은 판매 등록 순서")
+    void sorting() {
+        sale("A", "a", "뮤지컬", "서울", "공연중", "2026-12-03", "2027-01-31");
+        sale("B", "b", "뮤지컬", "서울", "공연중", "2026-12-01", "2027-03-31");
+        sale("C", "c", "뮤지컬", "서울", "공연중", "2026-12-02", "2027-01-31");
+
+        assertThat(names(get("/api/v1/performances"))).containsExactly("b", "c", "a");
+        assertThat(names(get("/api/v1/performances?sort=START"))).containsExactly("b", "c", "a");
+        assertThat(names(get("/api/v1/performances?sort=END"))).containsExactly("a", "c", "b");
+        assertThat(names(get("/api/v1/performances?sort=RECENT"))).containsExactly("c", "b", "a");
     }
 
     @Test
@@ -216,7 +283,11 @@ class PerformanceQueryTests extends EventIntegrationTest {
                 "maxPrice=-1",
                 "state=공연중",
                 "state=ON_SALE",
-                "state=ongoing")) {
+                "state=ongoing",
+                "saleState=SUSPENDED",
+                "category=FESTIVAL",
+                "category=child",
+                "sort=POPULAR")) {
             ResponseEntity<JsonNode> r = rest.getForEntity("/api/v1/performances?" + bad, JsonNode.class);
             assertThat(r.getStatusCode()).as(bad).isEqualTo(HttpStatus.BAD_REQUEST);
             assertThat(r.getBody().get("code").asText()).isEqualTo("INVALID_REQUEST");
@@ -361,14 +432,25 @@ class PerformanceQueryTests extends EventIntegrationTest {
         }
 
         List<Filter> filters = List.of(
-                new Filter(null, null, null, null, null, null, null),
-                new Filter("서울", null, null, null, null, null, null),
-                new Filter(null, "뮤지컬", null, null, null, null, null),
-                new Filter(null, null, LocalDate.of(2026, 6, 1), LocalDate.of(2026, 7, 1), null, null, null),
-                new Filter(null, null, null, null, PerformanceState.ONGOING, null, null),
-                new Filter(null, null, null, null, null, 60000, null),
-                new Filter(null, null, null, null, null, null, "공연 1"),
-                new Filter("서울", "뮤지컬", LocalDate.of(2026, 3, 1), null, PerformanceState.ONGOING, 60000, "공연"));
+                filter(null, null, null, null, null, null, null),
+                filter("서울", null, null, null, null, null, null),
+                filter(null, "뮤지컬", null, null, null, null, null),
+                filter(null, null, LocalDate.of(2026, 6, 1), LocalDate.of(2026, 7, 1), null, null, null),
+                filter(null, null, null, null, PerformanceState.ONGOING, null, null),
+                filter(null, null, null, null, null, 60000, null),
+                new Filter(
+                        List.of("서울", "부산"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(SaleStateFilter.ON_SALE, SaleStateFilter.SCHEDULED),
+                        List.of(Category.CHILD),
+                        null,
+                        null,
+                        PerformanceSort.RECENT),
+                filter(null, null, null, null, null, null, "공연 1"),
+                filter("서울", "뮤지컬", LocalDate.of(2026, 3, 1), null, PerformanceState.ONGOING, 60000, "공연"));
         for (Filter f : filters) {
             for (Built q : List.of(repository.listQuery(f, 0, 20, NOW), repository.countQuery(f, NOW))) {
                 List<Map<String, Object>> plan =

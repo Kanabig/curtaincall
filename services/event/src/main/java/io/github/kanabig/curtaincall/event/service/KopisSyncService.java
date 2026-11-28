@@ -40,7 +40,7 @@ import tools.jackson.databind.ObjectMapper;
  * EVT-1, EVT-3. KOPIS 증분 동기화. 목록(앞으로 windowDays일) → 상세(처음 보거나 바뀐 공연) → 시설상세(처음 보는 시설, 오래된 시설) 순서다.
  *
  * <p>저장은 모두 ID 기준 upsert라 같은 동기화를 두 번 돌려도 결과가 같고, 중간에 멈춰도 이미 저장한 것은 남는다. 호출 상한에 닿으면 멈추고, 상세를 못 받은 공연은
- * PENDING으로 남아 다음 실행이 이어 받는다. KOPIS 호출이 실패하면 즉시 재시도하지 않고 그 실행을 끝낸다(재시도도 한도를 쓴다).
+ * PENDING으로 남아 다음 실행이 이어 받는다. KOPIS 호출이 실패하면 즉시 재시도하지 않고 그 실행을 끝낸다(재시도도 한도를 쓴다). 상세 다시 받기의 실패만은 시도 횟수를 남기고 다음 공연으로 넘어간다.
  */
 @Service
 public class KopisSyncService {
@@ -49,6 +49,8 @@ public class KopisSyncService {
     private static final String LOCK = "kopis-sync";
     /** KOPIS 공연목록 조회는 시작일~종료일이 최대 31일이다(공식 가이드). */
     private static final int MAX_WINDOW_DAYS = 31;
+
+    private static final int MAX_CONSECUTIVE_CALL_FAILURES = 3;
 
     private final KopisClient client;
     private final KopisXmlParser parser;
@@ -240,6 +242,7 @@ public class KopisSyncService {
             fetchFacility(budget, progress, mt10id, triedVenues);
         }
         List<String> failed = new ArrayList<>();
+        int callFailures = 0;
         while (true) {
             PendingPerformance next = performances
                     .nextPending(today, endedAfter, properties.detailMaxAttempts(), failed)
@@ -247,7 +250,20 @@ public class KopisSyncService {
             if (next == null) {
                 return;
             }
-            String xml = call(budget, () -> client.performanceDetail(next.mt20id()));
+            String xml;
+            try {
+                xml = call(budget, () -> client.performanceDetail(next.mt20id()));
+                callFailures = 0;
+            } catch (KopisCallException e) {
+                // 다시 받기는 대기열 맨 앞이라, 계속 실패하는 공연 하나가 뒤의 상세를 막지 않게 건너뛴다. 연달아 실패하면 KOPIS 장애로 보고 끝낸다
+                if (!next.refetch() || ++callFailures >= MAX_CONSECUTIVE_CALL_FAILURES) {
+                    throw e;
+                }
+                log.warn("공연상세 다시 받기 실패 {}: {}", next.mt20id(), e.getMessage());
+                performances.recordDetailFailure(next.mt20id(), properties.detailMaxAttempts());
+                failed.add(next.mt20id());
+                continue;
+            }
             KopisPerformanceDetail detail;
             try {
                 detail = parser.parseDetail(xml);
@@ -261,7 +277,7 @@ public class KopisSyncService {
                 countParseFailure(progress, 1);
                 continue;
             }
-            performances.applyDetail(detail, relatesJson(detail), clock.instant());
+            performances.applyDetail(detail, json(detail.relates()), json(detail.introImages()), clock.instant());
             progress.detailsFetched++;
             if (detail.mt10id() != null) {
                 fetchFacility(budget, progress, detail.mt10id(), triedVenues);
@@ -308,9 +324,9 @@ public class KopisSyncService {
         parseFailures.increment(count);
     }
 
-    private String relatesJson(KopisPerformanceDetail detail) {
+    private String json(Object value) {
         try {
-            return objectMapper.writeValueAsString(detail.relates());
+            return objectMapper.writeValueAsString(value);
         } catch (JacksonException e) {
             return null;
         }

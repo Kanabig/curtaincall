@@ -1,12 +1,16 @@
 package io.github.kanabig.curtaincall.event.controller;
 
+import io.github.kanabig.curtaincall.event.dto.Category;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.Filter;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformanceDetail;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.PerformancePage;
 import io.github.kanabig.curtaincall.event.dto.PerformanceQueryDtos.SessionDetail;
+import io.github.kanabig.curtaincall.event.dto.PerformanceSort;
 import io.github.kanabig.curtaincall.event.dto.PerformanceState;
+import io.github.kanabig.curtaincall.event.dto.SaleStateFilter;
 import io.github.kanabig.curtaincall.event.service.PerformanceQueryService;
 import java.time.LocalDate;
+import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,16 +29,20 @@ public class PerformanceController {
 
     @GetMapping("/api/v1/performances")
     public PerformancePage list(
-            @RequestParam(required = false) String region,
+            @RequestParam(required = false) List<String> region,
             @RequestParam(required = false) String genre,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) PerformanceState state,
+            @RequestParam(required = false) List<SaleStateFilter> saleState,
+            @RequestParam(required = false) List<Category> category,
             @RequestParam(required = false) Integer maxPrice,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) PerformanceSort sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "" + PerformanceQueryService.DEFAULT_SIZE) int size) {
-        return service.list(new Filter(region, genre, from, to, state, maxPrice, keyword), page, size);
+        return service.list(
+                new Filter(region, genre, from, to, state, saleState, category, maxPrice, keyword, sort), page, size);
     }
 
     @GetMapping("/api/v1/performances/{id}")

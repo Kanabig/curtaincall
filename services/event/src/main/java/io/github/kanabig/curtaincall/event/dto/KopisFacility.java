@@ -12,7 +12,17 @@ public record KopisFacility(
         String address,
         BigDecimal latitude,
         BigDecimal longitude,
-        List<Hall> halls) {
+        List<Hall> halls,
+        String phone,
+        String website,
+        Boolean parkingLot,
+        Accessibility accessibility,
+        Amenities amenities) {
+
+    /** 장애인 시설. 응답에 없으면 null이다. */
+    public record Accessibility(Boolean elevator, Boolean parking, Boolean restroom, Boolean ramp) {}
+
+    public record Amenities(Boolean cafe, Boolean restaurant, Boolean store, Boolean playroom, Boolean nursingRoom) {}
 
     public record Hall(String mt13id, String name, Integer seatScale, Integer disabledSeatScale) {}
 }
