@@ -4,6 +4,7 @@ import { api } from '../api'
 import { ApiError, errorMessage } from '../api/client'
 import type { OrderDetail } from '../api/types'
 import { useAuth } from '../auth'
+import { Button } from '../components/ui'
 import { entryTokens } from '../entryToken'
 import { won } from '../format'
 import { holdStore } from '../holdStore'
@@ -90,14 +91,14 @@ export default function CheckoutPage() {
           <fieldset>
             <legend>테스트 카드(가짜 PG)</legend>
             {TEST_CARDS.map((c) => (
-              <label key={c.token} style={{ display: 'block' }}>
+              <label key={c.token} className="radio">
                 <input type="radio" name="card" checked={token === c.token} onChange={() => setToken(c.token)} />{' '}
                 {c.label} <code>{c.token}</code> <span className="hint">{c.hint}</span>
               </label>
             ))}
           </fieldset>
           <p className="hint">실제 결제는 일어나지 않습니다. 카드 번호는 입력받지 않습니다.</p>
-          <button disabled={busy || left <= 0} onClick={() => void pay()}>{won(order.amount)} 결제</button>
+          <Button variant="primary" disabled={busy || left <= 0} onClick={() => void pay()}>{won(order.amount)} 결제</Button>
         </>
       )}
       <p><Link to={`/sessions/${sessionId}/seats`}>← 좌석 선택</Link></p>

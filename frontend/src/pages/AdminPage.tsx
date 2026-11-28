@@ -4,7 +4,8 @@ import { FALLBACK_PRICES, InputError, defaultPrices, gradeDefaults, isEditLocked
 import { ApiError, errorMessage } from '../api/client'
 import type { PerformanceDetail, PerformanceItem, SessionBody, SessionItem } from '../api/types'
 import { useAuth } from '../auth'
-import { SALE_LABEL, formatDateTime } from '../format'
+import { Badge } from '../components/ui'
+import { SALE_LABEL, SALE_TONE, formatDateTime } from '../format'
 
 export default function AdminPage() {
   const { user, loading } = useAuth()
@@ -158,10 +159,10 @@ function SessionRow({ s, now, onChanged }: { s: SessionItem; now: number; onChan
   const { busy, run, note } = useAction()
   const opened = new Date(s.saleOpenAt).getTime() <= now
   return (
-    <li>
+    <li className="card">
       <div>
         <strong>{formatDateTime(s.startAt)}</strong>
-        <span className={`sale ${s.saleState}`}>{SALE_LABEL[s.saleState]}</span>
+        <Badge tone={SALE_TONE[s.saleState]}>{SALE_LABEL[s.saleState]}</Badge>
         <span>오픈 {formatDateTime(s.saleOpenAt)}</span>
         <button onClick={() => setEditing(!editing)}>{editing ? '닫기' : '수정'}</button>
         <button

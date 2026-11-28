@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
+import { Button, EmptyState } from '../components/ui'
 import { errorMessage } from '../api/client'
 import type { Page, PerformanceFilter, PerformanceItem } from '../api/types'
 import { STATE_LABEL, won } from '../format'
@@ -76,13 +77,13 @@ export default function PerformanceListPage() {
           <option value="ENDED">{STATE_LABEL.ENDED}</option>
         </select>
         <input name="maxPrice" type="number" min={0} step={1000} placeholder="최고 가격(원)" defaultValue={params.get('maxPrice') ?? ''} />
-        <button>검색</button>
+        <Button variant="primary">검색</Button>
         <button type="button" onClick={() => setParams(new URLSearchParams())}>초기화</button>
       </form>
 
       {error && <p role="alert" className="error">{error}</p>}
       {!result && !error && <p>불러오는 중</p>}
-      {result && result.content.length === 0 && <p>조건에 맞는 공연이 없습니다.</p>}
+      {result && result.content.length === 0 && <EmptyState title="조건에 맞는 공연이 없습니다." />}
       {result && (
         <ul className="grid">
           {result.content.map((p) => (

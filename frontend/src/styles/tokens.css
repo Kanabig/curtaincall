@@ -1,0 +1,55 @@
+:root {
+  --accent: #c2410c;
+  --accent-dark: #9a3412;
+  --ink: #1c1917;
+  --ink-2: #44403c;
+  --muted: #57534e;
+  --line: #e7e5e4;
+  --line-2: #d6d3d1;
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --success-bg: #dcfce7;
+  --success-fg: #166534;
+  --warn-bg: #ffedd5;
+  --warn-fg: #9a3412;
+  --danger: #b91c1c;
+  --danger-bg: #fee2e2;
+  --seat-ok: #fdba74;
+  --seat-sold: #e7e5e4;
+  --seat-held: #f5f5f4;
+  --wheel-bg: #dbeafe;
+  --wheel: #1d4ed8;
+
+  --font: 'Noto Sans KR', system-ui, sans-serif;
+  --text-title: 800 22px/1.35 var(--font);
+  --text-body: 400 14px/1.5 var(--font);
+  --text-sub: 400 12px/1.5 var(--font);
+  --text-button: 800 16px/1.25 var(--font);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --touch: 44px;
+  --bottom-nav-h: 60px;
+  --page-pad: var(--space-5);
+  --page-max: 100%;
+}
+
+/* 폭 기준: 768px 미만 모바일, 1280px 이상 PC, 그 사이는 모바일 배치를 넓힌다 */
+@media (min-width: 768px) {
+  :root { --page-max: 960px; --page-pad: var(--space-6); }
+}
+
+@media (min-width: 1280px) {
+  :root { --page-max: 1200px; --bottom-nav-h: 0px; }
+}

@@ -1,4 +1,5 @@
 import type { PerformanceState, SaleState } from './api/types'
+import type { Tone } from './components/ui'
 
 export const STATE_LABEL: Record<PerformanceState, string> = {
   UPCOMING: '공연예정',
@@ -11,6 +12,13 @@ export const SALE_LABEL: Record<SaleState, string> = {
   ON_SALE: '판매 중',
   SUSPENDED: '판매 중지',
   CLOSED: '판매 종료',
+}
+
+export const SALE_TONE: Record<SaleState, Tone> = {
+  SCHEDULED: 'warn',
+  ON_SALE: 'success',
+  SUSPENDED: 'danger',
+  CLOSED: 'neutral',
 }
 
 export const won = (n: number) => `${n.toLocaleString('ko-KR')}원`
