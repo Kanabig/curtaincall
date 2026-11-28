@@ -14,8 +14,8 @@ button, .btn {
   text-decoration: none;
   cursor: pointer;
 }
-.btn-primary, .btn-primary:hover { border-color: var(--accent); background: var(--accent); color: var(--surface); }
-.btn-primary:hover:not(:disabled) { border-color: var(--accent-dark); background: var(--accent-dark); }
+.btn-primary { border-color: var(--accent); background: var(--accent); color: var(--surface); }
+.btn-primary:hover:not(:disabled) { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--surface); }
 .btn-danger { border-color: var(--danger); color: var(--danger); }
 button:disabled { border-color: var(--line); background: var(--line); color: var(--muted); cursor: default; }
 
