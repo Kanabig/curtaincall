@@ -190,6 +190,9 @@ public class QueueRepository {
         if (code == -2) {
             return new EntryResult(Kind.NOT_OPENED, 0, 0, ((Number) r.get(1)).longValue(), false);
         }
+        if (code == -4) {
+            return EntryResult.of(Kind.SOLD_OUT_REJECTED);
+        }
         if (code == 4) {
             return EntryResult.of(Kind.NOT_IN_QUEUE);
         }

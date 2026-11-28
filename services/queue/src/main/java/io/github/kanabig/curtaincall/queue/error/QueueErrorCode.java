@@ -7,6 +7,7 @@ public enum QueueErrorCode implements ErrorCode {
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "회차를 찾을 수 없음"),
     SALE_NOT_OPENED(HttpStatus.CONFLICT, "판매 오픈 전"),
     SESSION_NOT_ON_SALE(HttpStatus.CONFLICT, "판매 중이 아닌 회차"),
+    SESSION_SOLD_OUT(HttpStatus.CONFLICT, "매진된 회차"),
     QUEUE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "대기열을 일시적으로 사용할 수 없음");
 
     private final HttpStatus status;

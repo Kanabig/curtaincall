@@ -6,6 +6,7 @@ public record EntryResult(Kind kind, long rank, long admissionPerSecond, long ep
     public enum Kind {
         WAITING,
         SOLD_OUT,
+        SOLD_OUT_REJECTED,
         ADMITTED,
         NOT_IN_QUEUE,
         SESSION_NOT_FOUND,

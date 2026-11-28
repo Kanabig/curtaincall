@@ -48,7 +48,7 @@ public class QueueService {
                 .register(meters);
     }
 
-    /** 이미 대기 중이면 기존 순번을 그대로 돌려준다. {@link Entered#created()}는 이번 호출로 새로 들어왔는지다. */
+    /** 이미 대기 중이면 기존 순번을 그대로 돌려준다. 매진 중에는 대기 중이 아닌 사용자를 409로 거절한다. {@link Entered#created()}는 이번 호출로 새로 들어왔는지다. */
     public Entered enter(long sessionId, long userId) {
         EntryResult result = call(() -> repository.enter(sessionId, userId));
         return new Entered(toResponse(result, sessionId, userId), result.created());
@@ -79,6 +79,7 @@ public class QueueService {
                         tokenIssuer.issue(userId, sessionId, Instant.ofEpochMilli(r.epochMs())), format(r.epochMs()));
             case NOT_IN_QUEUE -> QueueStatusResponse.expired();
             case SESSION_NOT_FOUND -> throw new BusinessException(QueueErrorCode.SESSION_NOT_FOUND);
+            case SOLD_OUT_REJECTED -> throw new BusinessException(QueueErrorCode.SESSION_SOLD_OUT);
             case NOT_ON_SALE -> throw new BusinessException(QueueErrorCode.SESSION_NOT_ON_SALE);
             case NOT_OPENED ->
                 throw new BusinessException(QueueErrorCode.SALE_NOT_OPENED).with("opensAt", format(r.epochMs()));

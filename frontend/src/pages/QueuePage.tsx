@@ -9,7 +9,7 @@ import { formatDateTime } from '../format'
 import { isTerminalQueueError, retryDelay } from '../queuePolling'
 import { formatCountdown, remainingSeconds } from '../seatGrid'
 
-type View = { kind: 'loading' } | { kind: 'closed'; opensAt: number } | { kind: 'queue'; entry: QueueEntry }
+type View = { kind: 'loading' } | { kind: 'closed'; opensAt: number } | { kind: 'soldOut' } | { kind: 'queue'; entry: QueueEntry }
 
 export default function QueuePage() {
   const { sessionId = '' } = useParams()
@@ -57,6 +57,12 @@ export default function QueuePage() {
         setView({ kind: 'closed', opensAt })
         // 오픈 시각이 되면 자동으로 다시 진입한다
         timer = setTimeout(() => void enter(), Math.max(1000, opensAt - Date.now()))
+        return
+      }
+      if (e instanceof ApiError && e.code === 'SESSION_SOLD_OUT') {
+        // 대기열에 없던 사용자는 매진 중에 들어갈 수 없다. 다시 시도하지 않는다
+        setError(null)
+        setView({ kind: 'soldOut' })
         return
       }
       setError(errorMessage(e))
@@ -110,6 +116,7 @@ export default function QueuePage() {
           <p>오픈 시각이 되면 자동으로 대기열에 진입합니다.</p>
         </>
       )}
+      {view.kind === 'soldOut' && <p className="big">매진되었습니다</p>}
       {view.kind === 'queue' && view.entry.status === 'WAITING' && (
         <>
           <p className="big">내 순번 {view.entry.position.toLocaleString()}번</p>
