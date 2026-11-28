@@ -21,7 +21,7 @@ import crypto from 'k6/crypto';
 import encoding from 'k6/encoding';
 import exec from 'k6/execution';
 import { sleep } from 'k6';
-import { Counter, Trend } from 'k6/metrics';
+import { Counter, Trend, Rate } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://gateway:8080';
 const SID = Number(__ENV.SESSION_ID || 1);
@@ -69,6 +69,7 @@ const T = {
 const wait = new Trend('queue_wait_ms', true); // 진입 요청 완료부터 입장까지
 const confirmTime = new Trend('confirm_ms', true); // 결제 시작부터 CONFIRMED까지
 const startLag = new Trend('start_lag_ms'); // VU가 오픈 시각보다 얼마나 늦게 시작했나(부하 생성기 지연 확인)
+const enterError = new Rate('enter_error');
 const C = {
   enterOk: new Counter('enter_ok'),
   enterFail: new Counter('enter_fail'),
@@ -151,7 +152,7 @@ export const options = (() => {
     },
     thresholds: {
       'http_req_duration{name:queue_enter}': ['p(95)<200'],
-      'http_req_failed{name:queue_enter}': ['rate<0.01'],
+      enter_error: ['rate<0.01'], // 매진 거절(SESSION_SOLD_OUT)이 아닌 진입 실패
       'http_req_duration{name:hold}': ['p(95)<300'],
       'http_req_duration{name:queue_poll}': ['max>=0'],
       'http_req_duration{name:seat_status}': ['max>=0'],
@@ -381,7 +382,9 @@ export function flow() {
   let body = null;
   for (let attempt = 0; attempt < 5; attempt++) {
     const res = call('POST', `/api/v1/queue/sessions/${SID}/entries`, null, auth, 'queue_enter', [200, 201, 409], T.enter);
-    if (soldOutRejected(res)) return;
+    const rejected = soldOutRejected(res);
+    enterError.add(!rejected && res.status !== 200 && res.status !== 201);
+    if (rejected) return;
     if (res.status === 200 || res.status === 201) {
       C.enterOk.add(1);
       enteredAt = Date.now();

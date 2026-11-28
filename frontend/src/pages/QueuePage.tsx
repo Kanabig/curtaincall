@@ -130,7 +130,11 @@ export default function QueuePage() {
           <p>순번 {view.entry.position.toLocaleString()}번을 유지합니다. 취소 표가 나오면 순서대로 입장합니다.</p>
         </>
       )}
-      <p><button onClick={() => void leave()}>대기 포기</button></p>
+      <p>
+        {view.kind === 'soldOut'
+          ? <button onClick={() => void navigate(-1)}>돌아가기</button>
+          : <button onClick={() => void leave()}>대기 포기</button>}
+      </p>
     </section>
   )
 }
